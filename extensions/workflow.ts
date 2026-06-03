@@ -1,8 +1,9 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
+import {
+	CustomEditor,
+	type ExtensionAPI,
+	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import {
@@ -16,6 +17,16 @@ import {
 	WorkflowBrowser,
 	type WorkflowJob,
 } from "../src/index.js";
+import {
+	highlightWorkflowTriggerWords,
+	transformNativeWorkflowInput,
+} from "../src/workflow-trigger.js";
+
+class WorkflowTriggerEditor extends CustomEditor {
+	render(width: number): string[] {
+		return super.render(width).map(highlightWorkflowTriggerWords);
+	}
+}
 
 export default function extension(pi: ExtensionAPI) {
 	const manager = createWorkflowManager();
@@ -30,6 +41,8 @@ export default function extension(pi: ExtensionAPI) {
 	let detachAgentAbortListener: (() => void) | undefined;
 
 	pi.registerTool(workflowTool);
+
+	pi.on("input", async (event) => transformNativeWorkflowInput(event));
 
 	pi.registerMessageRenderer(
 		"workflow-completion",
@@ -234,6 +247,11 @@ export default function extension(pi: ExtensionAPI) {
 	}
 
 	pi.on("session_start", (_event, ctx) => {
+		ctx.ui.setEditorComponent(
+			(tui, theme, keybindings) =>
+				new WorkflowTriggerEditor(tui, theme, keybindings),
+		);
+
 		currentSessionRunIds.clear();
 		for (const entry of ctx.sessionManager.getEntries()) {
 			if (
