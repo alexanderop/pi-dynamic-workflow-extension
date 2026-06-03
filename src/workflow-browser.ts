@@ -35,6 +35,12 @@ interface BrowserNavState {
 	expanded: boolean;
 }
 
+export interface WorkflowBrowserActions {
+	save?(job: WorkflowJob): void;
+	rerun?(job: WorkflowJob): void;
+	resume?(job: WorkflowJob): void;
+}
+
 export class WorkflowBrowser implements Component {
 	private readonly unsubscribe: () => void;
 	private closed = false;
@@ -54,6 +60,7 @@ export class WorkflowBrowser implements Component {
 		private readonly tui: BrowserTui,
 		private readonly theme: BrowserTheme,
 		private readonly done: () => void,
+		private readonly actions: WorkflowBrowserActions = {},
 	) {
 		const initialJobs = this.manager.getJobs();
 		this.nav.selectedJobIndex = Math.max(0, initialJobs.length - 1);
@@ -99,6 +106,15 @@ export class WorkflowBrowser implements Component {
 		} else if (data === "c" || data === "C") {
 			const job = jobs[this.nav.selectedJobIndex];
 			if (job) this.manager.cancel(job.id);
+		} else if (data === "s" || data === "S") {
+			const job = jobs[this.nav.selectedJobIndex];
+			if (job) this.actions.save?.(job);
+		} else if (data === "r") {
+			const job = jobs[this.nav.selectedJobIndex];
+			if (job) this.actions.rerun?.(job);
+		} else if (data === "R") {
+			const job = jobs[this.nav.selectedJobIndex];
+			if (job) this.actions.resume?.(job);
 		} else if (data === "[" || data === "<") {
 			this.selectJob(this.nav.selectedJobIndex - 1);
 		} else if (data === "]" || data === ">") {
@@ -156,7 +172,7 @@ export class WorkflowBrowser implements Component {
 			this.theme.fg(
 				"dim",
 				fitLine(
-					"↑↓ select · ←→ focus · j/k scroll · enter expand · c cancel · [/]/<> workflow · q close",
+					"↑↓ select · ←→ focus · j/k scroll · enter expand · c cancel · s save · r rerun · R resume · [/]/<> workflow · q close",
 					width,
 				),
 			),

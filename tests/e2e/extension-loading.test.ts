@@ -55,6 +55,10 @@ test("Pi loads the workflow extension and exposes its public entry points", asyn
 		assert.ok(extensionState.commands.includes("workflows"));
 		assert.ok(extensionState.commands.includes("workflow-save"));
 		assert.ok(extensionState.commands.includes("workflow-resume"));
+		assert.ok(extensionState.commands.includes("workflow-list"));
+		assert.ok(extensionState.commands.includes("workflow-delete"));
+		assert.ok(extensionState.commands.includes("workflow-edit"));
+		assert.ok(extensionState.commands.includes("workflow-refresh"));
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

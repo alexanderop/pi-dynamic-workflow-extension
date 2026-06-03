@@ -205,3 +205,29 @@ test("WorkflowBrowser keeps narrow fallback within width", () => {
 	for (const line of lines) assert.ok(visibleWidth(line) <= 48, line);
 	instance.handleInput("q");
 });
+
+test("WorkflowBrowser dashboard shortcuts call selected workflow actions", () => {
+	const selected = job({ id: 42, name: "selected_workflow" });
+	const manager = new FakeManager([selected]);
+	const calls: string[] = [];
+	const { instance } = browser(manager);
+	const actionable = new WorkflowBrowser(
+		manager as unknown as WorkflowManager,
+		{ requestRender: () => {} },
+		theme,
+		() => {},
+		{
+			save: (job) => calls.push(`save:${job.id}`),
+			rerun: (job) => calls.push(`rerun:${job.id}`),
+			resume: (job) => calls.push(`resume:${job.id}`),
+		},
+	);
+
+	instance.handleInput("q");
+	actionable.handleInput("s");
+	actionable.handleInput("r");
+	actionable.handleInput("R");
+	actionable.handleInput("q");
+
+	assert.deepEqual(calls, ["save:42", "rerun:42", "resume:42"]);
+});

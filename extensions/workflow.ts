@@ -75,7 +75,48 @@ export default function extension(pi: ExtensionAPI) {
 
 			await ctx.ui.custom<void>(
 				(tui, theme, _kb, done) =>
-					new WorkflowBrowser(manager, tui, theme, done),
+					new WorkflowBrowser(manager, tui, theme, done, {
+						save: (job) => {
+							void saveWorkflowJobFromDashboard(job, ctx);
+						},
+						rerun: (job) => {
+							const rerun = manager.start(job.script, {
+								cwd: ctx.cwd,
+								args: job.args,
+								session: {
+									modelRegistry: ctx.modelRegistry,
+									model: ctx.model,
+								},
+							});
+							ctx.ui.notify(
+								`Reran workflow #${job.id} as #${rerun.id}`,
+								"info",
+							);
+						},
+						resume: (job) => {
+							if (job.status === "running" || job.status === "done") {
+								ctx.ui.notify(
+									`Workflow #${job.id} is ${job.status}; use r to rerun completed workflows.`,
+									"warning",
+								);
+								return;
+							}
+							const resumed = manager.resume(job.id, {
+								cwd: ctx.cwd,
+								args: job.args,
+								session: {
+									modelRegistry: ctx.modelRegistry,
+									model: ctx.model,
+								},
+							});
+							if (!resumed) {
+								ctx.ui.notify(`Workflow #${job.id} was not found`, "error");
+								return;
+							}
+							announcedRuns.delete(resumed.runId);
+							ctx.ui.notify(`Workflow #${job.id} resumed`, "info");
+						},
+					}),
 			);
 		},
 	});
@@ -126,6 +167,126 @@ export default function extension(pi: ExtensionAPI) {
 			ctx.ui.notify(`Workflow #${id} resumed`, "info");
 		},
 	});
+
+	pi.registerCommand("workflow-list", {
+		description: "List globally saved workflow slash commands",
+		handler: async (_args, ctx) => {
+			const entries = globalWorkflowLibrary.list();
+			if (entries.length === 0) {
+				ctx.ui.notify(
+					"No saved workflows. Save one with /workflow-save <job-id> [command-name].",
+					"info",
+				);
+				return;
+			}
+			ctx.ui.notify(
+				entries
+					.map(
+						(entry) => `/${entry.name} — ${entry.description} (${entry.path})`,
+					)
+					.join("\n"),
+				"info",
+			);
+		},
+	});
+
+	pi.registerCommand("workflow-delete", {
+		description:
+			"Delete a globally saved workflow command: /workflow-delete <command-name>",
+		handler: async (args, ctx) => {
+			const name = args.trim().replace(/^\//, "");
+			if (!name) {
+				ctx.ui.notify("Usage: /workflow-delete <command-name>", "error");
+				return;
+			}
+			const entry = globalWorkflowLibrary.get(name);
+			if (!entry) {
+				ctx.ui.notify(`Saved workflow /${name} was not found`, "error");
+				return;
+			}
+			if (ctx.hasUI) {
+				const ok = await ctx.ui.confirm(
+					"Delete saved workflow?",
+					`Delete /${entry.name} from ${entry.path}?`,
+				);
+				if (!ok) return;
+			}
+			globalWorkflowLibrary.delete(entry.name);
+			ctx.ui.notify(
+				`Deleted saved workflow /${entry.name}. Existing sessions may still show the command until /reload, but it will no longer run.`,
+				"info",
+			);
+		},
+	});
+
+	pi.registerCommand("workflow-edit", {
+		description:
+			"Edit a globally saved workflow command script: /workflow-edit <command-name>",
+		handler: async (args, ctx) => {
+			const name = args.trim().replace(/^\//, "");
+			if (!name) {
+				ctx.ui.notify("Usage: /workflow-edit <command-name>", "error");
+				return;
+			}
+			const entry = globalWorkflowLibrary.get(name);
+			if (!entry) {
+				ctx.ui.notify(`Saved workflow /${name} was not found`, "error");
+				return;
+			}
+			if (!ctx.hasUI) {
+				ctx.ui.notify("/workflow-edit requires interactive mode", "error");
+				return;
+			}
+			const edited = await ctx.ui.editor(
+				`Edit saved workflow /${entry.name}`,
+				entry.script,
+			);
+			if (edited === undefined || edited === entry.script) return;
+			try {
+				const updated = globalWorkflowLibrary.update(entry.name, edited);
+				ctx.ui.notify(`Updated /${updated.name} (${updated.path})`, "info");
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				ctx.ui.notify(`Could not update /${entry.name}: ${message}`, "error");
+			}
+		},
+	});
+
+	pi.registerCommand("workflow-refresh", {
+		description:
+			"Reload saved workflow files and register any new slash commands",
+		handler: async (_args, ctx) => {
+			const before = registeredSavedWorkflowCommands.size;
+			registerSavedWorkflowCommands();
+			const added = registeredSavedWorkflowCommands.size - before;
+			ctx.ui.notify(
+				`Refreshed saved workflows (${added} new command${added === 1 ? "" : "s"}).`,
+				"info",
+			);
+		},
+	});
+
+	async function saveWorkflowJobFromDashboard(
+		job: WorkflowJob,
+		ctx: ExtensionContext,
+	): Promise<void> {
+		const name = await ctx.ui.input("Save workflow as slash command", job.name);
+		if (name === undefined) return;
+		try {
+			const entry = globalWorkflowLibrary.save(
+				job.script,
+				name.trim() || job.name,
+			);
+			registerSavedWorkflowCommand(entry);
+			ctx.ui.notify(
+				`Saved workflow #${job.id} globally as /${entry.name} (${entry.path})`,
+				"info",
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			ctx.ui.notify(`Could not save workflow #${job.id}: ${message}`, "error");
+		}
+	}
 
 	function registerSavedWorkflowCommand(entry: SavedWorkflowEntry): void {
 		if (registeredSavedWorkflowCommands.has(entry.name)) return;

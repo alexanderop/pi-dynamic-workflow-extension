@@ -41,7 +41,15 @@ test("README documents install, build, test, and Pi extension entry points", () 
 });
 
 test("README documents user-facing workflow commands and native triggers", () => {
-	for (const command of ["/workflows", "/workflow-save", "/workflow-resume"]) {
+	for (const command of [
+		"/workflows",
+		"/workflow-save",
+		"/workflow-resume",
+		"/workflow-list",
+		"/workflow-delete",
+		"/workflow-edit",
+		"/workflow-refresh",
+	]) {
 		assertReadmeIncludes(command, new RegExp(command.replace("/", "\\/")));
 	}
 
@@ -64,6 +72,9 @@ test("README documents dashboard controls, persistence locations, and runtime li
 		"j/k scroll",
 		"enter expand",
 		"c cancel",
+		"s save",
+		"r rerun",
+		"R resume",
 		"[/]/<> workflow",
 		"q close",
 	]) {

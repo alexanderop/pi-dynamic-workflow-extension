@@ -56,6 +56,10 @@ Installed commands:
 
 - `/workflows` opens the live and persisted workflow dashboard.
 - `/workflow-save <job-id> [command-name]` saves a job's script globally.
+- `/workflow-list` lists globally saved workflow commands.
+- `/workflow-edit <command-name>` edits a saved workflow script in Pi's editor.
+- `/workflow-delete <command-name>` deletes a saved workflow command file.
+- `/workflow-refresh` reloads saved workflow files and registers any new commands without a full Pi reload.
 - `/workflow-resume <job-id>` resumes a persisted project workflow job.
 - Saved workflows are registered as slash commands such as `/audit_project` and run with any trailing command text as `args`.
 
@@ -68,6 +72,9 @@ After a workflow starts, continue using Pi normally. Run `/workflows` to reopen 
 - `j/k scroll` the detail pane
 - `enter expand` the selected detail
 - `c cancel` a running workflow
+- `s save` the selected workflow as a global slash command
+- `r rerun` the selected workflow as a fresh job
+- `R resume` the selected interrupted/failed/cancelled workflow
 - `[/]/<> workflow` switches between workflow runs
 - `q close` or `esc` closes the dashboard
 

@@ -3,6 +3,7 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	unlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
@@ -19,6 +20,8 @@ export interface WorkflowLibrary {
 	list(): SavedWorkflowEntry[];
 	get(name: string): SavedWorkflowEntry | undefined;
 	save(script: string, name?: string): SavedWorkflowEntry;
+	update(name: string, script: string): SavedWorkflowEntry;
+	delete(name: string): boolean;
 }
 
 export function normalizeWorkflowCommandName(name: string): string {
@@ -75,6 +78,28 @@ export function createFileWorkflowLibrary(rootDir: string): WorkflowLibrary {
 			const normalized = normalizeWorkflowCommandName(name);
 			const path = pathFor(normalized);
 			return existsSync(path) ? readEntry(path) : undefined;
+		},
+		delete(name) {
+			const normalized = normalizeWorkflowCommandName(name);
+			const path = pathFor(normalized);
+			if (!existsSync(path)) return false;
+			unlinkSync(path);
+			return true;
+		},
+		update(name, script) {
+			const commandName = normalizeWorkflowCommandName(name);
+			const parsed = parseWorkflowScript(script);
+			const path = pathFor(commandName);
+			if (!existsSync(path)) {
+				throw new Error(`saved workflow not found: ${commandName}`);
+			}
+			writeFileSync(path, script, "utf8");
+			return {
+				name: commandName,
+				description: parsed.meta.description,
+				path,
+				script,
+			};
 		},
 		save(script, name) {
 			const parsed = parseWorkflowScript(script);
