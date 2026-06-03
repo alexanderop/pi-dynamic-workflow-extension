@@ -24,8 +24,10 @@ export default function extension(pi: ExtensionAPI) {
 		join(homedir(), ".pi", "agent", "workflows"),
 	);
 	const announcedRuns = new Set<string>();
+	const currentSessionRunIds = new Set<string>();
 	const registeredSavedWorkflowCommands = new Set<string>();
 	let unsubscribeStatus: (() => void) | undefined;
+	let detachAgentAbortListener: (() => void) | undefined;
 
 	pi.registerTool(workflowTool);
 
@@ -178,7 +180,13 @@ export default function extension(pi: ExtensionAPI) {
 		job: WorkflowJob,
 		ctx: ExtensionContext,
 	): void {
-		if (job.status === "running" || announcedRuns.has(job.runId)) return;
+		if (
+			job.status === "running" ||
+			job.status === "interrupted" ||
+			!currentSessionRunIds.has(job.runId) ||
+			announcedRuns.has(job.runId)
+		)
+			return;
 		announcedRuns.add(job.runId);
 		pi.appendEntry("workflow-notification-sent", {
 			runId: job.runId,
@@ -210,7 +218,23 @@ export default function extension(pi: ExtensionAPI) {
 		);
 	}
 
+	function watchAgentAbort(ctx: ExtensionContext): void {
+		detachAgentAbortListener?.();
+		detachAgentAbortListener = undefined;
+		const signal = ctx.signal;
+		if (!signal) return;
+		const onAbort = () => manager.interruptAll();
+		if (signal.aborted) {
+			onAbort();
+			return;
+		}
+		signal.addEventListener("abort", onAbort, { once: true });
+		detachAgentAbortListener = () =>
+			signal.removeEventListener("abort", onAbort);
+	}
+
 	pi.on("session_start", (_event, ctx) => {
+		currentSessionRunIds.clear();
 		for (const entry of ctx.sessionManager.getEntries()) {
 			if (
 				entry.type === "custom" &&
@@ -232,16 +256,24 @@ export default function extension(pi: ExtensionAPI) {
 
 		unsubscribeStatus?.();
 		unsubscribeStatus = manager.onChange((job) => {
+			if (job.status === "running") currentSessionRunIds.add(job.runId);
 			updateStatus(ctx);
 			announceCompletedWorkflow(job, ctx);
 		});
 		updateStatus(ctx);
-		for (const job of manager.getJobs()) announceCompletedWorkflow(job, ctx);
+	});
+
+	pi.on("agent_start", (_event, ctx) => watchAgentAbort(ctx));
+	pi.on("agent_end", () => {
+		detachAgentAbortListener?.();
+		detachAgentAbortListener = undefined;
 	});
 
 	pi.on("session_shutdown", () => {
 		unsubscribeStatus?.();
 		unsubscribeStatus = undefined;
-		manager.cancelAll();
+		detachAgentAbortListener?.();
+		detachAgentAbortListener = undefined;
+		manager.interruptAll();
 	});
 }

@@ -67,6 +67,28 @@ return await agent('inspect')
 	assert.equal(await readFile(job.scriptPath, "utf8"), script);
 });
 
+test("WorkflowManager interrupts running jobs without marking them cancelled", async () => {
+	const agent: WorkflowAgentLike = {
+		async run(): Promise<string> {
+			return new Promise<string>(() => {});
+		},
+	};
+	const manager = createWorkflowManager();
+	const job = manager.start(
+		`export const meta = { name: 'interrupt_jobs', description: 'demo' }
+return await agent('inspect')
+`,
+		{ agent },
+	);
+
+	while (job.snapshot.agents.length === 0)
+		await new Promise((resolve) => setTimeout(resolve, 5));
+
+	assert.equal(manager.interrupt(job.id), true);
+	assert.equal(job.status, "interrupted");
+	assert.equal(manager.interrupt(job.id), false);
+});
+
 test("WorkflowManager can resume a restored job from its journal", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-workflow-resume-"));
 	let calls = 0;

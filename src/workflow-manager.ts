@@ -164,6 +164,19 @@ export class WorkflowManager {
 		for (const job of this.jobs) this.cancel(job.id);
 	}
 
+	interrupt(id: number): boolean {
+		const job = this.jobs.find((item) => item.id === id);
+		if (job?.status !== "running") return false;
+		job.status = "interrupted";
+		job.controller.abort();
+		this.touch(job);
+		return true;
+	}
+
+	interruptAll(): void {
+		for (const job of this.jobs) this.interrupt(job.id);
+	}
+
 	onChange(listener: WorkflowJobListener): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
@@ -260,9 +273,14 @@ export class WorkflowManager {
 				}
 			}
 		} catch (error) {
-			if (job.controller.signal.aborted || job.status === "cancelled") {
-				job.status = "cancelled";
+			if (job.status === "cancelled") {
 				job.error = "Workflow was cancelled";
+			} else if (
+				job.controller.signal.aborted ||
+				job.status === "interrupted"
+			) {
+				job.status = "interrupted";
+				job.error = "Workflow was interrupted";
 			} else {
 				const message = error instanceof Error ? error.message : String(error);
 				job.status = "error";
@@ -271,7 +289,10 @@ export class WorkflowManager {
 			}
 			for (const agent of job.snapshot.agents) {
 				if (agent.status === "running" || agent.status === "queued") {
-					agent.status = job.status === "cancelled" ? "skipped" : "error";
+					agent.status =
+						job.status === "cancelled" || job.status === "interrupted"
+							? "skipped"
+							: "error";
 					agent.endedAt = agent.endedAt ?? Date.now();
 				}
 			}
