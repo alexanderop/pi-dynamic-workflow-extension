@@ -27,11 +27,13 @@ export type {
 	WorkflowResult,
 } from "./workflow.js";
 export {
+	assertJsonSerializable,
 	computeWorkflowAgentKey,
 	createFileWorkflowJournal,
 	createInMemoryWorkflowJournal,
 	parseWorkflowScript,
 	runWorkflow,
+	safeJsonStringify,
 } from "./workflow.js";
 export { WorkflowBrowser } from "./workflow-browser.js";
 export { WorkflowDashboard } from "./workflow-dashboard.js";

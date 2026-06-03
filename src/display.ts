@@ -2,6 +2,7 @@ import type {
 	AgentToolResult,
 	AgentToolUpdateCallback,
 } from "@earendil-works/pi-coding-agent";
+import { safeJsonStringify } from "./workflow.js";
 
 export type WorkflowAgentStatus =
 	| "queued"
@@ -96,8 +97,11 @@ export function updateSnapshotStats(
 }
 
 export function preview(value: unknown, maxLength = 180): string {
+	if (value === undefined) return "";
 	const text =
-		typeof value === "string" ? value : JSON.stringify(value, null, 2);
+		typeof value === "string"
+			? value
+			: safeJsonStringify(value, "workflow preview", 2);
 	if (!text) return "";
 	const compact = text.replace(/\s+/g, " ").trim();
 	return compact.length > maxLength
@@ -185,7 +189,9 @@ export function renderWorkflowText(
 	return renderWorkflowLines(snapshot, completed).join("\n");
 }
 
-function cloneSnapshot(snapshot: WorkflowSnapshot): WorkflowSnapshot {
+export function cloneWorkflowSnapshot(
+	snapshot: WorkflowSnapshot,
+): WorkflowSnapshot {
 	return {
 		...snapshot,
 		phases: [...snapshot.phases],
@@ -206,7 +212,7 @@ export function createToolUpdateWorkflowDisplay(
 } {
 	const emit = (snapshot: WorkflowSnapshot, completed: boolean) => {
 		updateSnapshotStats(snapshot);
-		const cloned = cloneSnapshot(snapshot);
+		const cloned = cloneWorkflowSnapshot(snapshot);
 		const result: AgentToolResult<WorkflowSnapshot> = {
 			content: [{ type: "text", text: renderWorkflowText(cloned, completed) }],
 			details: cloned,

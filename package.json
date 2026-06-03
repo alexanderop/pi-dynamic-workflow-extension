@@ -1,6 +1,6 @@
 {
 	"name": "pi-dynamic-workflow-extension",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"description": "Pi extension that runs dynamic JavaScript workflows with isolated subagents and live progress rendering.",
 	"type": "module",
 	"main": "./dist/src/index.js",

@@ -1,4 +1,6 @@
-.pi
+.pi/*
+!.pi/prompts/
+!.pi/prompts/release.md
 node_modules/
 dist/
 .env

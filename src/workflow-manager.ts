@@ -18,6 +18,7 @@ import {
 	parseWorkflowScript,
 	type RunWorkflowOptions,
 	runWorkflow,
+	safeJsonStringify,
 	type WorkflowJournal,
 } from "./workflow.js";
 
@@ -251,7 +252,7 @@ export class WorkflowManager {
 						agent.resultText =
 							typeof event.result === "string"
 								? event.result
-								: JSON.stringify(event.result, null, 2);
+								: safeJsonStringify(event.result, "agent result", 2);
 						if (event.error) agent.error = event.error.message;
 					}
 					this.touch(job);
@@ -338,9 +339,41 @@ export function createWorkflowManager(
 	return new WorkflowManager(options.store);
 }
 
+function isWorkflowJobStatus(value: unknown): value is WorkflowJobStatus {
+	return (
+		value === "running" ||
+		value === "done" ||
+		value === "error" ||
+		value === "cancelled" ||
+		value === "interrupted"
+	);
+}
+
+function isSafeRunId(value: unknown): value is string {
+	return (
+		typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)
+	);
+}
+
+function parseStoredJobManifest(
+	path: string,
+	expectedRunId: string,
+): WorkflowJob | undefined {
+	try {
+		const job = JSON.parse(readFileSync(path, "utf8")) as WorkflowJob;
+		if (job.runId !== expectedRunId) return undefined;
+		return isWorkflowJobStatus(job.status) ? job : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 	mkdirSync(rootDir, { recursive: true });
-	const runDir = (runId: string) => join(rootDir, runId);
+	const runDir = (runId: string) => {
+		if (!isSafeRunId(runId)) throw new Error(`unsafe workflow runId: ${runId}`);
+		return join(rootDir, runId);
+	};
 	const manifestPath = (runId: string) => join(runDir(runId), "manifest.json");
 	const scriptPath = (name: string) =>
 		join(rootDir, "scripts", `${name}.workflow.js`);
@@ -348,10 +381,13 @@ export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 		loadJobs() {
 			if (!existsSync(rootDir)) return [];
 			return readdirSync(rootDir, { withFileTypes: true })
-				.filter((entry) => entry.isDirectory())
-				.map((entry) => manifestPath(entry.name))
-				.filter((path) => existsSync(path))
-				.map((path) => JSON.parse(readFileSync(path, "utf8")) as WorkflowJob)
+				.filter((entry) => entry.isDirectory() && isSafeRunId(entry.name))
+				.flatMap((entry): WorkflowJob[] => {
+					const path = manifestPath(entry.name);
+					if (!existsSync(path)) return [];
+					const job = parseStoredJobManifest(path, entry.name);
+					return job ? [job] : [];
+				})
 				.sort((a, b) => a.startedAt - b.startedAt || a.id - b.id);
 		},
 		saveJob(job) {
@@ -407,16 +443,4 @@ export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 	};
 }
 
-export function cloneWorkflowSnapshot(
-	snapshot: WorkflowSnapshot,
-): WorkflowSnapshot {
-	return {
-		...snapshot,
-		phases: [...snapshot.phases],
-		logs: [...snapshot.logs],
-		agents: snapshot.agents.map((agent) => ({
-			...agent,
-			activity: agent.activity ? [...agent.activity] : undefined,
-		})),
-	};
-}
+export { cloneWorkflowSnapshot } from "./display.js";

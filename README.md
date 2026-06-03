@@ -6,12 +6,13 @@ A shareable Pi package that adds a `workflow` tool and `/workflows` dashboard. T
 
 ```bash
 npm install
+npm run build
 npm test
 pi install /absolute/path/to/pi-dynamic-workflow-extension
 # in Pi: /reload
 ```
 
-For quick testing:
+For quick testing without installing the package:
 
 ```bash
 pi -e ./extensions/workflow.ts
@@ -40,14 +41,32 @@ return { inventory, summary }
 
 The script can use `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()`, `args`, `cwd`, and `budget`. `parallel()` takes thunks: `await parallel(items.map(item => () => agent(...)))`.
 
+## Running workflows
+
+The extension exposes a `workflow` tool for generated orchestration scripts, plus native prompt triggers that ask the main agent to plan with that tool:
+
+- `ultracode <task>` for a larger, more thorough workflow plan
+- `quick workflow <task>` for a smaller, lower-budget workflow plan
+- `use [a] workflow to <task>` for standard workflow planning
+
+Installed commands:
+
+- `/workflows` opens the live and persisted workflow dashboard.
+- `/workflow-save <job-id> [command-name]` saves a job's script globally.
+- `/workflow-resume <job-id>` resumes a persisted project workflow job.
+- Saved workflows are registered as slash commands such as `/audit_project` and run with any trailing command text as `args`.
+
 ## Live workflow dashboard
 
 After a workflow starts, continue using Pi normally. Run `/workflows` to reopen the live dashboard:
 
-- `←` / `→` switch between workflow runs
-- `↑` / `↓` navigate agents inside the selected run
-- `c` cancels a running workflow
-- `q` or `esc` closes the dashboard
+- `↑↓ select` phases, agents, or detail rows in the focused pane
+- `←→ focus` between panes
+- `j/k scroll` the detail pane
+- `enter expand` the selected detail
+- `c cancel` a running workflow
+- `[/]/<> workflow` switches between workflow runs
+- `q close` or `esc` closes the dashboard
 
 The footer shows `workflows:N` while background runs are active.
 
@@ -60,15 +79,21 @@ The extension registers two Pi entry points:
 
 When the tool is called from the installed extension, it does **not** await the whole workflow before returning. Instead, it parses and validates the script, creates a background job in a shared `WorkflowManager`, returns immediately to Pi, and lets the workflow keep running. The `/workflows` command reads that same manager, so you can close and reopen the dashboard without losing the run state.
 
+Project workflow runs are persisted under `.pi/workflows` in the current project. Globally saved reusable workflow commands are stored under `~/.pi/agent/workflows`.
+
 Internally:
 
-- `src/workflow.ts` runs the script in a restricted `node:vm` context.
+- `src/workflow.ts` runs the script in a constrained `node:vm` orchestration context. This is **not** a strong security sandbox; there is no separate worker/process boundary, so only run workflows from trusted packages/users.
 - `src/workflow-manager.ts` owns background jobs, snapshots, cancellation, and change listeners.
 - `src/workflow-browser.ts` renders the interactive Pi TUI and handles arrow-key navigation.
 - `src/workflow-tool.ts` exposes the tool and can run either in foreground mode or background mode when given a manager.
 - Each `agent()` call creates a fresh isolated in-memory Pi subagent session, so subagents do not share conversation history unless the workflow prompt explicitly passes context between them.
 
-The workflow VM intentionally keeps orchestration deterministic: scripts must start with literal `export const meta = ...`, cannot use nondeterministic APIs like `Date.now()` or `Math.random()`, and should delegate file/project inspection to subagents rather than direct filesystem access.
+The workflow VM intentionally keeps orchestration deterministic: scripts must start with literal `export const meta = ...`, cannot use nondeterministic APIs like `Date.now()` or `Math.random()` (including obvious aliases), and should delegate file/project inspection to subagents rather than direct filesystem access. Obvious constructor-based escape attempts are blocked as a guardrail, not as a complete sandbox guarantee.
+
+Workflow and agent results must be JSON-serializable. Returning values such as `BigInt`, functions, symbols, or cyclic objects fails the workflow with a clear JSON boundary error before display or persistence.
+
+Cancellation and `timeoutMs` settle workflows that are waiting at async boundaries, including never-resolving promises or agent calls. They do not preempt CPU-bound loops that run after an `await`; doing that would require moving execution into a terminable worker or process.
 
 ## Publish/share checklist
 

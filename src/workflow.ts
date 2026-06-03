@@ -93,6 +93,7 @@ export interface RunWorkflowOptions {
 	onAgentStart?: (event: AgentStartEvent) => void;
 	onAgentEnd?: (event: AgentEndEvent) => void;
 	onAgentActivity?: (event: AgentActivityEvent) => void;
+	timeoutMs?: number;
 }
 
 export interface WorkflowResult {
@@ -118,6 +119,53 @@ type AnyNode = Record<string, any>;
 const RESERVED_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const JOURNAL_KEY_VERSION = "v1";
 const JOURNAL_MISSING = Symbol("workflow-journal-missing");
+const DETERMINISTIC_MATH = Object.freeze(
+	Object.assign(
+		Object.create(null),
+		Object.fromEntries(
+			Object.getOwnPropertyNames(Math).map((name) => {
+				if (name === "random")
+					return [name, forbiddenDeterminismApi(name, "Math")];
+				const value = (Math as unknown as Record<string, unknown>)[name];
+				return [
+					name,
+					typeof value === "function"
+						? forbidConstructorEscape(value.bind(Math))
+						: value,
+				];
+			}),
+		),
+	),
+);
+const DETERMINISTIC_DATE = Object.freeze(
+	Object.assign(Object.create(null), {
+		now: forbiddenDeterminismApi("now", "Date"),
+		parse: forbidConstructorEscape(Date.parse.bind(Date)),
+		UTC: forbidConstructorEscape(Date.UTC.bind(Date)),
+	}),
+);
+
+function forbiddenDeterminismApi(name: string, object: string): () => never {
+	return forbidConstructorEscape(() => {
+		throw new Error(
+			`workflow scripts must be deterministic; ${object}.${name}() is not allowed`,
+		);
+	});
+}
+
+function forbidConstructorEscape<T extends (...args: any[]) => unknown>(
+	fn: T,
+): T {
+	if (Object.hasOwn(fn, "constructor")) return fn;
+	Object.defineProperty(fn, "constructor", {
+		value: () => {
+			throw new Error("constructor escape is not allowed in workflow scripts");
+		},
+		writable: false,
+		configurable: false,
+	});
+	return fn;
+}
 
 export function createInMemoryWorkflowJournal(): WorkflowJournal {
 	const results = new Map<string, unknown>();
@@ -464,9 +512,11 @@ export async function runWorkflow(
 	const maxEstimatedTokens = options.maxEstimatedTokens ?? 80_000;
 	let previousJournalKey = "";
 	let journalDiverged = false;
+	let stoppedError: Error | undefined;
 
 	const throwIfAborted = () => {
 		if (options.signal?.aborted) throw new Error("Workflow was aborted");
+		if (stoppedError) throw stoppedError;
 	};
 
 	const log = (message: unknown) => {
@@ -482,17 +532,18 @@ export async function runWorkflow(
 		options.onPhase?.(text);
 	};
 
-	const budget = Object.freeze({
-		get spent() {
-			return state.spent;
-		},
-		get max() {
-			return maxEstimatedTokens;
-		},
-		get remaining() {
-			return Math.max(0, maxEstimatedTokens - state.spent);
-		},
-	});
+	const getBudgetSpent = forbidConstructorEscape(() => state.spent);
+	const getBudgetMax = forbidConstructorEscape(() => maxEstimatedTokens);
+	const getBudgetRemaining = forbidConstructorEscape(() =>
+		Math.max(0, maxEstimatedTokens - state.spent),
+	);
+	const budget = Object.freeze(
+		Object.defineProperties(Object.create(null), {
+			spent: { enumerable: true, get: getBudgetSpent },
+			max: { enumerable: true, get: getBudgetMax },
+			remaining: { enumerable: true, get: getBudgetRemaining },
+		}),
+	);
 
 	const agent = (prompt: unknown, agentOptions: unknown = {}) => {
 		throwIfAborted();
@@ -524,13 +575,28 @@ export async function runWorkflow(
 				model: normalizedOptions.model,
 				cached: true,
 			});
-			options.onAgentEnd?.({
-				id,
-				label,
-				phase: assignedPhase,
-				result: cached.result,
-			});
-			return Promise.resolve(cached.result);
+			try {
+				const result = assertJsonSerializable(cached.result, "agent result");
+				options.onAgentEnd?.({
+					id,
+					label,
+					phase: assignedPhase,
+					result,
+				});
+				return Promise.resolve(result);
+			} catch (error) {
+				const actualError =
+					error instanceof Error ? error : new Error(String(error));
+				log(`agent ${label} failed: ${actualError.message}`);
+				options.onAgentEnd?.({
+					id,
+					label,
+					phase: assignedPhase,
+					result: null,
+					error: actualError,
+				});
+				return Promise.reject(actualError);
+			}
 		}
 		if (options.journal) journalDiverged = true;
 
@@ -552,7 +618,7 @@ export async function runWorkflow(
 				model: normalizedOptions.model,
 			});
 			try {
-				const result = await agentRunner.run(taskPrompt, {
+				const rawResult = await agentRunner.run(taskPrompt, {
 					label,
 					schema: normalizedOptions.schema,
 					signal: options.signal,
@@ -560,10 +626,14 @@ export async function runWorkflow(
 						assignedPhase,
 						normalizedOptions,
 					),
-					onActivity: (activity) =>
-						options.onAgentActivity?.({ id, label, ...activity }),
+					onActivity: (activity) => {
+						if (options.signal?.aborted || stoppedError) return;
+						options.onAgentActivity?.({ id, label, ...activity });
+					},
 				});
-				state.spent += estimateTokens(result);
+				throwIfAborted();
+				const result = assertJsonSerializable(rawResult, "agent result");
+				state.spent += estimateTokens(result, "agent result");
 				options.journal?.appendResult({
 					type: "result",
 					key: journalKey,
@@ -573,16 +643,10 @@ export async function runWorkflow(
 				options.onAgentEnd?.({ id, label, phase: assignedPhase, result });
 				return result;
 			} catch (error) {
-				if (options.signal?.aborted) throw error;
+				if (options.signal?.aborted || stoppedError) throw error;
 				const actualError =
 					error instanceof Error ? error : new Error(String(error));
 				log(`agent ${label} failed: ${actualError.message}`);
-				options.journal?.appendResult({
-					type: "result",
-					key: journalKey,
-					agentId: id,
-					result: null,
-				});
 				options.onAgentEnd?.({
 					id,
 					label,
@@ -590,12 +654,15 @@ export async function runWorkflow(
 					result: null,
 					error: actualError,
 				});
-				return null;
+				throw actualError;
 			}
 		});
 
 		pendingAgentRuns.add(run);
-		run.finally(() => pendingAgentRuns.delete(run));
+		run.then(
+			() => pendingAgentRuns.delete(run),
+			() => pendingAgentRuns.delete(run),
+		);
 		return run;
 	};
 
@@ -609,17 +676,7 @@ export async function runWorkflow(
 			);
 		}
 		return Promise.all(
-			thunks.map(async (thunk, index) => {
-				try {
-					return await (thunk as () => Promise<unknown>)();
-				} catch (error) {
-					if (options.signal?.aborted) throw error;
-					log(
-						`parallel[${index}] failed: ${error instanceof Error ? error.message : String(error)}`,
-					);
-					return null;
-				}
-			}),
+			thunks.map(async (thunk) => await (thunk as () => Promise<unknown>)()),
 		);
 	};
 
@@ -635,15 +692,7 @@ export async function runWorkflow(
 				for (const stage of stages as Array<
 					(value: unknown, item: unknown, index: number) => Promise<unknown>
 				>) {
-					try {
-						value = await stage(value, item, index);
-					} catch (error) {
-						if (options.signal?.aborted) throw error;
-						log(
-							`pipeline[${index}] failed: ${error instanceof Error ? error.message : String(error)}`,
-						);
-						return null;
-					}
+					value = await stage(value, item, index);
 				}
 				return value;
 			}),
@@ -651,46 +700,65 @@ export async function runWorkflow(
 	};
 
 	const wrapped = `(async () => {\n${parsed.body}\n})()`;
+	const cwdValue = options.cwd ?? process.cwd();
+	const processFacade = Object.freeze(
+		Object.assign(Object.create(null), {
+			cwd: forbidConstructorEscape(() => cwdValue),
+		}),
+	);
+	const consoleFacade = Object.freeze(
+		Object.assign(Object.create(null), {
+			log: forbidConstructorEscape(log),
+			info: forbidConstructorEscape(log),
+			warn: forbidConstructorEscape((message: unknown) =>
+				log(`[warn] ${String(message)}`),
+			),
+			error: forbidConstructorEscape((message: unknown) =>
+				log(`[error] ${String(message)}`),
+			),
+		}),
+	);
+	const workflowArgsJson =
+		options.args === undefined
+			? undefined
+			: safeJsonStringify(options.args, "workflow args");
 	const context = vm.createContext(
 		{
-			agent,
-			parallel,
-			pipeline,
-			log,
-			phase,
-			args: options.args,
-			cwd: options.cwd ?? process.cwd(),
-			process: Object.freeze({ cwd: () => options.cwd ?? process.cwd() }),
+			agent: forbidConstructorEscape(agent),
+			parallel: forbidConstructorEscape(parallel),
+			pipeline: forbidConstructorEscape(pipeline),
+			log: forbidConstructorEscape(log),
+			phase: forbidConstructorEscape(phase),
+			args: undefined,
+			__workflowArgsJson: workflowArgsJson,
+			cwd: cwdValue,
+			process: processFacade,
 			budget,
-			console: Object.freeze({
-				log,
-				info: log,
-				warn: (message: unknown) => log(`[warn] ${String(message)}`),
-				error: (message: unknown) => log(`[error] ${String(message)}`),
-			}),
-			JSON,
-			Math,
-			Array,
-			Object,
-			String,
-			Number,
-			Boolean,
-			Set,
-			Map,
-			Promise,
+			console: consoleFacade,
+			Date: DETERMINISTIC_DATE,
+			Math: DETERMINISTIC_MATH,
 		},
 		{ codeGeneration: { strings: false, wasm: false } },
 	);
+	new vm.Script(
+		"if (globalThis.__workflowArgsJson !== undefined) globalThis.args = JSON.parse(globalThis.__workflowArgsJson); delete globalThis.__workflowArgsJson;",
+	).runInContext(context, { timeout: 1000 });
 
 	throwIfAborted();
-	const result = await new vm.Script(wrapped, {
-		filename: `${parsed.meta.name}.workflow.js`,
-	}).runInContext(context, {
-		timeout: 1000,
+	const vmResult = Promise.resolve(
+		new vm.Script(wrapped, {
+			filename: `${parsed.meta.name}.workflow.js`,
+		}).runInContext(context, {
+			timeout: 1000,
+		}),
+	);
+	const result = await raceWithAbortAndTimeout(vmResult, options, (error) => {
+		stoppedError = error;
 	});
 
 	await Promise.allSettled([...pendingAgentRuns]);
-	const clonedResult = assertStructuredCloneable(result, "workflow result");
+	const jsonResult = assertJsonSerializable(result, "workflow result");
+	const clonedResult = assertStructuredCloneable(jsonResult, "workflow result");
 	return {
 		meta: parsed.meta,
 		result: clonedResult,
@@ -699,6 +767,56 @@ export async function runWorkflow(
 		agentCount: state.agentCount,
 		estimatedTokens: state.spent,
 	};
+}
+
+function raceWithAbortAndTimeout<T>(
+	promise: Promise<T>,
+	options: Pick<RunWorkflowOptions, "signal" | "timeoutMs">,
+	onStop?: (error: Error) => void,
+): Promise<T> {
+	if (!options.signal && options.timeoutMs === undefined) return promise;
+	if (options.signal?.aborted) {
+		const error = new Error("Workflow was aborted");
+		onStop?.(error);
+		return Promise.reject(error);
+	}
+
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		const cleanup = () => {
+			if (timeout) clearTimeout(timeout);
+			options.signal?.removeEventListener("abort", onAbort);
+		};
+		const finish = <V>(fn: (value: V) => void, value: V) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			fn(value);
+		};
+		const stop = (message: string) => {
+			const error = new Error(message);
+			onStop?.(error);
+			finish(reject, error);
+		};
+		const onAbort = () => stop("Workflow was aborted");
+
+		options.signal?.addEventListener("abort", onAbort, { once: true });
+		if (options.timeoutMs !== undefined) {
+			timeout = setTimeout(
+				() => stop(`Workflow timed out after ${options.timeoutMs}ms`),
+				options.timeoutMs,
+			);
+		}
+		promise.then(
+			(value) => finish(resolve, value),
+			(error) =>
+				finish(
+					reject,
+					error instanceof Error ? error : new Error(String(error)),
+				),
+		);
+	});
 }
 
 function createDefaultWorkflowAgent(
@@ -771,8 +889,114 @@ function requireString(value: unknown, label: string): string {
 	return value;
 }
 
-function estimateTokens(value: unknown): number {
-	return Math.ceil(JSON.stringify(value ?? "").length / 4);
+function estimateTokens(value: unknown, label: string): number {
+	return Math.ceil(safeJsonStringify(value ?? "", label).length / 4);
+}
+
+export function safeJsonStringify(
+	value: unknown,
+	label: string,
+	space?: string | number,
+): string {
+	assertJsonSerializable(value, label);
+	try {
+		const text = JSON.stringify(value, null, space);
+		if (text === undefined) {
+			if (label === "agent result" && value === undefined) return "";
+			throw new TypeError("JSON.stringify returned undefined");
+		}
+		return text;
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(`${label} must be JSON-serializable; ${reason}`);
+	}
+}
+
+export function assertJsonSerializable<T>(value: T, label: string): T {
+	const visit = (item: unknown, path: string, ancestors: WeakSet<object>) => {
+		switch (typeof item) {
+			case "string":
+			case "boolean":
+				return;
+			case "number":
+				if (!Number.isFinite(item)) {
+					throw new Error(
+						`${label} must be JSON-serializable; ${path} must be a finite number`,
+					);
+				}
+				return;
+			case "bigint":
+				throw new Error(
+					`${label} must be JSON-serializable; ${path} is a bigint`,
+				);
+			case "function":
+				throw new Error(
+					`${label} must be JSON-serializable; ${path} is a function`,
+				);
+			case "symbol":
+				throw new Error(
+					`${label} must be JSON-serializable; ${path} is a symbol`,
+				);
+			case "undefined":
+				if (label === "agent result" && path === "$") return;
+				throw new Error(
+					`${label} must be JSON-serializable; ${path} is undefined`,
+				);
+			case "object":
+				break;
+		}
+
+		if (item === null) return;
+		if (isPromiseLike(item)) {
+			if (label === "workflow result") {
+				throw new Error(
+					`${label} must be structured-cloneable; did you forget to await agent(), parallel(), or pipeline()? ${path} is a Promise`,
+				);
+			}
+			throw new Error(
+				`${label} must be JSON-serializable; ${path} is a Promise`,
+			);
+		}
+		if (ancestors.has(item)) {
+			throw new Error(
+				`${label} must be JSON-serializable; ${path} contains a cycle`,
+			);
+		}
+
+		ancestors.add(item);
+		if (Array.isArray(item)) {
+			for (let index = 0; index < item.length; index++) {
+				if (!(index in item)) {
+					throw new Error(
+						`${label} must be JSON-serializable; ${path}[${index}] is a sparse array hole`,
+					);
+				}
+				visit(item[index], `${path}[${index}]`, ancestors);
+			}
+		} else {
+			for (const key of Reflect.ownKeys(item)) {
+				if (typeof key === "symbol") {
+					throw new Error(
+						`${label} must be JSON-serializable; ${path} has a symbol key`,
+					);
+				}
+				if (!Object.prototype.propertyIsEnumerable.call(item, key)) continue;
+				visit(
+					(item as Record<string, unknown>)[key],
+					`${path}.${key}`,
+					ancestors,
+				);
+			}
+		}
+		ancestors.delete(item);
+	};
+
+	visit(value, "$", new WeakSet<object>());
+	return value;
+}
+
+function isPromiseLike(value: object): boolean {
+	return typeof (value as { then?: unknown }).then === "function";
 }
 
 function assertStructuredCloneable(value: unknown, label: string): unknown {

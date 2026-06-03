@@ -38,7 +38,6 @@ export default function extension(pi: ExtensionAPI) {
 	const currentSessionRunIds = new Set<string>();
 	const registeredSavedWorkflowCommands = new Set<string>();
 	let unsubscribeStatus: (() => void) | undefined;
-	let detachAgentAbortListener: (() => void) | undefined;
 
 	pi.registerTool(workflowTool);
 
@@ -231,21 +230,6 @@ export default function extension(pi: ExtensionAPI) {
 		);
 	}
 
-	function watchAgentAbort(ctx: ExtensionContext): void {
-		detachAgentAbortListener?.();
-		detachAgentAbortListener = undefined;
-		const signal = ctx.signal;
-		if (!signal) return;
-		const onAbort = () => manager.interruptAll();
-		if (signal.aborted) {
-			onAbort();
-			return;
-		}
-		signal.addEventListener("abort", onAbort, { once: true });
-		detachAgentAbortListener = () =>
-			signal.removeEventListener("abort", onAbort);
-	}
-
 	pi.on("session_start", (_event, ctx) => {
 		ctx.ui.setEditorComponent(
 			(tui, theme, keybindings) =>
@@ -281,17 +265,9 @@ export default function extension(pi: ExtensionAPI) {
 		updateStatus(ctx);
 	});
 
-	pi.on("agent_start", (_event, ctx) => watchAgentAbort(ctx));
-	pi.on("agent_end", () => {
-		detachAgentAbortListener?.();
-		detachAgentAbortListener = undefined;
-	});
-
 	pi.on("session_shutdown", () => {
 		unsubscribeStatus?.();
 		unsubscribeStatus = undefined;
-		detachAgentAbortListener?.();
-		detachAgentAbortListener = undefined;
 		manager.interruptAll();
 	});
 }

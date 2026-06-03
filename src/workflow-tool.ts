@@ -2,6 +2,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import {
+	cloneWorkflowSnapshot,
 	createToolUpdateWorkflowDisplay,
 	createWorkflowSnapshot,
 	preview,
@@ -12,10 +13,10 @@ import {
 	parseWorkflowScript,
 	type RunWorkflowOptions,
 	runWorkflow,
+	safeJsonStringify,
 } from "./workflow.js";
 import { WorkflowDashboard } from "./workflow-dashboard.js";
 import {
-	cloneWorkflowSnapshot,
 	createWorkflowManager,
 	type WorkflowManager,
 } from "./workflow-manager.js";
@@ -63,18 +64,6 @@ function normalizeWorkflowScript(script: string): string {
 	return script.trim();
 }
 
-function cloneDetails(snapshot: WorkflowSnapshot): WorkflowSnapshot {
-	return {
-		...snapshot,
-		phases: [...snapshot.phases],
-		logs: [...snapshot.logs],
-		agents: snapshot.agents.map((agent) => ({
-			...agent,
-			activity: agent.activity ? [...agent.activity] : undefined,
-		})),
-	};
-}
-
 export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 	const manager = options.manager ?? createWorkflowManager();
 	const runInBackground = options.background ?? Boolean(options.manager);
@@ -89,12 +78,17 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 		promptGuidelines: [
 			"Use workflow only when the user explicitly asks for a workflow, workflows, fan-out, multi-agent orchestration, or a planned multi-step agent run.",
 			"For workflow, always pass one raw JavaScript string in the required script parameter; do not include Markdown fences.",
-			"For workflow, the first statement must be `export const meta = { name: 'short_snake_case', description: 'non-empty description' }` with literal-only values.",
-			"For workflow, call phase(title) before groups of related agent work so progress is visible.",
-			"For workflow, call agent(prompt, opts) at least once; subagents are isolated, so each prompt must include enough file paths and context.",
-			"For workflow, parallel() takes functions, not promises: use `await parallel(items.map(item => () => agent(...)))`.",
+			"For workflow, the first statement must be `export const meta = { name: 'short_snake_case', description: 'non-empty description', phases: [{ title: 'Phase' }] }` with literal-only values; use snake_case, not kebab-case.",
+			"For workflow, call phase(title) before each major group of work so progress is visible; prefer phase names that match meta.phases titles.",
+			"For workflow, call agent(prompt, opts) at least once; subagents are isolated, so each prompt must include enough file paths, repo context, prior findings, and success criteria.",
+			"For workflow, prefer JSON Schema constants for structured subagent outputs and pass `{ label, phase, schema }` to agent() so fan-in code can safely consume results.",
+			"For workflow, use args for user inputs; validate required args near the top and return a JSON-serializable error object instead of asking follow-up questions inside the script.",
+			"For workflow, compose Claude-style fan-out/fan-in runs with `parallel(items.map(item => () => agent(...)))`, `.filter(Boolean)`, optional adversarial verification agents, and a final synthesis agent.",
+			"For workflow, parallel() takes functions, not promises: use `await parallel(items.map(item => () => agent(...)))`; pipeline(items, ...stages) streams each item through stages independently.",
+			"For workflow, failed agent calls reject the workflow, including inside parallel()/pipeline(); handle recoverable failures explicitly in the script if needed.",
 			"For workflow, always await agent(), parallel(), and pipeline() before returning a JSON-serializable result.",
-			"For workflow, do not use Date.now(), new Date(), Math.random(), require, import, fs, network APIs, or direct filesystem access in the script; delegate work to agent().",
+			"For workflow, supported agent options are label, phase, schema, agentType, model, isolation, and instructions; do not rely on unsupported Claude options such as harness, permissions, maxRetries, or worktree.",
+			"For workflow, do not use Date.now(), new Date(), Math.random(), aliases of those APIs, constructor escape patterns, require, import, fs, network APIs, or direct filesystem access in the script; delegate file, git, and web work to agent().",
 			"When workflow returns a background job id, do not poll, wait, or re-run it; continue normally because the extension will send a workflow-completion message when the job finishes.",
 		],
 		parameters: workflowToolSchema,
@@ -204,13 +198,13 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 				onAgentEnd(event) {
 					const agent = snapshot.agents.find((item) => item.id === event.id);
 					if (agent) {
-						agent.status = event.result === null ? "error" : "done";
+						agent.status = event.error ? "error" : "done";
 						agent.endedAt = Date.now();
 						agent.resultPreview = preview(event.result);
 						agent.resultText =
 							typeof event.result === "string"
 								? event.result
-								: JSON.stringify(event.result, null, 2);
+								: safeJsonStringify(event.result, "agent result", 2);
 						if (event.error) agent.error = event.error.message;
 					}
 					emit();
@@ -237,14 +231,14 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 				content: [
 					{
 						type: "text",
-						text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).\n\nResult:\n${JSON.stringify(
+						text: `Workflow ${result.meta.name} completed with ${result.agentCount} agent(s).\n\nResult:\n${safeJsonStringify(
 							result.result,
-							null,
+							"workflow result",
 							2,
 						)}`,
 					},
 				],
-				details: cloneDetails(snapshot),
+				details: cloneWorkflowSnapshot(snapshot),
 			};
 		},
 

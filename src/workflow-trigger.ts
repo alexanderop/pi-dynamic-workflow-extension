@@ -51,7 +51,11 @@ function matchNativeWorkflowTrigger(
 const WORKFLOW_PROMPT_INSTRUCTIONS = [
 	"Decide whether using the workflow tool is appropriate for this task.",
 	"If it is, use or generate a deterministic JavaScript workflow that slices the work into clear subagent tasks.",
-	"Call phase() before each major group of work.",
+	"Start the script with literal metadata: export const meta = { name: 'short_snake_case', description: '...', phases: [{ title: '...' }] }; use snake_case, not kebab-case.",
+	"Use args for user inputs, validate them near the top, and return JSON-serializable error objects for missing required inputs.",
+	"Call phase() before each major group of work and pass { label, phase, schema } to important agent() calls.",
+	"Prefer JSON Schema constants for structured subagent outputs, then fan-in with .filter(Boolean) before synthesis.",
+	"Use Claude-style fan-out/fan-in patterns: parallel thunks for independent readers, pipeline for per-item flows, optional adversarial verification, final synthesis.",
 	"For implementation tasks, include test-first/TDD red-green-refactor instructions.",
 	"Finish with a simplification/refactor phase.",
 ];
