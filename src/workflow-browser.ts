@@ -1,5 +1,8 @@
 import { type Component, Key, matchesKey } from "@earendil-works/pi-tui";
-import type { WorkflowAgentSnapshot } from "./display.js";
+import {
+	formatWorkflowArtifactSummary,
+	type WorkflowAgentSnapshot,
+} from "./display.js";
 import type { WorkflowJob, WorkflowManager } from "./workflow-manager.js";
 import {
 	cell,
@@ -395,6 +398,7 @@ export class WorkflowBrowser implements Component {
 					? ["Outcome", `  ${singleLine(JSON.stringify(result))}`]
 					: []),
 				...(job.error ? ["Error", `  ${job.error}`] : []),
+				...this.artifactRows(job),
 			];
 		}
 
@@ -403,6 +407,7 @@ export class WorkflowBrowser implements Component {
 			`Phase: ${agent.phase ?? "Unphased"}`,
 			`Status: ${agent.status}${agent.model ? ` · ${agent.model}` : ""}`,
 			`Metrics: ${this.detailMetrics(agent)}`,
+			...this.artifactRows(job),
 			"Prompt",
 			...this.promptRows(agent.prompt),
 			...(agent.activity?.length
@@ -419,6 +424,17 @@ export class WorkflowBrowser implements Component {
 				? ["Workflow result", `  ${singleLine(JSON.stringify(job.result))}`]
 				: []),
 			...(job.error ? ["Workflow error", `  ${job.error}`] : []),
+		];
+	}
+
+	private artifactRows(job: WorkflowJob): string[] {
+		const artifacts = job.snapshot.artifacts ?? [];
+		if (artifacts.length === 0) return [];
+		return [
+			"Artifacts",
+			...artifacts.map(
+				(artifact) => `  ${formatWorkflowArtifactSummary(artifact)}`,
+			),
 		];
 	}
 

@@ -18,9 +18,11 @@ Good workflows usually follow this shape: validate `args`, define schemas, `phas
 - Call `agent()` at least once.
 - Always await `agent()`, `parallel()`, and `pipeline()`; never return unresolved promises.
 - Return only JSON-serializable values.
+- Use `artifact(name, value, options?)` for durable named outputs such as reports, findings, handoffs, and checklists.
+- Artifact names must be unique safe relative names, and artifact values must be JSON-serializable.
 - If required `args` are missing, return a JSON-serializable error object instead of asking the user from inside the workflow.
 - Failed agent calls reject the workflow, including inside `parallel()` and `pipeline()`; catch errors inside a thunk only when best-effort behavior is intentional.
-- When the workflow tool returns a background job id, do not poll, wait, or re-run it. The extension sends a workflow-completion message when the job finishes.
+- When the workflow tool returns a background job id, end your turn and yield control. If the user says nothing, stay idle instead of continuing the task on your own. Do not poll, busy-wait, or re-run it. Resume only when the user sends a new message or the extension sends a workflow-completion message when the job finishes.
 
 ## Workflow Primitive Reference
 
@@ -39,6 +41,17 @@ declare function phase(title: string): void;
 
 /** Emit a concise progress note into the workflow dashboard after important decisions, fan-ins, counts, or skips. */
 declare function log(message: string): void;
+
+interface ArtifactOptions {
+  /** Artifact content type. Defaults to 'json' when omitted. */
+  type?: 'markdown' | 'json' | 'text';
+
+  /** Short human-readable description shown in workflow dashboards and reports. */
+  description?: string;
+}
+
+/** Register a durable named workflow output. Names must be unique safe relative names; values must be JSON-serializable. */
+declare function artifact(name: string, value: unknown, options?: ArtifactOptions): void;
 
 /** JSON Schema-like object used for schema-enforced structured subagent output. */
 type JsonSchema = {
@@ -85,6 +98,16 @@ declare function pipeline<TItem, TResult>(
   ...stages: Array<(value: unknown, item: TItem, index: number) => Promise<unknown>>
 ): Promise<TResult[]>;
 ```
+
+Artifact examples:
+
+```js
+artifact('review.md', markdown, { type: 'markdown', description: 'Review report' })
+artifact('findings.json', findings, { type: 'json' })
+artifact('summary.txt', summary, { type: 'text' })
+```
+
+Do not use absolute paths, parent traversal (`..`), duplicate artifact names, or non-JSON values such as functions, `BigInt`, `undefined`, or cyclic objects.
 
 ## Workflow Authoring Rules
 

@@ -1,4 +1,8 @@
-import { preview, type WorkflowAgentStatus } from "./display.js";
+import {
+	formatWorkflowArtifactSummary,
+	preview,
+	type WorkflowAgentStatus,
+} from "./display.js";
 import type { WorkflowJob, WorkflowJobStatus } from "./workflow-manager.js";
 import {
 	formatDuration,
@@ -25,6 +29,12 @@ export interface WorkflowAgentReportRow {
 	toolCount: number;
 }
 
+export interface WorkflowArtifactReportRow {
+	name: string;
+	type: "markdown" | "json" | "text";
+	description?: string;
+}
+
 export interface WorkflowReport {
 	id: number;
 	name: string;
@@ -37,6 +47,7 @@ export interface WorkflowReport {
 	toolCount: number;
 	phases: WorkflowPhaseReportRow[];
 	agents: WorkflowAgentReportRow[];
+	artifacts: WorkflowArtifactReportRow[];
 	resultPreview?: string;
 	error?: string;
 }
@@ -71,6 +82,13 @@ export function selectWorkflowReport(job: WorkflowJob): WorkflowReport {
 	const toolCount =
 		snapshot.toolCount ??
 		agents.reduce((total, agent) => total + agent.toolCount, 0);
+	const artifacts = (snapshot.artifacts ?? []).map((artifact) => ({
+		name: artifact.name,
+		type: artifact.type,
+		...(artifact.description !== undefined
+			? { description: artifact.description }
+			: {}),
+	}));
 	const result = job.result ?? snapshot.result;
 	const cancelledAgents = snapshot.agents.filter(
 		(agent) => agent.status === "skipped",
@@ -92,6 +110,7 @@ export function selectWorkflowReport(job: WorkflowJob): WorkflowReport {
 		toolCount,
 		phases,
 		agents,
+		artifacts,
 		resultPreview: result !== undefined ? preview(result, 500) : undefined,
 		error: job.error,
 	};
@@ -124,6 +143,13 @@ export function renderWorkflowReportText(report: WorkflowReport): string {
 		lines.push(
 			`  #${agent.id} ${statusGlyph(agent.status)} ${agent.label} ${agent.phase} ${formatDuration(agent.durationMs)} · ${agent.toolCount} tools`,
 		);
+	}
+
+	if (report.artifacts.length > 0) {
+		lines.push("", "Artifacts");
+		for (const artifact of report.artifacts) {
+			lines.push(`  ${formatWorkflowArtifactSummary(artifact)}`);
+		}
 	}
 
 	if (report.resultPreview) {

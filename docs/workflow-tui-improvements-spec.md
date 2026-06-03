@@ -1,3 +1,8 @@
+---
+created: 2026-06-03
+implemented: true
+---
+
 # Workflow TUI Improvements Spec
 
 ## Context

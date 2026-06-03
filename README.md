@@ -42,7 +42,17 @@ const summary = await agent('Summarize this inventory:\n' + inventory, {
 return { inventory, summary }
 ```
 
-The script can use `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()`, `args`, `cwd`, and `budget`. `parallel()` takes thunks: `await parallel(items.map(item => () => agent(...)))`.
+The script can use `agent()`, `parallel()`, `pipeline()`, `artifact()`, `phase()`, `log()`, `args`, `cwd`, and `budget`. `parallel()` takes thunks: `await parallel(items.map(item => () => agent(...)))`.
+
+Use `artifact(name, value, options?)` to register durable workflow outputs such as Markdown reports, JSON findings, text summaries, handoffs, or checklists:
+
+```js
+artifact('review.md', markdown, { type: 'markdown', description: 'Review report' })
+artifact('findings.json', findings, { type: 'json' })
+artifact('summary.txt', summary, { type: 'text' })
+```
+
+Artifact names must be unique safe relative names, not absolute paths or parent-traversal paths. Artifact values must be JSON-serializable. Artifacts appear in the live workflow dashboard, completion reports, and persisted job snapshots.
 
 ## Running workflows
 
@@ -101,7 +111,7 @@ Internally:
 
 The workflow VM intentionally keeps orchestration deterministic: scripts must start with literal `export const meta = ...`, cannot use nondeterministic APIs like `Date.now()` or `Math.random()` (including obvious aliases), and should delegate file/project inspection to subagents rather than direct filesystem access. Obvious constructor-based escape attempts are blocked as a guardrail, not as a complete sandbox guarantee.
 
-Workflow and agent results must be JSON-serializable. Returning values such as `BigInt`, functions, symbols, or cyclic objects fails the workflow with a clear JSON boundary error before display or persistence.
+Workflow results, agent results, and artifact values must be JSON-serializable. Returning values such as `BigInt`, functions, symbols, `undefined`, or cyclic objects fails the workflow with a clear JSON boundary error before display or persistence.
 
 Cancellation and `timeoutMs` settle workflows that are waiting at async boundaries, including never-resolving promises or agent calls. They do not preempt CPU-bound loops that run after an `await`; doing that would require moving execution into a terminable worker or process.
 

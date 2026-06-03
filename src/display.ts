@@ -2,7 +2,7 @@ import type {
 	AgentToolResult,
 	AgentToolUpdateCallback,
 } from "@earendil-works/pi-coding-agent";
-import { safeJsonStringify } from "./workflow.js";
+import { safeJsonStringify, type WorkflowArtifact } from "./workflow.js";
 
 export type WorkflowAgentStatus =
 	| "queued"
@@ -52,6 +52,7 @@ export interface WorkflowSnapshot {
 	toolCount?: number;
 	durationMs?: number;
 	result?: unknown;
+	artifacts?: WorkflowArtifact[];
 }
 
 export function createWorkflowSnapshot(meta: {
@@ -69,6 +70,7 @@ export function createWorkflowSnapshot(meta: {
 		runningCount: 0,
 		doneCount: 0,
 		errorCount: 0,
+		artifacts: [],
 	};
 }
 
@@ -94,6 +96,13 @@ export function updateSnapshotStats(
 		0,
 	);
 	return snapshot;
+}
+
+export function formatWorkflowArtifactSummary(
+	artifact: Pick<WorkflowArtifact, "name" | "type" | "description">,
+): string {
+	const description = artifact.description ? ` · ${artifact.description}` : "";
+	return `${artifact.name} (${artifact.type})${description}`;
 }
 
 export function preview(value: unknown, maxLength = 180): string {
@@ -176,6 +185,14 @@ export function renderWorkflowLines(
 			lines.push(`    #${agent.id} ${statusIcon(agent.status)} ${agent.label}`);
 	}
 
+	const artifacts = snapshot.artifacts ?? [];
+	if (artifacts.length > 0) {
+		lines.push("  Artifacts");
+		for (const artifact of artifacts) {
+			lines.push(`    ${formatWorkflowArtifactSummary(artifact)}`);
+		}
+	}
+
 	for (const log of snapshot.logs.slice(-3)) lines.push(`  log: ${log}`);
 	if (completed && snapshot.durationMs !== undefined)
 		lines.push(`  duration: ${Math.round(snapshot.durationMs / 1000)}s`);
@@ -199,6 +216,10 @@ export function cloneWorkflowSnapshot(
 		agents: snapshot.agents.map((agent) => ({
 			...agent,
 			activity: agent.activity ? [...agent.activity] : undefined,
+		})),
+		artifacts: snapshot.artifacts?.map((artifact) => ({
+			...artifact,
+			value: structuredClone(artifact.value),
 		})),
 	};
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildNativeWorkflowPrompt } from "../src/prompts/workflow-trigger.js";
 import {
 	highlightWorkflowTriggerWords,
 	type NativeWorkflowInputTransform,
@@ -63,6 +64,18 @@ test("native workflow input transforms use workflow phrasing", () => {
 	});
 	assertTransform(withoutArticle);
 	assertStandardWorkflowPrompt(withoutArticle.text, "write regression tests");
+});
+
+test("native workflow prompt tells the agent to yield after background launch", () => {
+	const prompt = buildNativeWorkflowPrompt({
+		task: "audit the repo",
+		mode: "standard",
+	});
+
+	assert.ok(prompt.includes("After launching a background workflow"));
+	assert.ok(prompt.includes("end your turn and yield control"));
+	assert.ok(prompt.includes("If the user says nothing, stay idle"));
+	assert.ok(prompt.includes("workflow-completion"));
 });
 
 test("native workflow input ignores extension-injected trigger text", () => {

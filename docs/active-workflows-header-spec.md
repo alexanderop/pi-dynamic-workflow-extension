@@ -1,3 +1,8 @@
+---
+created: 2026-06-03
+implemented: false
+---
+
 # Spec: Active-Only Workflow Header
 
 ## Problem

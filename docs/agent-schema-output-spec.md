@@ -1,3 +1,8 @@
+---
+created: 2026-06-03
+implemented: true
+---
+
 # Spec: schema-enforced subagent output for workflow `agent()`
 
 ## Status

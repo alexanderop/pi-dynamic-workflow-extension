@@ -3,10 +3,11 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import type {
-	WorkflowAgentSnapshot,
-	WorkflowAgentStatus,
-	WorkflowSnapshot,
+import {
+	formatWorkflowArtifactSummary,
+	type WorkflowAgentSnapshot,
+	type WorkflowAgentStatus,
+	type WorkflowSnapshot,
 } from "./display.js";
 
 interface DashboardTheme {
@@ -115,11 +116,18 @@ export class WorkflowDashboard implements Component {
 				return `Tool: ${item.toolName ?? "tool"} ${item.argsPreview ?? ""}`;
 			return item.text ?? "";
 		});
+		const artifacts = (this.snapshot.artifacts ?? []).flatMap(
+			(artifact, index) => {
+				const row = formatWorkflowArtifactSummary(artifact);
+				return index === 0 ? ["Artifacts", row] : [row];
+			},
+		);
 		const detail = selected
 			? [
 					`Agent: ${selected.label}`,
 					`Phase: ${selected.phase ?? "Unphased"}`,
 					`Status: ${selected.status}`,
+					...artifacts,
 					`Prompt: ${selected.prompt}`,
 					...(activity?.length
 						? activity.map((line) => `Activity: ${line}`)
@@ -129,7 +137,9 @@ export class WorkflowDashboard implements Component {
 						: []),
 					...(selected.error ? [`Error: ${selected.error}`] : []),
 				]
-			: ["No agents started yet"];
+			: artifacts.length
+				? artifacts
+				: ["No agents started yet"];
 
 		const rows = Math.max(phases.length, agents.length, detail.length, 1);
 		const status = this.completed

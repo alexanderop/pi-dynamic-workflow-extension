@@ -3,9 +3,17 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+const workflowTypes = await readFile(
+	new URL("../types/workflow.d.ts", import.meta.url),
+	"utf8",
+);
 const packageJson = JSON.parse(
 	await readFile(new URL("../package.json", import.meta.url), "utf8"),
-) as { scripts?: Record<string, string>; pi?: { extensions?: string[] } };
+) as {
+	exports?: Record<string, { types?: string }>;
+	scripts?: Record<string, string>;
+	pi?: { extensions?: string[] };
+};
 
 function assertReadmeIncludes(label: string, pattern: RegExp): void {
 	assert.match(readme, pattern, `README should document ${label}`);
@@ -62,6 +70,39 @@ test("README documents user-facing workflow commands and native triggers", () =>
 	assertReadmeIncludes(
 		"saved workflow slash commands",
 		/saved workflows?.*slash commands?/is,
+	);
+});
+
+test("README documents workflow artifact outputs", () => {
+	assertReadmeIncludes(
+		"artifact primitive",
+		/artifact\(name, value, options\?\)/,
+	);
+	assertReadmeIncludes("artifact safe relative names", /safe relative names/i);
+	assertReadmeIncludes(
+		"artifact JSON values",
+		/artifact values.*JSON-serializable/is,
+	);
+	assertReadmeIncludes(
+		"artifact dashboard visibility",
+		/Artifacts.*dashboard/is,
+	);
+});
+
+test("workflow global types expose the artifact contract", () => {
+	assert.equal(
+		packageJson.exports?.["./workflow"]?.types,
+		"./types/workflow.d.ts",
+	);
+	assert.match(workflowTypes, /interface ArtifactOptions/);
+	assert.match(
+		workflowTypes,
+		/type\?: ["']markdown["'] \| ["']json["'] \| ["']text["']/,
+	);
+	assert.match(workflowTypes, /interface WorkflowArtifact/);
+	assert.match(
+		workflowTypes,
+		/function artifact\(\s*name: string,\s*value: unknown,\s*options\?: ArtifactOptions,\s*\): void/s,
 	);
 });
 

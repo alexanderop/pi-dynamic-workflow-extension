@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import {
+	cloneWorkflowSnapshot,
 	renderWorkflowLines,
 	type WorkflowAgentSnapshot,
 	type WorkflowSnapshot,
@@ -52,6 +53,49 @@ test("renderWorkflowLines hides empty phase rows", () => {
 	assert.ok(!lines.some((line) => line.includes("Review 0/0")));
 });
 
+test("renderWorkflowLines includes registered workflow artifacts", () => {
+	const lines = renderWorkflowLines(
+		snapshot({
+			artifacts: [
+				{
+					name: "review.md",
+					type: "markdown",
+					description: "Human report",
+					value: "# Review",
+				},
+			],
+		}),
+		true,
+	);
+
+	assert.ok(lines.some((line) => line.includes("Artifacts")));
+	assert.ok(lines.some((line) => line.includes("review.md")));
+	assert.ok(lines.some((line) => line.includes("markdown")));
+	assert.ok(lines.some((line) => line.includes("Human report")));
+});
+
+test("cloneWorkflowSnapshot deep-clones workflow artifacts", () => {
+	const original = snapshot({
+		artifacts: [
+			{
+				name: "findings.json",
+				type: "json",
+				value: { nested: { count: 1 } },
+			},
+		],
+	});
+
+	const cloned = cloneWorkflowSnapshot(original);
+	cloned.artifacts?.push({ name: "extra.txt", type: "text", value: "extra" });
+	(cloned.artifacts?.[0]?.value as { nested: { count: number } }).nested.count =
+		2;
+
+	assert.equal(original.artifacts?.length, 1);
+	assert.deepEqual(original.artifacts?.[0]?.value, { nested: { count: 1 } });
+	assert.notEqual(cloned.artifacts, original.artifacts);
+	assert.notEqual(cloned.artifacts?.[0]?.value, original.artifacts?.[0]?.value);
+});
+
 test("WorkflowDashboard keeps lines within width", () => {
 	const dashboard = new WorkflowDashboard(
 		snapshot({
@@ -76,6 +120,28 @@ test("WorkflowDashboard keeps lines within width", () => {
 	const lines = dashboard.render(72);
 	assert.ok(lines.length > 0);
 	for (const line of lines) assert.ok(visibleWidth(line) <= 72, line);
+});
+
+test("WorkflowDashboard renders artifact summaries", () => {
+	const dashboard = new WorkflowDashboard(
+		snapshot({
+			artifacts: [
+				{
+					name: "review.md",
+					type: "markdown",
+					description: "Human report",
+					value: "# Review",
+				},
+			],
+		}),
+		theme,
+		true,
+	);
+
+	const text = dashboard.render(96).join("\n");
+	assert.match(text, /Artifacts/);
+	assert.match(text, /review\.md/);
+	assert.match(text, /markdown/);
 });
 
 test("WorkflowDashboard has narrow fallback", () => {

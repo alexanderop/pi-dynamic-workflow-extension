@@ -211,6 +211,33 @@ test("WorkflowBrowser keeps ANSI resets out of truncated selected workflow chip"
 	instance.handleInput("q");
 });
 
+test("WorkflowBrowser renders workflow artifacts in the detail pane", () => {
+	const { instance } = browser(
+		new FakeManager([
+			job({
+				snapshot: snapshot({
+					artifacts: [
+						{
+							name: "review.md",
+							type: "markdown",
+							description: "Human report",
+							value: "# Review",
+						},
+					],
+				}),
+			}),
+		]),
+	);
+
+	const text = instance.render(124).join("\n");
+	assert.match(text, /Artifacts/);
+	assert.match(text, /review\.md/);
+	assert.match(text, /markdown/);
+	assert.match(text, /Human report/);
+
+	instance.handleInput("q");
+});
+
 test("WorkflowBrowser supports p and n workflow navigation", () => {
 	const first = job({ id: 1, name: "first_workflow", status: "done" });
 	const second = job({ id: 2, name: "second_workflow", status: "running" });

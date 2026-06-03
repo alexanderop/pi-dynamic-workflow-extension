@@ -207,6 +207,13 @@ export class WorkflowManager {
 					job.snapshot.logs.push(message);
 					this.touch(job);
 				},
+				onArtifact: (artifact) => {
+					job.snapshot.artifacts = [
+						...(job.snapshot.artifacts ?? []),
+						artifact,
+					];
+					this.touch(job);
+				},
 				onAgentStart: (event) => {
 					const now = Date.now();
 					job.snapshot.agents.push({
@@ -267,6 +274,7 @@ export class WorkflowManager {
 			job.result = result.result;
 			job.snapshot.currentPhase = undefined;
 			job.snapshot.result = result.result;
+			job.snapshot.artifacts = result.artifacts;
 			for (const agent of job.snapshot.agents) {
 				if (agent.status === "running" || agent.status === "queued") {
 					agent.status = "done";

@@ -4,6 +4,7 @@ import {
 	createInMemoryWorkflowJournal,
 	runWorkflow,
 	type WorkflowAgentLike,
+	type WorkflowArtifact,
 } from "../src/workflow.js";
 
 const fakeAgent: WorkflowAgentLike = {
@@ -49,6 +50,151 @@ return { scan }
 	assert.deepEqual(result.phases, ["Scan"]);
 	assert.equal(result.agentCount, 1);
 	assert.deepEqual(result.result, { scan: "result:scan" });
+});
+
+test("runWorkflow registers ordered workflow artifacts", async () => {
+	const result = await runWorkflow(
+		`export const meta = { name: 'artifact_demo', description: 'demo' }
+artifact('review.md', '# Report', { type: 'markdown', description: 'Human report' })
+await agent('inspect')
+artifact('findings.json', [{ severity: 'low' }])
+return { ok: true }
+`,
+		{ agent: fakeAgent },
+	);
+
+	assert.deepEqual(result.artifacts, [
+		{
+			name: "review.md",
+			type: "markdown",
+			description: "Human report",
+			value: "# Report",
+		},
+		{
+			name: "findings.json",
+			type: "json",
+			value: [{ severity: "low" }],
+		},
+	]);
+});
+
+test("runWorkflow emits cloned artifact callbacks before completion", async () => {
+	const seen: WorkflowArtifact[] = [];
+	const result = await runWorkflow(
+		`export const meta = { name: 'artifact_callback', description: 'demo' }
+artifact('data.json', { nested: { count: 1 } })
+await agent('inspect')
+artifact('summary.txt', 'done', { type: 'text' })
+return { ok: true }
+`,
+		{
+			agent: fakeAgent,
+			onArtifact(artifact) {
+				seen.push(artifact);
+				if (artifact.name === "data.json") {
+					(artifact.value as { nested: { count: number } }).nested.count = 99;
+				}
+			},
+		},
+	);
+
+	assert.deepEqual(
+		seen.map((artifact) => artifact.name),
+		["data.json", "summary.txt"],
+	);
+	assert.deepEqual(result.artifacts[0]?.value, { nested: { count: 1 } });
+	assert.notEqual(seen[0], result.artifacts[0]);
+});
+
+test("runWorkflow rejects invalid artifact registrations", async () => {
+	const cases: Array<{ name: string; statement: string; expected: RegExp }> = [
+		{
+			name: "duplicate_artifact",
+			statement: "artifact('same.json', 1); artifact('same.json', 2)",
+			expected: /artifact name must be unique/i,
+		},
+		{
+			name: "parent_artifact",
+			statement: "artifact('../secret.txt', 'x')",
+			expected: /artifact name must be a safe relative path/i,
+		},
+		{
+			name: "absolute_artifact",
+			statement: "artifact('/tmp/output.md', 'x')",
+			expected: /artifact name must be a safe relative path/i,
+		},
+		{
+			name: "windows_artifact",
+			statement: "artifact('..\\\\secret.txt', 'x')",
+			expected: /artifact name must be a safe relative path/i,
+		},
+		{
+			name: "empty_artifact",
+			statement: "artifact('', 'x')",
+			expected: /artifact name must be a non-empty string/i,
+		},
+		{
+			name: "bad_artifact_type",
+			statement: "artifact('out.bin', 'x', { type: 'binary' })",
+			expected: /artifact type must be one of/i,
+		},
+		{
+			name: "bad_artifact_description",
+			statement: "artifact('out.txt', 'x', { description: 1 })",
+			expected: /artifact description must be a string/i,
+		},
+		{
+			name: "cyclic_artifact",
+			statement:
+				"const value = {}; value.self = value; artifact('cycle.json', value)",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+		{
+			name: "function_artifact",
+			statement: "artifact('function.json', () => {})",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+		{
+			name: "bigint_artifact",
+			statement: "artifact('bigint.json', 1n)",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+		{
+			name: "undefined_artifact",
+			statement: "artifact('undefined.json', undefined)",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+		{
+			name: "map_artifact",
+			statement: "artifact('map.json', new Map([['a', 1]]))",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+		{
+			name: "set_artifact",
+			statement: "artifact('set.json', new Set([1]))",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+		{
+			name: "custom_artifact",
+			statement: "class Box { value = 1 } artifact('box.json', new Box())",
+			expected: /artifact value must be JSON-serializable/i,
+		},
+	];
+
+	for (const item of cases) {
+		await assert.rejects(
+			() =>
+				runWorkflow(
+					`export const meta = { name: '${item.name}', description: 'demo' }
+${item.statement}
+await agent('inspect')
+return { ok: true }
+`,
+					{ agent: fakeAgent },
+				),
+			item.expected,
+		);
+	}
 });
 
 test("runWorkflow passes schema and structured-output contract to agents", async () => {

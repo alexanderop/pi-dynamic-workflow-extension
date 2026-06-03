@@ -57,6 +57,32 @@ function job(): WorkflowJob {
 	};
 }
 
+test("workflow completion report summarizes artifacts", () => {
+	const report = selectWorkflowReport({
+		...job(),
+		snapshot: {
+			...job().snapshot,
+			artifacts: [
+				{
+					name: "review.md",
+					type: "markdown",
+					description: "Human report",
+					value: "# Review",
+				},
+			],
+		},
+	});
+
+	assert.deepEqual(report.artifacts, [
+		{ name: "review.md", type: "markdown", description: "Human report" },
+	]);
+	const text = renderWorkflowReportText(report);
+	assert.match(text, /Artifacts/);
+	assert.match(text, /review\.md/);
+	assert.match(text, /markdown/);
+	assert.match(text, /Human report/);
+});
+
 test("workflow completion report summarizes status, phases, agents, tools, and result", () => {
 	const report = selectWorkflowReport(job());
 	assert.equal(report.durationMs, 65_000);

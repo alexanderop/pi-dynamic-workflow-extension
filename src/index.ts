@@ -19,6 +19,9 @@ export type {
 	RuntimePhaseEvent,
 	RunWorkflowOptions,
 	WorkflowAgentLike,
+	WorkflowArtifact,
+	WorkflowArtifactOptions,
+	WorkflowArtifactType,
 	WorkflowJournal,
 	WorkflowJournalCachedResult,
 	WorkflowJournalResultRecord,
@@ -59,6 +62,7 @@ export {
 } from "./workflow-manager.js";
 export type {
 	WorkflowAgentReportRow,
+	WorkflowArtifactReportRow,
 	WorkflowPhaseReportRow,
 	WorkflowReport,
 } from "./workflow-report.js";

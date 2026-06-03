@@ -54,6 +54,20 @@ export interface WorkflowAgentRunOptions {
 	onActivity?: (event: Omit<AgentActivityEvent, "id" | "label">) => void;
 }
 
+export type WorkflowArtifactType = "markdown" | "json" | "text";
+
+export interface WorkflowArtifactOptions {
+	type?: WorkflowArtifactType;
+	description?: string;
+}
+
+export interface WorkflowArtifact {
+	name: string;
+	type: WorkflowArtifactType;
+	description?: string;
+	value: unknown;
+}
+
 export interface WorkflowJournalStartedRecord {
 	type: "started";
 	key: string;
@@ -94,6 +108,7 @@ export interface RunWorkflowOptions {
 	onAgentStart?: (event: AgentStartEvent) => void;
 	onAgentEnd?: (event: AgentEndEvent) => void;
 	onAgentActivity?: (event: AgentActivityEvent) => void;
+	onArtifact?: (artifact: WorkflowArtifact) => void;
 	timeoutMs?: number;
 }
 
@@ -104,6 +119,7 @@ export interface WorkflowResult {
 	logs: string[];
 	agentCount: number;
 	estimatedTokens: number;
+	artifacts: WorkflowArtifact[];
 }
 
 interface RuntimeState {
@@ -113,6 +129,7 @@ interface RuntimeState {
 	agentCount: number;
 	nextAgentId: number;
 	spent: number;
+	artifacts: WorkflowArtifact[];
 }
 
 type AnyNode = Record<string, any>;
@@ -498,6 +515,7 @@ export async function runWorkflow(
 		agentCount: 0,
 		nextAgentId: 1,
 		spent: 0,
+		artifacts: [],
 	};
 	const pendingAgentRuns = new Set<Promise<unknown>>();
 	const concurrency = Math.max(
@@ -548,6 +566,36 @@ export async function runWorkflow(
 			remaining: { enumerable: true, get: getBudgetRemaining },
 		}),
 	);
+
+	const artifact = (
+		name: unknown,
+		value: unknown,
+		artifactOptions: unknown = {},
+	) => {
+		throwIfAborted();
+		const artifactName = requireString(name, "artifact name");
+		if (!isSafeArtifactName(artifactName)) {
+			throw new Error(
+				`artifact name must be a safe relative path: ${artifactName}`,
+			);
+		}
+		if (state.artifacts.some((item) => item.name === artifactName)) {
+			throw new Error(`artifact name must be unique: ${artifactName}`);
+		}
+		const normalizedOptions = normalizeArtifactOptions(artifactOptions);
+		const jsonValue = assertJsonSerializable(value, "artifact value");
+		const clonedValue = assertStructuredCloneable(jsonValue, "artifact value");
+		const registered: WorkflowArtifact = {
+			name: artifactName,
+			type: normalizedOptions.type,
+			...(normalizedOptions.description !== undefined
+				? { description: normalizedOptions.description }
+				: {}),
+			value: clonedValue,
+		};
+		state.artifacts.push(registered);
+		options.onArtifact?.(structuredClone(registered));
+	};
 
 	const agent = (prompt: unknown, agentOptions: unknown = {}) => {
 		throwIfAborted();
@@ -731,6 +779,7 @@ export async function runWorkflow(
 	const context = vm.createContext(
 		{
 			agent: forbidConstructorEscape(agent),
+			artifact: forbidConstructorEscape(artifact),
 			parallel: forbidConstructorEscape(parallel),
 			pipeline: forbidConstructorEscape(pipeline),
 			log: forbidConstructorEscape(log),
@@ -772,6 +821,7 @@ export async function runWorkflow(
 		logs: [...state.logs],
 		agentCount: state.agentCount,
 		estimatedTokens: state.spent,
+		artifacts: structuredClone(state.artifacts),
 	};
 }
 
@@ -868,6 +918,41 @@ function normalizeAgentOptions(value: unknown): {
 	};
 }
 
+function normalizeArtifactOptions(value: unknown): {
+	type: WorkflowArtifactType;
+	description?: string;
+} {
+	if (value === undefined || value === null) return { type: "json" };
+	if (!isPlainRecord(value))
+		throw new TypeError("artifact options must be an object");
+	const type = value.type ?? "json";
+	if (type !== "markdown" && type !== "json" && type !== "text") {
+		throw new TypeError(
+			"artifact type must be one of 'markdown', 'json', or 'text'",
+		);
+	}
+	if (
+		value.description !== undefined &&
+		typeof value.description !== "string"
+	) {
+		throw new TypeError("artifact description must be a string");
+	}
+	return {
+		type,
+		description: value.description,
+	};
+}
+
+function isSafeArtifactName(value: string): boolean {
+	if (value !== value.trim()) return false;
+	if (value.startsWith("/") || value.startsWith("\\")) return false;
+	if (value.includes("\\") || value.includes(":")) return false;
+	if (!/^[A-Za-z0-9._/-]+$/.test(value)) return false;
+	return value.split("/").every((segment) => {
+		return segment.length > 0 && segment !== "." && segment !== "..";
+	});
+}
+
 function buildAgentInstructions(
 	phase: string | undefined,
 	options: ReturnType<typeof normalizeAgentOptions>,
@@ -960,6 +1045,12 @@ export function assertJsonSerializable<T>(value: T, label: string): T {
 				`${label} must be JSON-serializable; ${path} is a Promise`,
 			);
 		}
+		const nonJsonObjectType = getNonJsonObjectType(item);
+		if (nonJsonObjectType) {
+			throw new Error(
+				`${label} must be JSON-serializable; ${path} is a ${nonJsonObjectType}`,
+			);
+		}
 		if (ancestors.has(item)) {
 			throw new Error(
 				`${label} must be JSON-serializable; ${path} contains a cycle`,
@@ -1000,6 +1091,18 @@ export function assertJsonSerializable<T>(value: T, label: string): T {
 
 function isPromiseLike(value: object): boolean {
 	return typeof (value as { then?: unknown }).then === "function";
+}
+
+function getNonJsonObjectType(value: object): string | undefined {
+	if (Array.isArray(value)) return undefined;
+	const tag = Object.prototype.toString.call(value);
+	if (tag !== "[object Object]") return tag.slice(8, -1);
+	const prototype = Object.getPrototypeOf(value) as {
+		constructor?: { name?: string };
+	} | null;
+	if (prototype === null) return undefined;
+	if (prototype.constructor?.name === "Object") return undefined;
+	return prototype.constructor?.name ?? "object with custom prototype";
 }
 
 function assertStructuredCloneable(value: unknown, label: string): unknown {

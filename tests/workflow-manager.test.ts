@@ -51,6 +51,39 @@ return { answer }
 	assert.equal(jobs[0]?.snapshot.doneCount, 1);
 });
 
+test("WorkflowManager persists workflow artifacts in restored job snapshots", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pi-workflow-artifacts-"));
+	const agent: WorkflowAgentLike = {
+		async run(prompt: string): Promise<string> {
+			return `done:${prompt}`;
+		},
+	};
+	const store = createFileWorkflowStore(dir);
+	const manager = createWorkflowManager({ store });
+	const job = manager.start(
+		`export const meta = { name: 'persist_artifacts', description: 'demo' }
+artifact('review.md', '# Review', { type: 'markdown', description: 'Report' })
+return await agent('inspect')
+`,
+		{ agent },
+	);
+
+	await waitForFinished(job);
+
+	const restored = createWorkflowManager({
+		store: createFileWorkflowStore(dir),
+	});
+	const jobs = restored.getJobs();
+	assert.deepEqual(jobs[0]?.snapshot.artifacts, [
+		{
+			name: "review.md",
+			type: "markdown",
+			description: "Report",
+			value: "# Review",
+		},
+	]);
+});
+
 test("WorkflowManager skips corrupt persisted workflow manifests", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-workflow-corrupt-"));
 	const runDir = join(dir, "wf_corrupt");

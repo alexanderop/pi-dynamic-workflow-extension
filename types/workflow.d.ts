@@ -15,12 +15,29 @@ declare global {
 		readonly remaining: number;
 	}
 
+	interface ArtifactOptions {
+		type?: "markdown" | "json" | "text";
+		description?: string;
+	}
+
+	interface WorkflowArtifact {
+		name: string;
+		type: "markdown" | "json" | "text";
+		description?: string;
+		value: unknown;
+	}
+
 	const args: unknown;
 	const cwd: string;
 	const budget: WorkflowBudget;
 
 	function phase(title: string): void;
 	function log(message: unknown): void;
+	function artifact(
+		name: string,
+		value: unknown,
+		options?: ArtifactOptions,
+	): void;
 	function agent<T = unknown>(
 		prompt: string,
 		options?: WorkflowAgentOptions,

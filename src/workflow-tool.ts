@@ -149,6 +149,10 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 					snapshot.logs.push(message);
 					emit();
 				},
+				onArtifact(artifact) {
+					snapshot.artifacts = [...(snapshot.artifacts ?? []), artifact];
+					emit();
+				},
 				onAgentStart(event) {
 					const now = Date.now();
 					snapshot.agents.push({
@@ -204,6 +208,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 			snapshot.currentPhase = undefined;
 			snapshot.durationMs = Date.now() - startedAt;
 			snapshot.result = result.result;
+			snapshot.artifacts = result.artifacts;
 			for (const agent of snapshot.agents) {
 				if (agent.status === "running" || agent.status === "queued") {
 					agent.status = signal?.aborted ? "skipped" : "done";

@@ -8,6 +8,7 @@ export const WORKFLOW_PROMPT_INSTRUCTIONS = [
 	"Call phase() before each major group of work and pass { label, phase, schema } to important agent() calls.",
 	"Prefer JSON Schema constants for structured subagent outputs, then fan-in with .filter(Boolean) before synthesis.",
 	"Use fan-out/fan-in patterns: parallel thunks only for independent work, pipeline for dependent per-item flows, optional adversarial verification, final synthesis.",
+	"After launching a background workflow, end your turn and yield control. If the user says nothing, stay idle; resume only on a workflow-completion message or a new user instruction.",
 	"In each subagent prompt, include repo root/path context, prior findings, constraints, success criteria, verification expectations, and the expected return shape.",
 	"For implementation tasks, include test-first/TDD red-green-refactor instructions and drive to working code with relevant tests/builds when feasible.",
 	"For review tasks, require finding-first output with severity, file/line evidence, impact, and concrete fix.",
