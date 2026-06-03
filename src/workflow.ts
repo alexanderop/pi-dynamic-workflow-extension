@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import vm from "node:vm";
 import { parse } from "acorn";
+import { buildWorkflowAgentInstructions } from "./prompts/workflow-agent.js";
 
 export interface WorkflowMeta {
 	name: string;
@@ -218,16 +219,19 @@ export function computeWorkflowAgentKey(
 		agentType?: string;
 		model?: string;
 		isolation?: string;
+		hasSchema?: boolean;
 		schema?: unknown;
 		instructions?: string;
 	},
 ): string {
+	const hasSchema = options.hasSchema ?? Object.hasOwn(options, "schema");
 	const canonicalOptions = stableStringify({
 		agentType: options.agentType,
 		instructions: options.instructions,
 		isolation: options.isolation,
 		model: options.model,
-		schema: options.schema,
+		schema: hasSchema ? options.schema : undefined,
+		structuredOutput: hasSchema ? true : undefined,
 	});
 	const digest = createHash("sha256")
 		.update(prompt)
@@ -618,9 +622,8 @@ export async function runWorkflow(
 				model: normalizedOptions.model,
 			});
 			try {
-				const rawResult = await agentRunner.run(taskPrompt, {
+				const runOptions: WorkflowAgentRunOptions = {
 					label,
-					schema: normalizedOptions.schema,
 					signal: options.signal,
 					instructions: buildAgentInstructions(
 						assignedPhase,
@@ -630,7 +633,10 @@ export async function runWorkflow(
 						if (options.signal?.aborted || stoppedError) return;
 						options.onAgentActivity?.({ id, label, ...activity });
 					},
-				});
+				};
+				if (normalizedOptions.hasSchema)
+					runOptions.schema = normalizedOptions.schema;
+				const rawResult = await agentRunner.run(taskPrompt, runOptions);
 				throwIfAborted();
 				const result = assertJsonSerializable(rawResult, "agent result");
 				state.spent += estimateTokens(result, "agent result");
@@ -840,10 +846,11 @@ function normalizeAgentOptions(value: unknown): {
 	agentType?: string;
 	model?: string;
 	isolation?: string;
+	hasSchema: boolean;
 	schema?: unknown;
 	instructions?: string;
 } {
-	if (value === undefined || value === null) return {};
+	if (value === undefined || value === null) return { hasSchema: false };
 	if (!isPlainRecord(value))
 		throw new TypeError("agent options must be an object");
 	return {
@@ -854,6 +861,7 @@ function normalizeAgentOptions(value: unknown): {
 		model: typeof value.model === "string" ? value.model : undefined,
 		isolation:
 			typeof value.isolation === "string" ? value.isolation : undefined,
+		hasSchema: Object.hasOwn(value, "schema"),
 		schema: value.schema,
 		instructions:
 			typeof value.instructions === "string" ? value.instructions : undefined,
@@ -864,19 +872,14 @@ function buildAgentInstructions(
 	phase: string | undefined,
 	options: ReturnType<typeof normalizeAgentOptions>,
 ): string | undefined {
-	const lines: string[] = [];
-	if (phase) lines.push(`Workflow phase: ${phase}.`);
-	if (options.agentType)
-		lines.push(`Act as this subagent type: ${options.agentType}.`);
-	if (options.model) lines.push(`Requested model hint: ${options.model}.`);
-	if (options.isolation)
-		lines.push(`Requested isolation hint: ${options.isolation}.`);
-	if (options.instructions) lines.push(options.instructions);
-	if (options.schema)
-		lines.push(
-			"Return your final answer by calling the structured_output tool exactly once.",
-		);
-	return lines.length > 0 ? lines.join("\n") : undefined;
+	return buildWorkflowAgentInstructions({
+		phase,
+		agentType: options.agentType,
+		model: options.model,
+		isolation: options.isolation,
+		instructions: options.instructions,
+		hasSchema: options.hasSchema,
+	});
 }
 
 function defaultAgentLabel(phase: string | undefined, id: number): string {

@@ -18,8 +18,12 @@ function escapeRegExp(text: string): string {
 test("README documents install, build, test, and Pi extension entry points", () => {
 	assert.equal(packageJson.scripts?.build, "tsc -p tsconfig.json");
 	assert.equal(
+		packageJson.scripts?.["test:e2e"],
+		"tsx --test tests/e2e/*.test.ts",
+	);
+	assert.equal(
 		packageJson.scripts?.test,
-		"npm run check && npm run build && npm run test:unit",
+		"npm run check && npm run build && npm run test:unit && npm run test:e2e",
 	);
 	assert.deepEqual(packageJson.pi?.extensions, ["extensions/workflow.ts"]);
 

@@ -6,6 +6,8 @@ import {
 	SettingsManager,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { structuredOutputMissingError } from "./prompts/structured-output.js";
+import { buildWorkflowSubagentPrompt } from "./prompts/workflow-agent.js";
 import {
 	createStructuredOutputTool,
 	type StructuredOutputCapture,
@@ -43,9 +45,10 @@ export class WorkflowAgent {
 	}
 
 	async run(prompt: string, options: AgentRunOptions = {}): Promise<unknown> {
+		const wantsStructuredOutput = Object.hasOwn(options, "schema");
 		const capture: StructuredOutputCapture = { called: false };
 		const runTools = [...this.baseTools, ...(options.tools ?? [])];
-		if (options.schema)
+		if (wantsStructuredOutput)
 			runTools.push(
 				createStructuredOutputTool({ schema: options.schema, capture }),
 			);
@@ -96,17 +99,14 @@ export class WorkflowAgent {
 
 			try {
 				await session.prompt(
-					this.buildPrompt(prompt, options, Boolean(options.schema)),
+					this.buildPrompt(prompt, options, wantsStructuredOutput),
 				);
 			} finally {
 				unsubscribe();
 			}
 
-			if (options.schema) {
-				if (!capture.called)
-					throw new Error(
-						"Subagent finished without calling structured_output",
-					);
+			if (wantsStructuredOutput) {
+				if (!capture.called) throw structuredOutputMissingError();
 				return capture.value;
 			}
 
@@ -122,19 +122,12 @@ export class WorkflowAgent {
 		options: AgentRunOptions,
 		wantsStructuredOutput: boolean,
 	): string {
-		const lines = [
-			"You are a fresh, isolated Pi subagent running inside a parent workflow.",
-			"Do the requested task using the available tools. Be concise and specific.",
-		];
-		if (options.label) lines.push(`Subagent label: ${options.label}`);
-		if (options.instructions) lines.push(options.instructions);
-		if (wantsStructuredOutput) {
-			lines.push(
-				"Your final action MUST be a call to structured_output with data matching its schema. Do not finish with plain prose.",
-			);
-		}
-		lines.push("", "Task:", prompt);
-		return lines.join("\n");
+		return buildWorkflowSubagentPrompt({
+			prompt,
+			label: options.label,
+			instructions: options.instructions,
+			wantsStructuredOutput,
+		});
 	}
 
 	private lastAssistantText(messages: unknown[]): string {

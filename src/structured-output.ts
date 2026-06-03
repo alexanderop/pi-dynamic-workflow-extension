@@ -3,6 +3,13 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type TSchema, Type } from "typebox";
+import {
+	STRUCTURED_OUTPUT_ANY_SCHEMA_DESCRIPTION,
+	STRUCTURED_OUTPUT_TOOL_DESCRIPTION,
+	STRUCTURED_OUTPUT_TOOL_NAME,
+	STRUCTURED_OUTPUT_TOOL_PROMPT_SNIPPET,
+	structuredOutputToolPromptGuidelines,
+} from "./prompts/structured-output.js";
 
 export interface StructuredOutputCapture {
 	called: boolean;
@@ -17,25 +24,20 @@ export interface StructuredOutputToolOptions {
 
 function asToolSchema(schema: unknown): TSchema {
 	if (schema && typeof schema === "object") return schema as TSchema;
-	return Type.Any({ description: "Final structured output value" });
+	return Type.Any({ description: STRUCTURED_OUTPUT_ANY_SCHEMA_DESCRIPTION });
 }
 
 export function createStructuredOutputTool({
 	schema,
 	capture,
-	name = "structured_output",
+	name = STRUCTURED_OUTPUT_TOOL_NAME,
 }: StructuredOutputToolOptions): ToolDefinition<any, unknown> {
 	return defineTool({
 		name,
 		label: "Structured Output",
-		description:
-			"Return the final machine-readable result for this subagent task.",
-		promptSnippet:
-			"Return the final machine-readable result for this subagent task",
-		promptGuidelines: [
-			`Use ${name} as the final action when the subagent prompt asks for structured output.`,
-			`After calling ${name}, do not emit another assistant response in the same turn.`,
-		],
+		description: STRUCTURED_OUTPUT_TOOL_DESCRIPTION,
+		promptSnippet: STRUCTURED_OUTPUT_TOOL_PROMPT_SNIPPET,
+		promptGuidelines: structuredOutputToolPromptGuidelines(name),
 		parameters: asToolSchema(schema),
 		async execute(_toolCallId, params) {
 			capture.called = true;

@@ -51,6 +51,77 @@ return { scan }
 	assert.deepEqual(result.result, { scan: "result:scan" });
 });
 
+test("runWorkflow passes schema and structured-output contract to agents", async () => {
+	const expectedSchema = {
+		type: "object",
+		additionalProperties: false,
+		required: ["summary", "findings"],
+		properties: {
+			summary: { type: "string" },
+			findings: { type: "array", items: { type: "object" } },
+		},
+	};
+	let seenOptions: Parameters<WorkflowAgentLike["run"]>[1];
+	const agent: WorkflowAgentLike = {
+		async run(_prompt, options): Promise<unknown> {
+			seenOptions = options;
+			return { summary: "ok", findings: [] };
+		},
+	};
+
+	const result = await runWorkflow(
+		`export const meta = { name: 'structured_schema_demo', description: 'demo' }
+const FINDINGS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'findings'],
+  properties: {
+    summary: { type: 'string' },
+    findings: { type: 'array', items: { type: 'object' } },
+  },
+}
+const findings = await agent('inspect', { label: 'inspect', schema: FINDINGS_SCHEMA })
+return { count: findings.findings.length, summary: findings.summary }
+`,
+		{ agent },
+	);
+
+	assert.deepEqual(result.result, { count: 0, summary: "ok" });
+	assert.deepEqual(
+		JSON.parse(JSON.stringify(seenOptions?.schema)),
+		expectedSchema,
+	);
+	const instructions = seenOptions?.instructions ?? "";
+	assert.match(instructions, /structured_output/);
+	assert.match(instructions, /parent workflow only receives/i);
+	assert.match(instructions, /Do not finish with plain prose/);
+	assert.match(instructions, /Do not wrap the result in markdown/);
+	assert.match(
+		instructions,
+		/Do not call structured_output until you have completed the task/,
+	);
+});
+
+test("runWorkflow treats a present null schema as a structured-output request", async () => {
+	let seenOptions: Parameters<WorkflowAgentLike["run"]>[1];
+	const agent: WorkflowAgentLike = {
+		async run(_prompt, options): Promise<unknown> {
+			seenOptions = options;
+			return { ok: true };
+		},
+	};
+
+	await runWorkflow(
+		`export const meta = { name: 'null_schema_demo', description: 'demo' }
+return await agent('inspect', { schema: null })
+`,
+		{ agent },
+	);
+
+	assert.equal(seenOptions?.schema, null);
+	assert.match(seenOptions?.instructions ?? "", /structured_output/);
+});
+
 test("runWorkflow supports parallel thunks in input order", async () => {
 	const result = await runWorkflow(
 		`export const meta = { name: 'parallel_demo', description: 'demo' }

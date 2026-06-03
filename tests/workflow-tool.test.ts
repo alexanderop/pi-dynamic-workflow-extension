@@ -46,19 +46,26 @@ return await agent('inspect')
 test("workflow tool has explicit prompt guidelines", () => {
 	const tool = createWorkflowTool();
 	assert.equal(tool.name, "workflow");
-	assert.ok(tool.promptGuidelines?.length);
-	for (const guideline of tool.promptGuidelines ?? [])
-		assert.match(guideline, /workflow/);
+	assert.equal(tool.promptGuidelines?.length, 1);
+	const guideline = tool.promptGuidelines?.[0] ?? "";
+	const normalizedGuideline = guideline.toLowerCase();
+	assert.match(guideline, /workflow/);
+	assert.ok(normalizedGuideline.includes("workflow overview"));
 	assert.ok(
-		tool.promptGuidelines?.some((guideline) =>
-			guideline.includes("parallel() takes functions"),
-		),
+		guideline.includes("deterministic JavaScript orchestration script"),
 	);
-	assert.ok(
-		tool.promptGuidelines?.some(
-			(guideline) =>
-				guideline.includes("do not poll") &&
-				guideline.includes("workflow-completion"),
-		),
-	);
+	assert.ok(normalizedGuideline.includes("workflow script contract"));
+	assert.ok(guideline.includes("do not poll"));
+	assert.ok(guideline.includes("workflow-completion"));
+	assert.ok(normalizedGuideline.includes("workflow primitive reference"));
+	assert.ok(guideline.includes("declare function parallel"));
+	assert.ok(guideline.includes("Pass thunks/functions, not promises"));
+	assert.ok(guideline.includes("structured_output"));
+	assert.ok(normalizedGuideline.includes("workflow authoring rules"));
+	assert.ok(guideline.includes("merge parallel findings"));
+	assert.ok(guideline.includes("Avoid structured output"));
+	assert.ok(normalizedGuideline.includes("workflow example"));
+	assert.ok(guideline.includes("export const meta"));
+	assert.ok(guideline.includes("prompt_quality_audit"));
+	assert.ok(guideline.includes("await parallel"));
 });

@@ -18,6 +18,10 @@ import {
 	type WorkflowJob,
 } from "../src/index.js";
 import {
+	buildWorkflowCompletionPrompt,
+	WORKFLOW_COMPLETION_TRUNCATION_NOTICE,
+} from "../src/prompts/workflow-completion.js";
+import {
 	highlightWorkflowTriggerWords,
 	transformNativeWorkflowInput,
 } from "../src/workflow-trigger.js";
@@ -182,10 +186,15 @@ export default function extension(pi: ExtensionAPI) {
 						? "was interrupted"
 						: "failed";
 		const report = renderWorkflowReportText(selectWorkflowReport(job));
-		const message = `Background workflow #${job.id} (${job.name}) ${statusLine}.\n\n${report}\n\nPlease summarize this workflow outcome for the user and suggest any useful next step. The interactive details remain available in /workflows.`;
+		const message = buildWorkflowCompletionPrompt({
+			jobId: job.id,
+			jobName: job.name,
+			statusLine,
+			report,
+		});
 		const maxLength = 30_000;
 		if (message.length <= maxLength) return message;
-		return `${message.slice(0, maxLength)}\n\n[Workflow completion message truncated. Open /workflows for the full result.]`;
+		return `${message.slice(0, maxLength)}\n\n${WORKFLOW_COMPLETION_TRUNCATION_NOTICE}`;
 	}
 
 	function announceCompletedWorkflow(

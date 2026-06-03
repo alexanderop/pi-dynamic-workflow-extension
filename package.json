@@ -1,6 +1,6 @@
 {
 	"name": "pi-dynamic-workflow-extension",
-	"version": "0.1.7",
+	"version": "0.1.8",
 	"description": "Pi extension that runs dynamic JavaScript workflows with isolated subagents and live progress rendering.",
 	"type": "module",
 	"main": "./dist/src/index.js",
@@ -37,8 +37,9 @@
 		"build": "tsc -p tsconfig.json",
 		"lint": "biome check .",
 		"check": "npm run lint",
-		"test:unit": "tsx --test tests/**/*.test.ts",
-		"test": "npm run check && npm run build && npm run test:unit"
+		"test:unit": "tsx --test tests/*.test.ts",
+		"test:e2e": "tsx --test tests/e2e/*.test.ts",
+		"test": "npm run check && npm run build && npm run test:unit && npm run test:e2e"
 	},
 	"dependencies": {
 		"acorn": "^8.16.0"

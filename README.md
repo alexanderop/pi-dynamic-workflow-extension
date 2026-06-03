@@ -8,6 +8,7 @@ A shareable Pi package that adds a `workflow` tool and `/workflows` dashboard. T
 npm install
 npm run build
 npm test
+npm run test:e2e # optional: run only the Pi extension loading smoke test
 pi install /absolute/path/to/pi-dynamic-workflow-extension
 # in Pi: /reload
 ```
@@ -17,6 +18,8 @@ For quick testing without installing the package:
 ```bash
 pi -e ./extensions/workflow.ts
 ```
+
+The automated end-to-end smoke test launches the real Pi CLI in JSON mode with only this extension and a test probe loaded. It verifies that the `workflow` tool and public slash commands are registered without making an LLM call.
 
 ## Example workflow script
 
@@ -99,7 +102,8 @@ Cancellation and `timeoutMs` settle workflows that are waiting at async boundari
 
 1. Pick your final npm package name in `package.json`.
 2. Run `npm test`.
-3. Publish to npm or share the git repository.
-4. Users can install with `pi install git:github.com/alexanderop/pi-dynamic-workflow-extension`.
+3. Optionally run `npm run test:e2e` by itself while iterating on Pi extension loading.
+4. Publish to npm or share the git repository.
+5. Users can install with `pi install git:github.com/alexanderop/pi-dynamic-workflow-extension`.
 
 Pi packages run with full system permissions, so only install packages you trust.

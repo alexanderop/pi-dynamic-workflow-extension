@@ -103,6 +103,33 @@ return 'ok'
 	assert.equal(calls, 1);
 });
 
+test("runWorkflow does not reuse text results for present undefined schemas", async () => {
+	const journal = createInMemoryWorkflowJournal();
+	let calls = 0;
+	const agent: WorkflowAgentLike = {
+		async run(_prompt, options): Promise<unknown> {
+			calls++;
+			return Object.hasOwn(options ?? {}, "schema")
+				? { summary: "structured" }
+				: "plain text";
+		},
+	};
+
+	const textScript = `export const meta = { name: 'schema_presence_journal_demo', description: 'demo' }
+return await agent('same prompt')
+`;
+	const structuredScript = `export const meta = { name: 'schema_presence_journal_demo', description: 'demo' }
+return await agent('same prompt', { schema: undefined })
+`;
+
+	const textRun = await runWorkflow(textScript, { agent, journal });
+	const structuredRun = await runWorkflow(structuredScript, { agent, journal });
+
+	assert.equal(textRun.result, "plain text");
+	assert.deepEqual(structuredRun.result, { summary: "structured" });
+	assert.equal(calls, 2);
+});
+
 test("runWorkflow can resume from a persisted journal file", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-workflow-journal-"));
 	const journalPath = join(dir, "journal.jsonl");

@@ -10,6 +10,13 @@ import {
 	type WorkflowSnapshot,
 } from "./display.js";
 import {
+	buildWorkflowToolBackgroundStartMessage,
+	WORKFLOW_TOOL_DESCRIPTION,
+	WORKFLOW_TOOL_PROMPT_GUIDELINES,
+	WORKFLOW_TOOL_PROMPT_SNIPPET,
+	WORKFLOW_TOOL_SCRIPT_DESCRIPTION,
+} from "./prompts/workflow-tool.js";
+import {
 	parseWorkflowScript,
 	type RunWorkflowOptions,
 	runWorkflow,
@@ -23,12 +30,7 @@ import {
 
 const workflowToolSchema = Type.Object({
 	script: Type.String({
-		description: [
-			"Required raw JavaScript workflow script, with no Markdown fences.",
-			"First statement: export const meta = { name: 'short_snake_case', description: 'non-empty description' }.",
-			"Use phase(title), agent(prompt, opts), parallel(thunks), pipeline(items, ...stages), log(message), args, cwd, and budget.",
-			"parallel() requires functions, not promises.",
-		].join(" "),
+		description: WORKFLOW_TOOL_SCRIPT_DESCRIPTION,
 	}),
 	args: Type.Optional(
 		Type.Any({ description: "Optional JSON value exposed as global `args`." }),
@@ -71,26 +73,9 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 	return defineTool({
 		name: "workflow",
 		label: "Workflow",
-		description:
-			"Execute a deterministic JavaScript workflow that orchestrates multiple isolated Pi subagents.",
-		promptSnippet:
-			"Run a JavaScript orchestration workflow with isolated subagents",
-		promptGuidelines: [
-			"Use workflow only when the user explicitly asks for a workflow, workflows, fan-out, multi-agent orchestration, or a planned multi-step agent run.",
-			"For workflow, always pass one raw JavaScript string in the required script parameter; do not include Markdown fences.",
-			"For workflow, the first statement must be `export const meta = { name: 'short_snake_case', description: 'non-empty description', phases: [{ title: 'Phase' }] }` with literal-only values; use snake_case, not kebab-case.",
-			"For workflow, call phase(title) before each major group of work so progress is visible; prefer phase names that match meta.phases titles.",
-			"For workflow, call agent(prompt, opts) at least once; subagents are isolated, so each prompt must include enough file paths, repo context, prior findings, and success criteria.",
-			"For workflow, prefer JSON Schema constants for structured subagent outputs and pass `{ label, phase, schema }` to agent() so fan-in code can safely consume results.",
-			"For workflow, use args for user inputs; validate required args near the top and return a JSON-serializable error object instead of asking follow-up questions inside the script.",
-			"For workflow, compose Claude-style fan-out/fan-in runs with `parallel(items.map(item => () => agent(...)))`, `.filter(Boolean)`, optional adversarial verification agents, and a final synthesis agent.",
-			"For workflow, parallel() takes functions, not promises: use `await parallel(items.map(item => () => agent(...)))`; pipeline(items, ...stages) streams each item through stages independently.",
-			"For workflow, failed agent calls reject the workflow, including inside parallel()/pipeline(); handle recoverable failures explicitly in the script if needed.",
-			"For workflow, always await agent(), parallel(), and pipeline() before returning a JSON-serializable result.",
-			"For workflow, supported agent options are label, phase, schema, agentType, model, isolation, and instructions; do not rely on unsupported Claude options such as harness, permissions, maxRetries, or worktree.",
-			"For workflow, do not use Date.now(), new Date(), Math.random(), aliases of those APIs, constructor escape patterns, require, import, fs, network APIs, or direct filesystem access in the script; delegate file, git, and web work to agent().",
-			"When workflow returns a background job id, do not poll, wait, or re-run it; continue normally because the extension will send a workflow-completion message when the job finishes.",
-		],
+		description: WORKFLOW_TOOL_DESCRIPTION,
+		promptSnippet: WORKFLOW_TOOL_PROMPT_SNIPPET,
+		promptGuidelines: [...WORKFLOW_TOOL_PROMPT_GUIDELINES],
 		parameters: workflowToolSchema,
 		prepareArguments(args) {
 			return normalizeWorkflowToolArgs(args);
@@ -117,14 +102,15 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 					"Open /workflows for the interactive live dashboard.",
 				);
 				createToolUpdateWorkflowDisplay(onUpdate).update(snapshot);
-				const scriptNote = job.scriptPath
-					? ` The reusable workflow script was saved at ${job.scriptPath}.`
-					: "";
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Workflow ${job.name} started in the background as #${job.id}.${scriptNote} Use /workflows to watch progress, navigate agents, cancel, and inspect the final result. Do not poll, wait, or re-run it; the extension will notify you with a workflow-completion message when it finishes. When you receive that message, summarize the outcome for the user and suggest a useful next step.`,
+							text: buildWorkflowToolBackgroundStartMessage({
+								name: job.name,
+								id: job.id,
+								scriptPath: job.scriptPath,
+							}),
 						},
 					],
 					details: snapshot,
