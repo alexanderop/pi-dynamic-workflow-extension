@@ -23,7 +23,14 @@ export type {
 	WorkflowResult,
 } from "./workflow.js";
 export { parseWorkflowScript, runWorkflow } from "./workflow.js";
+export { WorkflowBrowser } from "./workflow-browser.js";
 export { WorkflowDashboard } from "./workflow-dashboard.js";
+export type { WorkflowJob, WorkflowJobStatus } from "./workflow-manager.js";
+export {
+	cloneWorkflowSnapshot,
+	createWorkflowManager,
+	WorkflowManager,
+} from "./workflow-manager.js";
 export type {
 	WorkflowToolInput,
 	WorkflowToolOptions,

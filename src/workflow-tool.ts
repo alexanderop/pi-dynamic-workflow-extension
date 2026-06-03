@@ -14,6 +14,11 @@ import {
 	runWorkflow,
 } from "./workflow.js";
 import { WorkflowDashboard } from "./workflow-dashboard.js";
+import {
+	cloneWorkflowSnapshot,
+	createWorkflowManager,
+	type WorkflowManager,
+} from "./workflow-manager.js";
 
 const workflowToolSchema = Type.Object({
 	script: Type.String({
@@ -35,7 +40,12 @@ export interface WorkflowToolOptions
 	extends Pick<
 		RunWorkflowOptions,
 		"cwd" | "agent" | "concurrency" | "maxEstimatedTokens"
-	> {}
+	> {
+	/** Shared manager used by /workflows to show live background runs. */
+	manager?: WorkflowManager;
+	/** Defaults to true when a manager is provided, otherwise false. */
+	background?: boolean;
+}
 
 export function normalizeWorkflowToolArgs(args: unknown): WorkflowToolInput {
 	if (typeof args === "string") return { script: args };
@@ -66,6 +76,9 @@ function cloneDetails(snapshot: WorkflowSnapshot): WorkflowSnapshot {
 }
 
 export function createWorkflowTool(options: WorkflowToolOptions = {}) {
+	const manager = options.manager ?? createWorkflowManager();
+	const runInBackground = options.background ?? Boolean(options.manager);
+
 	return defineTool({
 		name: "workflow",
 		label: "Workflow",
@@ -89,8 +102,38 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 		},
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const startedAt = Date.now();
+			if (signal?.aborted) throw new Error("Workflow was aborted");
 			const script = normalizeWorkflowScript(params.script);
+
+			if (runInBackground) {
+				const job = manager.start(script, {
+					cwd: options.cwd ?? ctx.cwd,
+					args: params.args,
+					agent: options.agent,
+					concurrency: options.concurrency,
+					maxEstimatedTokens: options.maxEstimatedTokens,
+					session: {
+						modelRegistry: ctx.modelRegistry,
+						model: ctx.model,
+					},
+				});
+				const snapshot = cloneWorkflowSnapshot(job.snapshot);
+				snapshot.logs.push(
+					"Open /workflows for the interactive live dashboard.",
+				);
+				createToolUpdateWorkflowDisplay(onUpdate).update(snapshot);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Workflow ${job.name} started in the background as #${job.id}. Use /workflows to watch progress, navigate agents, cancel, and inspect the final result.`,
+						},
+					],
+					details: snapshot,
+				};
+			}
+
+			const startedAt = Date.now();
 			const parsed = parseWorkflowScript(script);
 			const snapshot = createWorkflowSnapshot(parsed.meta);
 			const display = createToolUpdateWorkflowDisplay(onUpdate);
