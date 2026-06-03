@@ -20,6 +20,8 @@ export interface AgentStartEvent {
 	label: string;
 	phase?: string;
 	prompt: string;
+	model?: string;
+	cached?: boolean;
 }
 
 export interface AgentEndEvent {
@@ -519,6 +521,8 @@ export async function runWorkflow(
 				label,
 				phase: assignedPhase,
 				prompt: taskPrompt,
+				model: normalizedOptions.model,
+				cached: true,
 			});
 			options.onAgentEnd?.({
 				id,
@@ -545,6 +549,7 @@ export async function runWorkflow(
 				label,
 				phase: assignedPhase,
 				prompt: taskPrompt,
+				model: normalizedOptions.model,
 			});
 			try {
 				const result = await agentRunner.run(taskPrompt, {

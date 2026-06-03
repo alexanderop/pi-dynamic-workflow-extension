@@ -56,6 +56,15 @@ export {
 	WorkflowManager,
 } from "./workflow-manager.js";
 export type {
+	WorkflowAgentReportRow,
+	WorkflowPhaseReportRow,
+	WorkflowReport,
+} from "./workflow-report.js";
+export {
+	renderWorkflowReportText,
+	selectWorkflowReport,
+} from "./workflow-report.js";
+export type {
 	WorkflowToolInput,
 	WorkflowToolOptions,
 } from "./workflow-tool.js";

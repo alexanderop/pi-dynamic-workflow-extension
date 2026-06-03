@@ -10,8 +10,9 @@ import {
 	createFileWorkflowStore,
 	createWorkflowManager,
 	createWorkflowTool,
-	renderWorkflowText,
+	renderWorkflowReportText,
 	type SavedWorkflowEntry,
+	selectWorkflowReport,
 	WorkflowBrowser,
 	type WorkflowJob,
 } from "../src/index.js";
@@ -166,14 +167,8 @@ export default function extension(pi: ExtensionAPI) {
 					: job.status === "interrupted"
 						? "was interrupted"
 						: "failed";
-		const summary = renderWorkflowText(job.snapshot, true);
-		const resultText =
-			job.status === "done"
-				? `\n\nFinal result:\n${JSON.stringify(job.result, null, 2)}`
-				: job.error
-					? `\n\nError:\n${job.error}`
-					: "";
-		const message = `Background workflow #${job.id} (${job.name}) ${statusLine}.\n\n${summary}${resultText}\n\nPlease summarize this workflow outcome for the user and suggest any useful next step. The interactive details remain available in /workflows.`;
+		const report = renderWorkflowReportText(selectWorkflowReport(job));
+		const message = `Background workflow #${job.id} (${job.name}) ${statusLine}.\n\n${report}\n\nPlease summarize this workflow outcome for the user and suggest any useful next step. The interactive details remain available in /workflows.`;
 		const maxLength = 30_000;
 		if (message.length <= maxLength) return message;
 		return `${message.slice(0, maxLength)}\n\n[Workflow completion message truncated. Open /workflows for the full result.]`;

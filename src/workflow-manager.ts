@@ -194,13 +194,18 @@ export class WorkflowManager {
 					this.touch(job);
 				},
 				onAgentStart: (event) => {
+					const now = Date.now();
 					job.snapshot.agents.push({
 						id: event.id,
 						label: event.label,
 						phase: event.phase,
 						prompt: event.prompt,
-						status: "running",
+						status: event.cached ? "done" : "running",
+						startedAt: now,
+						model: event.model,
+						toolCount: 0,
 						activity: [],
+						cached: event.cached,
 					});
 					this.touch(job);
 				},
@@ -209,6 +214,8 @@ export class WorkflowManager {
 						(item) => item.id === event.id,
 					);
 					if (!agent) return;
+					if (event.type === "tool")
+						agent.toolCount = (agent.toolCount ?? 0) + 1;
 					agent.activity = [
 						...(agent.activity ?? []),
 						{
@@ -226,7 +233,12 @@ export class WorkflowManager {
 					);
 					if (agent) {
 						agent.status = event.error ? "error" : "done";
+						agent.endedAt = Date.now();
 						agent.resultPreview = preview(event.result);
+						agent.resultText =
+							typeof event.result === "string"
+								? event.result
+								: JSON.stringify(event.result, null, 2);
 						if (event.error) agent.error = event.error.message;
 					}
 					this.touch(job);
@@ -242,8 +254,10 @@ export class WorkflowManager {
 			job.snapshot.currentPhase = undefined;
 			job.snapshot.result = result.result;
 			for (const agent of job.snapshot.agents) {
-				if (agent.status === "running" || agent.status === "queued")
+				if (agent.status === "running" || agent.status === "queued") {
 					agent.status = "done";
+					agent.endedAt = agent.endedAt ?? Date.now();
+				}
 			}
 		} catch (error) {
 			if (job.controller.signal.aborted || job.status === "cancelled") {
@@ -256,8 +270,10 @@ export class WorkflowManager {
 				job.snapshot.logs.push(`[error] ${message}`);
 			}
 			for (const agent of job.snapshot.agents) {
-				if (agent.status === "running" || agent.status === "queued")
+				if (agent.status === "running" || agent.status === "queued") {
 					agent.status = job.status === "cancelled" ? "skipped" : "error";
+					agent.endedAt = agent.endedAt ?? Date.now();
+				}
 			}
 		} finally {
 			job.finishedAt = Date.now();

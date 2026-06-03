@@ -23,8 +23,17 @@ export interface WorkflowAgentSnapshot {
 	phase?: string;
 	prompt: string;
 	status: WorkflowAgentStatus;
+	startedAt?: number;
+	endedAt?: number;
+	model?: string;
+	liveTokens?: number;
+	inputTokens?: number;
+	outputTokens?: number;
+	toolCount?: number;
 	activity?: WorkflowAgentActivity[];
 	resultPreview?: string;
+	resultText?: string;
+	cached?: boolean;
 	error?: string;
 }
 
@@ -39,6 +48,7 @@ export interface WorkflowSnapshot {
 	runningCount: number;
 	doneCount: number;
 	errorCount: number;
+	toolCount?: number;
 	durationMs?: number;
 	result?: unknown;
 }
@@ -46,11 +56,12 @@ export interface WorkflowSnapshot {
 export function createWorkflowSnapshot(meta: {
 	name: string;
 	description?: string;
+	phases?: Array<{ title: string }>;
 }): WorkflowSnapshot {
 	return {
 		name: meta.name,
 		description: meta.description,
-		phases: [],
+		phases: meta.phases?.map((phase) => phase.title) ?? [],
 		logs: [],
 		agents: [],
 		agentCount: 0,
@@ -73,6 +84,14 @@ export function updateSnapshotStats(
 	snapshot.errorCount = snapshot.agents.filter(
 		(agent) => agent.status === "error",
 	).length;
+	snapshot.toolCount = snapshot.agents.reduce(
+		(total, agent) =>
+			total +
+			(agent.toolCount ??
+				agent.activity?.filter((item) => item.type === "tool").length ??
+				0),
+		0,
+	);
 	return snapshot;
 }
 

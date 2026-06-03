@@ -170,19 +170,26 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 					emit();
 				},
 				onAgentStart(event) {
+					const now = Date.now();
 					snapshot.agents.push({
 						id: event.id,
 						label: event.label,
 						phase: event.phase,
 						prompt: event.prompt,
-						status: "running",
+						status: event.cached ? "done" : "running",
+						startedAt: now,
+						model: event.model,
+						toolCount: 0,
 						activity: [],
+						cached: event.cached,
 					});
 					emit();
 				},
 				onAgentActivity(event) {
 					const agent = snapshot.agents.find((item) => item.id === event.id);
 					if (!agent) return;
+					if (event.type === "tool")
+						agent.toolCount = (agent.toolCount ?? 0) + 1;
 					agent.activity = [
 						...(agent.activity ?? []),
 						{
@@ -198,7 +205,12 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 					const agent = snapshot.agents.find((item) => item.id === event.id);
 					if (agent) {
 						agent.status = event.result === null ? "error" : "done";
+						agent.endedAt = Date.now();
 						agent.resultPreview = preview(event.result);
+						agent.resultText =
+							typeof event.result === "string"
+								? event.result
+								: JSON.stringify(event.result, null, 2);
 						if (event.error) agent.error = event.error.message;
 					}
 					emit();
@@ -213,8 +225,10 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 			snapshot.durationMs = Date.now() - startedAt;
 			snapshot.result = result.result;
 			for (const agent of snapshot.agents) {
-				if (agent.status === "running" || agent.status === "queued")
+				if (agent.status === "running" || agent.status === "queued") {
 					agent.status = signal?.aborted ? "skipped" : "done";
+					agent.endedAt = agent.endedAt ?? Date.now();
+				}
 			}
 			updateSnapshotStats(snapshot);
 			display.complete(snapshot);
