@@ -95,6 +95,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 			"For workflow, parallel() takes functions, not promises: use `await parallel(items.map(item => () => agent(...)))`.",
 			"For workflow, always await agent(), parallel(), and pipeline() before returning a JSON-serializable result.",
 			"For workflow, do not use Date.now(), new Date(), Math.random(), require, import, fs, network APIs, or direct filesystem access in the script; delegate work to agent().",
+			"When workflow returns a background job id, do not poll, wait, or re-run it; continue normally because the extension will send a workflow-completion message when the job finishes.",
 		],
 		parameters: workflowToolSchema,
 		prepareArguments(args) {
@@ -122,11 +123,14 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 					"Open /workflows for the interactive live dashboard.",
 				);
 				createToolUpdateWorkflowDisplay(onUpdate).update(snapshot);
+				const scriptNote = job.scriptPath
+					? ` The reusable workflow script was saved at ${job.scriptPath}.`
+					: "";
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Workflow ${job.name} started in the background as #${job.id}. Use /workflows to watch progress, navigate agents, cancel, and inspect the final result.`,
+							text: `Workflow ${job.name} started in the background as #${job.id}.${scriptNote} Use /workflows to watch progress, navigate agents, cancel, and inspect the final result. Do not poll, wait, or re-run it; the extension will notify you with a workflow-completion message when it finishes. When you receive that message, summarize the outcome for the user and suggest a useful next step.`,
 						},
 					],
 					details: snapshot,

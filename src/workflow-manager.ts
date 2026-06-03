@@ -1,3 +1,12 @@
+import { randomUUID } from "node:crypto";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
 import {
 	createWorkflowSnapshot,
 	preview,
@@ -5,25 +14,45 @@ import {
 	type WorkflowSnapshot,
 } from "./display.js";
 import {
+	createFileWorkflowJournal,
 	parseWorkflowScript,
 	type RunWorkflowOptions,
 	runWorkflow,
+	type WorkflowJournal,
 } from "./workflow.js";
 
-export type WorkflowJobStatus = "running" | "done" | "error" | "cancelled";
+export type WorkflowJobStatus =
+	| "running"
+	| "done"
+	| "error"
+	| "cancelled"
+	| "interrupted";
 
 export interface WorkflowJob {
 	id: number;
+	runId: string;
 	name: string;
 	description?: string;
 	status: WorkflowJobStatus;
 	script: string;
+	scriptPath?: string;
 	args?: unknown;
 	snapshot: WorkflowSnapshot;
 	startedAt: number;
 	finishedAt?: number;
 	error?: string;
 	result?: unknown;
+}
+
+export interface WorkflowJobStore {
+	loadJobs(): WorkflowJob[];
+	saveJob(job: WorkflowJob): void;
+	saveScript(job: WorkflowJob): string;
+	createJournal(runId: string): WorkflowJournal;
+}
+
+export interface WorkflowManagerOptions {
+	store?: WorkflowJobStore;
 }
 
 export type WorkflowJobListener = (job: WorkflowJob) => void;
@@ -52,11 +81,21 @@ export class WorkflowManager {
 	private readonly jobs: InternalWorkflowJob[] = [];
 	private readonly listeners = new Set<WorkflowJobListener>();
 
+	constructor(private store?: WorkflowJobStore) {
+		this.restoreJobs();
+	}
+
+	attachStore(store: WorkflowJobStore): void {
+		this.store = store;
+		this.restoreJobs();
+	}
+
 	start(script: string, options: StartWorkflowJobOptions = {}): WorkflowJob {
 		const parsed = parseWorkflowScript(script);
 		const snapshot = createWorkflowSnapshot(parsed.meta);
 		const job: InternalWorkflowJob = {
 			id: this.nextId++,
+			runId: `wf_${randomUUID()}`,
 			name: parsed.meta.name,
 			description: parsed.meta.description,
 			status: "running",
@@ -67,9 +106,13 @@ export class WorkflowManager {
 			controller: new AbortController(),
 		};
 
+		job.scriptPath = this.store?.saveScript(job);
 		this.jobs.push(job);
 		this.touch(job);
-		job.promise = this.runJob(job, options);
+		job.promise = this.runJob(job, {
+			...options,
+			journal: options.journal ?? this.store?.createJournal(job.runId),
+		});
 		return job;
 	}
 
@@ -79,6 +122,33 @@ export class WorkflowManager {
 
 	getJob(id: number): WorkflowJob | undefined {
 		return this.jobs.find((job) => job.id === id);
+	}
+
+	resume(
+		id: number,
+		options: StartWorkflowJobOptions = {},
+	): WorkflowJob | undefined {
+		const job = this.jobs.find((item) => item.id === id);
+		if (!job || job.status === "running") return job;
+		const parsed = parseWorkflowScript(job.script);
+		job.name = parsed.meta.name;
+		job.description = parsed.meta.description;
+		job.args = options.args ?? job.args;
+		job.status = "running";
+		job.error = undefined;
+		job.result = undefined;
+		job.finishedAt = undefined;
+		job.startedAt = Date.now();
+		job.snapshot = createWorkflowSnapshot(parsed.meta);
+		job.controller = new AbortController();
+		job.scriptPath = this.store?.saveScript(job) ?? job.scriptPath;
+		this.touch(job);
+		job.promise = this.runJob(job, {
+			...options,
+			args: job.args,
+			journal: options.journal ?? this.store?.createJournal(job.runId),
+		});
+		return job;
 	}
 
 	cancel(id: number): boolean {
@@ -110,6 +180,7 @@ export class WorkflowManager {
 				agent: options.agent,
 				concurrency: options.concurrency,
 				maxEstimatedTokens: options.maxEstimatedTokens,
+				journal: options.journal,
 				session: options.session,
 				signal: job.controller.signal,
 				onPhase: (title) => {
@@ -194,9 +265,26 @@ export class WorkflowManager {
 		}
 	}
 
+	private restoreJobs(): void {
+		if (!this.store) return;
+		const existingRunIds = new Set(this.jobs.map((job) => job.runId));
+		for (const job of this.store.loadJobs()) {
+			if (existingRunIds.has(job.runId)) continue;
+			const restored: InternalWorkflowJob = {
+				...job,
+				status: job.status === "running" ? "interrupted" : job.status,
+				controller: new AbortController(),
+			};
+			this.jobs.push(restored);
+			if (restored.status !== job.status) this.store.saveJob(restored);
+			this.nextId = Math.max(this.nextId, restored.id + 1);
+		}
+	}
+
 	private touch(job: InternalWorkflowJob): void {
 		job.snapshot.durationMs = Date.now() - job.startedAt;
 		updateSnapshotStats(job.snapshot);
+		this.store?.saveJob(job);
 		for (const listener of [...this.listeners]) {
 			try {
 				listener(job);
@@ -207,8 +295,79 @@ export class WorkflowManager {
 	}
 }
 
-export function createWorkflowManager(): WorkflowManager {
-	return new WorkflowManager();
+export function createWorkflowManager(
+	options: WorkflowManagerOptions = {},
+): WorkflowManager {
+	return new WorkflowManager(options.store);
+}
+
+export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
+	mkdirSync(rootDir, { recursive: true });
+	const runDir = (runId: string) => join(rootDir, runId);
+	const manifestPath = (runId: string) => join(runDir(runId), "manifest.json");
+	const scriptPath = (name: string) =>
+		join(rootDir, "scripts", `${name}.workflow.js`);
+	return {
+		loadJobs() {
+			if (!existsSync(rootDir)) return [];
+			return readdirSync(rootDir, { withFileTypes: true })
+				.filter((entry) => entry.isDirectory())
+				.map((entry) => manifestPath(entry.name))
+				.filter((path) => existsSync(path))
+				.map((path) => JSON.parse(readFileSync(path, "utf8")) as WorkflowJob)
+				.sort((a, b) => a.startedAt - b.startedAt || a.id - b.id);
+		},
+		saveJob(job) {
+			mkdirSync(runDir(job.runId), { recursive: true });
+			const {
+				id,
+				runId,
+				name,
+				description,
+				status,
+				script,
+				scriptPath,
+				args,
+				snapshot,
+				startedAt,
+				finishedAt,
+				error,
+				result,
+			} = job;
+			writeFileSync(
+				manifestPath(runId),
+				`${JSON.stringify(
+					{
+						id,
+						runId,
+						name,
+						description,
+						status,
+						script,
+						scriptPath,
+						args,
+						snapshot,
+						startedAt,
+						finishedAt,
+						error,
+						result,
+					},
+					null,
+					2,
+				)}\n`,
+				"utf8",
+			);
+		},
+		saveScript(job) {
+			const path = scriptPath(job.name);
+			mkdirSync(join(rootDir, "scripts"), { recursive: true });
+			writeFileSync(path, job.script, "utf8");
+			return path;
+		},
+		createJournal(runId) {
+			return createFileWorkflowJournal(join(runDir(runId), "journal.jsonl"));
+		},
+	};
 }
 
 export function cloneWorkflowSnapshot(

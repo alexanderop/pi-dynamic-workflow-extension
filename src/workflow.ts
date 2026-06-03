@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import vm from "node:vm";
 import { parse } from "acorn";
 
@@ -48,11 +51,38 @@ export interface WorkflowAgentRunOptions {
 	onActivity?: (event: Omit<AgentActivityEvent, "id" | "label">) => void;
 }
 
+export interface WorkflowJournalStartedRecord {
+	type: "started";
+	key: string;
+	agentId: number;
+	label: string;
+	phase?: string;
+	prompt: string;
+}
+
+export interface WorkflowJournalResultRecord {
+	type: "result";
+	key: string;
+	agentId: number;
+	result: unknown;
+}
+
+export interface WorkflowJournalCachedResult {
+	result: unknown;
+}
+
+export interface WorkflowJournal {
+	getResult(key: string): WorkflowJournalCachedResult | undefined;
+	appendStarted(record: WorkflowJournalStartedRecord): void;
+	appendResult(record: WorkflowJournalResultRecord): void;
+}
+
 export interface RunWorkflowOptions {
 	cwd?: string;
 	args?: unknown;
 	signal?: AbortSignal;
 	agent?: WorkflowAgentLike;
+	journal?: WorkflowJournal;
 	session?: unknown;
 	concurrency?: number;
 	maxEstimatedTokens?: number;
@@ -84,6 +114,95 @@ interface RuntimeState {
 type AnyNode = Record<string, any>;
 
 const RESERVED_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const JOURNAL_KEY_VERSION = "v1";
+const JOURNAL_MISSING = Symbol("workflow-journal-missing");
+
+export function createInMemoryWorkflowJournal(): WorkflowJournal {
+	const results = new Map<string, unknown>();
+	return {
+		getResult(key) {
+			return results.has(key) ? { result: results.get(key) } : undefined;
+		},
+		appendStarted() {},
+		appendResult(record) {
+			results.set(record.key, record.result);
+		},
+	};
+}
+
+export function createFileWorkflowJournal(path: string): WorkflowJournal {
+	mkdirSync(dirname(path), { recursive: true });
+	const results = new Map<string, unknown>();
+	if (existsSync(path)) {
+		for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+			if (!line.trim()) continue;
+			const record = JSON.parse(line) as
+				| WorkflowJournalStartedRecord
+				| WorkflowJournalResultRecord;
+			if (record.type === "result") results.set(record.key, record.result);
+		}
+	}
+	const append = (
+		record: WorkflowJournalStartedRecord | WorkflowJournalResultRecord,
+	) => {
+		appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
+	};
+	return {
+		getResult(key) {
+			return results.has(key) ? { result: results.get(key) } : undefined;
+		},
+		appendStarted(record) {
+			append(record);
+		},
+		appendResult(record) {
+			results.set(record.key, record.result);
+			append(record);
+		},
+	};
+}
+
+export function computeWorkflowAgentKey(
+	prompt: string,
+	previousKey: string,
+	options: {
+		agentType?: string;
+		model?: string;
+		isolation?: string;
+		schema?: unknown;
+		instructions?: string;
+	},
+): string {
+	const canonicalOptions = stableStringify({
+		agentType: options.agentType,
+		instructions: options.instructions,
+		isolation: options.isolation,
+		model: options.model,
+		schema: options.schema,
+	});
+	const digest = createHash("sha256")
+		.update(prompt)
+		.update("\0")
+		.update(previousKey)
+		.update("\0")
+		.update(canonicalOptions)
+		.digest("hex");
+	return `${JOURNAL_KEY_VERSION}:${digest}`;
+}
+
+function stableStringify(value: unknown): string {
+	return JSON.stringify(sortForJson(value));
+}
+
+function sortForJson(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(sortForJson);
+	if (!isPlainRecord(value)) return value;
+	const output: Record<string, unknown> = {};
+	for (const key of Object.keys(value).sort()) {
+		const item = value[key];
+		if (item !== undefined) output[key] = sortForJson(item);
+	}
+	return output;
+}
 
 export function parseWorkflowScript(script: string): {
 	meta: WorkflowMeta;
@@ -341,6 +460,8 @@ export async function runWorkflow(
 	const limiter = createLimiter(concurrency, options.signal);
 	const agentRunner = options.agent ?? createDefaultWorkflowAgent(options);
 	const maxEstimatedTokens = options.maxEstimatedTokens ?? 80_000;
+	let previousJournalKey = "";
+	let journalDiverged = false;
 
 	const throwIfAborted = () => {
 		if (options.signal?.aborted) throw new Error("Workflow was aborted");
@@ -379,12 +500,46 @@ export async function runWorkflow(
 		const normalizedOptions = normalizeAgentOptions(agentOptions);
 		const assignedPhase = normalizedOptions.phase ?? state.currentPhase;
 		const id = state.nextAgentId++;
+		state.agentCount++;
 		const label =
 			normalizedOptions.label || defaultAgentLabel(assignedPhase, id);
+		const journalKey = computeWorkflowAgentKey(
+			taskPrompt,
+			previousJournalKey,
+			normalizedOptions,
+		);
+		previousJournalKey = journalKey;
+
+		const cached = !journalDiverged
+			? (options.journal?.getResult(journalKey) ?? JOURNAL_MISSING)
+			: JOURNAL_MISSING;
+		if (cached !== JOURNAL_MISSING) {
+			options.onAgentStart?.({
+				id,
+				label,
+				phase: assignedPhase,
+				prompt: taskPrompt,
+			});
+			options.onAgentEnd?.({
+				id,
+				label,
+				phase: assignedPhase,
+				result: cached.result,
+			});
+			return Promise.resolve(cached.result);
+		}
+		if (options.journal) journalDiverged = true;
 
 		const run = limiter(async () => {
 			throwIfAborted();
-			state.agentCount++;
+			options.journal?.appendStarted({
+				type: "started",
+				key: journalKey,
+				agentId: id,
+				label,
+				phase: assignedPhase,
+				prompt: taskPrompt,
+			});
 			options.onAgentStart?.({
 				id,
 				label,
@@ -404,6 +559,12 @@ export async function runWorkflow(
 						options.onAgentActivity?.({ id, label, ...activity }),
 				});
 				state.spent += estimateTokens(result);
+				options.journal?.appendResult({
+					type: "result",
+					key: journalKey,
+					agentId: id,
+					result,
+				});
 				options.onAgentEnd?.({ id, label, phase: assignedPhase, result });
 				return result;
 			} catch (error) {
@@ -411,6 +572,12 @@ export async function runWorkflow(
 				const actualError =
 					error instanceof Error ? error : new Error(String(error));
 				log(`agent ${label} failed: ${actualError.message}`);
+				options.journal?.appendResult({
+					type: "result",
+					key: journalKey,
+					agentId: id,
+					result: null,
+				});
 				options.onAgentEnd?.({
 					id,
 					label,

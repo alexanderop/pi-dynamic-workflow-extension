@@ -19,15 +19,39 @@ export type {
 	RuntimePhaseEvent,
 	RunWorkflowOptions,
 	WorkflowAgentLike,
+	WorkflowJournal,
+	WorkflowJournalCachedResult,
+	WorkflowJournalResultRecord,
+	WorkflowJournalStartedRecord,
 	WorkflowMeta,
 	WorkflowResult,
 } from "./workflow.js";
-export { parseWorkflowScript, runWorkflow } from "./workflow.js";
+export {
+	computeWorkflowAgentKey,
+	createFileWorkflowJournal,
+	createInMemoryWorkflowJournal,
+	parseWorkflowScript,
+	runWorkflow,
+} from "./workflow.js";
 export { WorkflowBrowser } from "./workflow-browser.js";
 export { WorkflowDashboard } from "./workflow-dashboard.js";
-export type { WorkflowJob, WorkflowJobStatus } from "./workflow-manager.js";
+export type {
+	SavedWorkflowEntry,
+	WorkflowLibrary,
+} from "./workflow-library.js";
+export {
+	createFileWorkflowLibrary,
+	normalizeWorkflowCommandName,
+} from "./workflow-library.js";
+export type {
+	WorkflowJob,
+	WorkflowJobStatus,
+	WorkflowJobStore,
+	WorkflowManagerOptions,
+} from "./workflow-manager.js";
 export {
 	cloneWorkflowSnapshot,
+	createFileWorkflowStore,
 	createWorkflowManager,
 	WorkflowManager,
 } from "./workflow-manager.js";

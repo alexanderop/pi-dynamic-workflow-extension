@@ -43,6 +43,7 @@ function statusIcon(status: WorkflowAgentStatus | WorkflowJobStatus): string {
 		case "error":
 			return "✗";
 		case "cancelled":
+		case "interrupted":
 		case "skipped":
 			return "-";
 		case "queued":

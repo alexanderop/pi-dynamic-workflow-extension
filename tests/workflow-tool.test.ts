@@ -27,4 +27,11 @@ test("workflow tool has explicit prompt guidelines", () => {
 			guideline.includes("parallel() takes functions"),
 		),
 	);
+	assert.ok(
+		tool.promptGuidelines?.some(
+			(guideline) =>
+				guideline.includes("do not poll") &&
+				guideline.includes("workflow-completion"),
+		),
+	);
 });
