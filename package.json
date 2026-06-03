@@ -1,0 +1,65 @@
+{
+	"name": "pi-dynamic-workflow-extension",
+	"version": "0.1.0",
+	"description": "Pi extension that runs dynamic JavaScript workflows with isolated subagents and live progress rendering.",
+	"type": "module",
+	"main": "./dist/src/index.js",
+	"types": "./dist/src/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/src/index.d.ts",
+			"import": "./dist/src/index.js"
+		},
+		"./workflow": {
+			"types": "./types/workflow.d.ts"
+		}
+	},
+	"files": [
+		"dist",
+		"extensions",
+		"src",
+		"types",
+		"README.md"
+	],
+	"keywords": [
+		"pi-package",
+		"pi",
+		"workflow",
+		"agents",
+		"subagents"
+	],
+	"pi": {
+		"extensions": [
+			"extensions/workflow.ts"
+		]
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"check": "biome check .",
+		"test:unit": "tsx --test tests/**/*.test.ts",
+		"test": "npm run check && npm run build && npm run test:unit"
+	},
+	"dependencies": {
+		"acorn": "^8.16.0"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-ai": "^0.78.0",
+		"@earendil-works/pi-coding-agent": "^0.78.0",
+		"@earendil-works/pi-tui": "^0.78.0",
+		"typebox": "*"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.2.5",
+		"@earendil-works/pi-ai": "^0.78.0",
+		"@earendil-works/pi-coding-agent": "^0.78.0",
+		"@earendil-works/pi-tui": "^0.78.0",
+		"@types/node": "^24.0.0",
+		"tsx": "^4.20.6",
+		"typebox": "*",
+		"typescript": "^5.9.3"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"license": "MIT"
+}
