@@ -38,8 +38,7 @@
 		"lint": "biome check .",
 		"check": "npm run lint",
 		"test:unit": "tsx --test tests/**/*.test.ts",
-		"test": "npm run check && npm run build && npm run test:unit",
-		"prepare": "lefthook install"
+		"test": "npm run check && npm run build && npm run test:unit"
 	},
 	"dependencies": {
 		"acorn": "^8.16.0"
@@ -56,7 +55,6 @@
 		"@earendil-works/pi-coding-agent": "^0.78.0",
 		"@earendil-works/pi-tui": "^0.78.0",
 		"@types/node": "^24.0.0",
-		"lefthook": "^2.1.9",
 		"tsx": "^4.20.6",
 		"typebox": "*",
 		"typescript": "^5.9.3"
