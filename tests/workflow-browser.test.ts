@@ -154,6 +154,85 @@ test("WorkflowBrowser arrow navigation moves focus then selects phase and agent"
 	instance.handleInput("q");
 });
 
+test("WorkflowBrowser header keeps selected workflow and switch hint visible", () => {
+	const jobs = Array.from({ length: 9 }, (_, index) =>
+		job({
+			id: index + 1,
+			name: `very_long_completed_workflow_name_${index + 1}_with_extra_context`,
+			status: index === 8 ? "running" : "done",
+			snapshot: snapshot({
+				name: `very_long_completed_workflow_name_${index + 1}_with_extra_context`,
+			}),
+		}),
+	);
+	const { instance } = browser(new FakeManager(jobs));
+	const text = instance.render(96).join("\n");
+
+	assert.match(text, /Runs 9\/9/);
+	assert.match(text, /#9 very_long_completed_workflow_name_9/);
+	assert.match(text, /p\/n or \[\/\]\/<> switch workflow/);
+	for (const line of instance.render(96))
+		assert.ok(visibleWidth(line) <= 96, line);
+
+	instance.handleInput("q");
+});
+
+test("WorkflowBrowser keeps ANSI resets out of truncated selected workflow chip", () => {
+	const jobs = Array.from({ length: 9 }, (_, index) =>
+		job({
+			id: index + 1,
+			name: `very_long_completed_workflow_name_${index + 1}_with_extra_context`,
+			status: index === 8 ? "running" : "done",
+			snapshot: snapshot({
+				name: `very_long_completed_workflow_name_${index + 1}_with_extra_context`,
+			}),
+		}),
+	);
+	const instance = new WorkflowBrowser(
+		new FakeManager(jobs) as unknown as WorkflowManager,
+		{ requestRender() {} },
+		{
+			fg(_color: string, text: string) {
+				return `\u001b[35m${text}\u001b[39m`;
+			},
+			bold(text: string) {
+				return `\u001b[1m${text}\u001b[22m`;
+			},
+		},
+		() => {},
+	);
+
+	const strip = instance.render(96)[1] ?? "";
+	const ansiEscape = String.fromCharCode(27);
+	assert.equal(strip.includes(`${ansiEscape}[0m…${ansiEscape}[0m]`), false);
+	assert.match(strip, /very_long_completed_workflow_name_9_with_e…\]/);
+	assert.ok(visibleWidth(strip) <= 96, strip);
+
+	instance.handleInput("q");
+});
+
+test("WorkflowBrowser supports p and n workflow navigation", () => {
+	const first = job({ id: 1, name: "first_workflow", status: "done" });
+	const second = job({ id: 2, name: "second_workflow", status: "running" });
+	const { instance } = browser(new FakeManager([first, second]));
+
+	let text = instance.render(124).join("\n");
+	assert.match(text, /Runs 2\/2/);
+	assert.match(text, /Workflow: second_workflow|#2 second_workflow/);
+
+	instance.handleInput("p");
+	text = instance.render(124).join("\n");
+	assert.match(text, /Runs 1\/2/);
+	assert.match(text, /Workflow: first_workflow|#1 first_workflow/);
+
+	instance.handleInput("n");
+	text = instance.render(124).join("\n");
+	assert.match(text, /Runs 2\/2/);
+	assert.match(text, /Workflow: second_workflow|#2 second_workflow/);
+
+	instance.handleInput("q");
+});
+
 test("WorkflowBrowser supports prompt expansion and detail scrolling", () => {
 	const longPrompt = Array.from(
 		{ length: 12 },

@@ -25,6 +25,17 @@ export const STRUCTURED_OUTPUT_PROMPT_CONTRACT = [
 	"Do not call structured_output until you have completed the task.",
 ] as const;
 
+export function buildStructuredOutputRepairPrompt(
+	name = STRUCTURED_OUTPUT_TOOL_NAME,
+): string {
+	return [
+		`You finished without calling ${name}.`,
+		"The parent workflow cannot continue until it receives the structured tool arguments.",
+		"Do not redo the task or answer in prose.",
+		`Make your next and final action exactly one ${name} call with the final result matching the requested schema.`,
+	].join("\n");
+}
+
 export function structuredOutputMissingError(): Error {
 	const error = new Error(
 		"Subagent finished without calling structured_output",

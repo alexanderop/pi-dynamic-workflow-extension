@@ -75,7 +75,7 @@ After a workflow starts, continue using Pi normally. Run `/workflows` to reopen 
 - `s save` the selected workflow as a global slash command
 - `r rerun` the selected workflow as a fresh job
 - `R resume` the selected interrupted/failed/cancelled workflow
-- `[/]/<> workflow` switches between workflow runs
+- `p/n`, `[/]`, or `</>` workflow switches between older/newer workflow runs
 - `q close` or `esc` closes the dashboard
 
 The footer shows `workflows:N` while background runs are active.

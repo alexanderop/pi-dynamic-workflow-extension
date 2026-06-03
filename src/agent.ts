@@ -6,7 +6,11 @@ import {
 	SettingsManager,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { structuredOutputMissingError } from "./prompts/structured-output.js";
+import {
+	buildStructuredOutputRepairPrompt,
+	STRUCTURED_OUTPUT_TOOL_NAME,
+	structuredOutputMissingError,
+} from "./prompts/structured-output.js";
 import { buildWorkflowSubagentPrompt } from "./prompts/workflow-agent.js";
 import {
 	createStructuredOutputTool,
@@ -31,6 +35,37 @@ export interface WorkflowAgentOptions {
 	cwd?: string;
 	session?: Partial<CreateAgentSessionOptions>;
 	tools?: ToolDefinition[];
+}
+
+export interface WorkflowAgentPromptSession {
+	prompt(prompt: string): Promise<unknown>;
+	setActiveToolsByName(toolNames: string[]): void;
+}
+
+export interface WorkflowAgentPromptRunOptions {
+	session: WorkflowAgentPromptSession;
+	initialPrompt: string;
+	wantsStructuredOutput: boolean;
+	capture: StructuredOutputCapture;
+	onActivity?: AgentRunOptions["onActivity"];
+}
+
+export async function runWorkflowAgentPrompts({
+	session,
+	initialPrompt,
+	wantsStructuredOutput,
+	capture,
+	onActivity,
+}: WorkflowAgentPromptRunOptions): Promise<void> {
+	await session.prompt(initialPrompt);
+	if (!wantsStructuredOutput || capture.called) return;
+
+	onActivity?.({
+		type: "log",
+		text: "Subagent omitted structured_output; requesting one repair turn.",
+	});
+	session.setActiveToolsByName([STRUCTURED_OUTPUT_TOOL_NAME]);
+	await session.prompt(buildStructuredOutputRepairPrompt());
 }
 
 export class WorkflowAgent {
@@ -98,9 +133,17 @@ export class WorkflowAgent {
 			});
 
 			try {
-				await session.prompt(
-					this.buildPrompt(prompt, options, wantsStructuredOutput),
-				);
+				await runWorkflowAgentPrompts({
+					session,
+					initialPrompt: this.buildPrompt(
+						prompt,
+						options,
+						wantsStructuredOutput,
+					),
+					wantsStructuredOutput,
+					capture,
+					onActivity: options.onActivity,
+				});
 			} finally {
 				unsubscribe();
 			}

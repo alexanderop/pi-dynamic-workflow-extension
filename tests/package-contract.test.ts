@@ -75,7 +75,9 @@ test("README documents dashboard controls, persistence locations, and runtime li
 		"s save",
 		"r rerun",
 		"R resume",
-		"[/]/<> workflow",
+		"p/n",
+		"[/]",
+		"</>",
 		"q close",
 	]) {
 		assertReadmeIncludes(

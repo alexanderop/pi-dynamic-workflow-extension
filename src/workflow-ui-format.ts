@@ -68,6 +68,20 @@ export function fitLine(value: string, width: number): string {
 	return truncateToWidth(value, Math.max(0, width), width > 0 ? "…" : "");
 }
 
+export function truncatePlainLine(value: string, width: number): string {
+	const safeWidth = Math.max(0, width);
+	if (safeWidth === 0) return "";
+	if (visibleWidth(value) <= safeWidth) return value;
+	if (safeWidth === 1) return "…";
+
+	let result = "";
+	for (const character of value) {
+		if (visibleWidth(`${result}${character}…`) > safeWidth) break;
+		result += character;
+	}
+	return `${result}…`;
+}
+
 export function cell(value: string, width: number): string {
 	const safeWidth = Math.max(0, width);
 	const clipped = fitLine(singleLine(value), safeWidth);

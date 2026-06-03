@@ -11,6 +11,7 @@ import {
 	phaseSummaries,
 	singleLine,
 	statusGlyph,
+	truncatePlainLine,
 	type WorkflowPhaseSummary,
 	windowAround,
 } from "./workflow-ui-format.js";
@@ -115,9 +116,9 @@ export class WorkflowBrowser implements Component {
 		} else if (data === "R") {
 			const job = jobs[this.nav.selectedJobIndex];
 			if (job) this.actions.resume?.(job);
-		} else if (data === "[" || data === "<") {
+		} else if (data === "[" || data === "<" || data === "p" || data === "P") {
 			this.selectJob(this.nav.selectedJobIndex - 1);
-		} else if (data === "]" || data === ">") {
+		} else if (data === "]" || data === ">" || data === "n" || data === "N") {
 			this.selectJob(this.nav.selectedJobIndex + 1);
 		}
 
@@ -172,7 +173,7 @@ export class WorkflowBrowser implements Component {
 			this.theme.fg(
 				"dim",
 				fitLine(
-					"↑↓ select · ←→ focus · j/k scroll · enter expand · c cancel · s save · r rerun · R resume · [/]/<> workflow · q close",
+					"↑↓ select · ←→ focus · j/k scroll · enter expand · c cancel · s save · r rerun · R resume · p/n or [/]/<> workflow · q close",
 					width,
 				),
 			),
@@ -203,15 +204,29 @@ export class WorkflowBrowser implements Component {
 	}
 
 	private renderJobStrip(jobs: WorkflowJob[], width: number): string {
-		const rendered = windowAround(jobs, this.nav.selectedJobIndex, 4)
-			.map(([job, index]) => {
-				const label = `${statusGlyph(job.status, this.frame)} #${job.id} ${job.name}`;
-				return index === this.nav.selectedJobIndex
-					? this.theme.fg("accent", this.theme.bold(`[${label}]`))
-					: this.theme.fg("muted", label);
-			})
-			.join("  ");
+		const selectedIndex = clampIndex(this.nav.selectedJobIndex, jobs.length);
+		const selected = jobs[selectedIndex];
+		if (!selected) return "";
+
+		const selectedChip = truncatePlainLine(
+			this.jobChip(selected),
+			Math.max(16, Math.floor(width * 0.5)),
+		);
+		const selectedLabel = this.theme.fg(
+			"accent",
+			this.theme.bold(`[${selectedChip}]`),
+		);
+		const hint = jobs.length > 1 ? "p/n or [/]/<> switch workflow · " : "";
+		const olderJob = jobs[selectedIndex - 1];
+		const newerJob = jobs[selectedIndex + 1];
+		const older = olderJob ? ` · older ${this.jobChip(olderJob)}` : " · oldest";
+		const newer = newerJob ? ` · newer ${this.jobChip(newerJob)}` : " · newest";
+		const rendered = `${this.theme.fg("muted", `Runs ${selectedIndex + 1}/${jobs.length} · `)}${this.theme.fg("dim", hint)}${selectedLabel}${this.theme.fg("muted", older)}${this.theme.fg("muted", newer)}`;
 		return fitLine(rendered, width);
+	}
+
+	private jobChip(job: WorkflowJob): string {
+		return `${statusGlyph(job.status, this.frame)} #${job.id} ${job.name}`;
 	}
 
 	private renderWide(job: WorkflowJob, width: number): string[] {
