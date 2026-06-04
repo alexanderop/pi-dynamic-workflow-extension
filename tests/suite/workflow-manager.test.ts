@@ -5,9 +5,11 @@ import { basename, join } from "node:path";
 import { test } from "vitest";
 import {
 	createFileWorkflowStore,
+	createWorkflowSnapshot,
 	createWorkflowManager,
 	type WorkflowAgentLike,
 	type WorkflowJob,
+	type WorkflowStoreFileOperations,
 } from "../../src/index.js";
 import { waitForCondition } from "../support/wait.js";
 
@@ -207,6 +209,66 @@ test("file workflow store rejects unsafe run IDs when creating journals", async 
 
 	assert.throws(() => store.createJournal(`../${escapeName}`), /unsafe workflow runId/);
 	await assert.rejects(access(join(dir, "..", escapeName, "journal.jsonl")));
+});
+
+test("file workflow store can run through injected file operations", () => {
+	const files = new Map<string, string>();
+	const dirs = new Set<string>();
+	const operations: WorkflowStoreFileOperations = {
+		ensureDir(path) {
+			dirs.add(path);
+		},
+		exists(path) {
+			return dirs.has(path) || files.has(path);
+		},
+		listDirectories(path) {
+			return Array.from(dirs)
+				.filter((dir) => dir.startsWith(`${path}/`))
+				.map((dir) => dir.slice(path.length + 1))
+				.filter((dir) => !dir.includes("/"));
+		},
+		readFile(path) {
+			const value = files.get(path);
+			if (value === undefined) throw new Error(`missing fake file: ${path}`);
+			return value;
+		},
+		writeFile(path, value) {
+			files.set(path, value);
+		},
+		createJournal(path) {
+			return {
+				getResult: () => undefined,
+				appendStarted: () => {},
+				appendResult: () => {
+					files.set(path, "journal touched");
+				},
+			};
+		},
+	};
+	const store = createFileWorkflowStore("/fake/project/.pi/workflows", operations);
+	const job: WorkflowJob = {
+		id: 1,
+		runId: "wf_fake",
+		name: "fake_store",
+		description: "Fake store",
+		status: "done",
+		script: "export const meta = { name: 'fake_store', description: 'Fake store' }\nreturn null\n",
+		snapshot: createWorkflowSnapshot({ name: "fake_store", description: "Fake store" }),
+		startedAt: 1,
+		result: null,
+	};
+
+	store.saveJob(job);
+	const scriptPath = store.saveScript(job);
+
+	assert.equal(scriptPath, "/fake/project/.pi/workflows/scripts/fake_store.workflow.js");
+	assert.equal(files.get(scriptPath), job.script);
+	assert.deepEqual(
+		store.loadJobs().map((item) => item.runId),
+		["wf_fake"],
+	);
+	store.createJournal("wf_fake").appendResult({ type: "result", key: "k1", agentId: 1, result: "ok" });
+	assert.equal(files.get("/fake/project/.pi/workflows/wf_fake/journal.jsonl"), "journal touched");
 });
 
 test("WorkflowManager saves a reusable workflow script file when triggered", async () => {

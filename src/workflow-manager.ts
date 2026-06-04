@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createWorkflowSnapshot, preview, updateSnapshotStats, type WorkflowSnapshot } from "./display.js";
+import { createWorkflowSnapshot, updateSnapshotStats, type WorkflowSnapshot } from "./display.js";
 import {
 	createFileWorkflowJournal,
 	parseWorkflowScript,
 	type RunWorkflowOptions,
 	runWorkflow,
-	safeJsonStringify,
 	type WorkflowJournal,
 } from "./workflow.js";
+import {
+	applyWorkflowSnapshotFailure,
+	applyWorkflowSnapshotSuccess,
+	createWorkflowSnapshotEventHandlers,
+} from "./workflow-snapshot-events.js";
 
 export type WorkflowJobStatus = "running" | "done" | "error" | "cancelled" | "interrupted";
 
@@ -35,6 +39,38 @@ export interface WorkflowJobStore {
 	saveScript(job: WorkflowJob): string;
 	createJournal(runId: string): WorkflowJournal;
 }
+
+export interface WorkflowStoreFileOperations {
+	ensureDir(path: string): void;
+	exists(path: string): boolean;
+	listDirectories(path: string): string[];
+	readFile(path: string): string;
+	writeFile(path: string, value: string): void;
+	createJournal(path: string): WorkflowJournal;
+}
+
+export const defaultWorkflowStoreFileOperations: WorkflowStoreFileOperations = {
+	ensureDir(path) {
+		mkdirSync(path, { recursive: true });
+	},
+	exists(path) {
+		return existsSync(path);
+	},
+	listDirectories(path) {
+		return readdirSync(path, { withFileTypes: true })
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => entry.name);
+	},
+	readFile(path) {
+		return readFileSync(path, "utf8");
+	},
+	writeFile(path, value) {
+		writeFileSync(path, value, "utf8");
+	},
+	createJournal(path) {
+		return createFileWorkflowJournal(path);
+	},
+};
 
 export interface WorkflowManagerOptions {
 	store?: WorkflowJobStore;
@@ -168,64 +204,9 @@ export class WorkflowManager {
 				journal: options.journal,
 				session: options.session,
 				signal: job.controller.signal,
-				onPhase: (title) => {
-					job.snapshot.currentPhase = title;
-					if (!job.snapshot.phases.includes(title)) job.snapshot.phases.push(title);
-					this.touch(job);
-				},
-				onLog: (message) => {
-					job.snapshot.logs.push(message);
-					this.touch(job);
-				},
-				onArtifact: (artifact) => {
-					job.snapshot.artifacts = [...(job.snapshot.artifacts ?? []), artifact];
-					this.touch(job);
-				},
-				onAgentStart: (event) => {
-					const now = Date.now();
-					job.snapshot.agents.push({
-						id: event.id,
-						label: event.label,
-						phase: event.phase,
-						prompt: event.prompt,
-						status: event.cached ? "done" : "running",
-						startedAt: now,
-						model: event.model,
-						toolCount: 0,
-						activity: [],
-						cached: event.cached,
-					});
-					this.touch(job);
-				},
-				onAgentActivity: (event) => {
-					const agent = job.snapshot.agents.find((item) => item.id === event.id);
-					if (!agent) return;
-					if (event.type === "tool") agent.toolCount = (agent.toolCount ?? 0) + 1;
-					agent.activity = [
-						...(agent.activity ?? []),
-						{
-							type: event.type,
-							text: event.text,
-							toolName: event.toolName,
-							argsPreview: event.argsPreview,
-						},
-					].slice(-12);
-					this.touch(job);
-				},
-				onAgentEnd: (event) => {
-					const agent = job.snapshot.agents.find((item) => item.id === event.id);
-					if (agent) {
-						agent.status = event.error ? "error" : "done";
-						agent.endedAt = Date.now();
-						agent.resultPreview = preview(event.result);
-						agent.resultText =
-							typeof event.result === "string"
-								? event.result
-								: safeJsonStringify(event.result, "agent result", 2);
-						if (event.error) agent.error = event.error.message;
-					}
-					this.touch(job);
-				},
+				...createWorkflowSnapshotEventHandlers(job.snapshot, {
+					emit: () => this.touch(job),
+				}),
 			});
 
 			if (result.agentCount === 0) {
@@ -234,33 +215,22 @@ export class WorkflowManager {
 
 			job.status = "done";
 			job.result = result.result;
-			job.snapshot.currentPhase = undefined;
-			job.snapshot.result = result.result;
-			job.snapshot.artifacts = result.artifacts;
-			for (const agent of job.snapshot.agents) {
-				if (agent.status === "running" || agent.status === "queued") {
-					agent.status = "done";
-					agent.endedAt = agent.endedAt ?? Date.now();
-				}
-			}
+			applyWorkflowSnapshotSuccess(job.snapshot, result);
 		} catch (error) {
+			let message: string;
 			if (job.status === "cancelled") {
-				job.error = "Workflow was cancelled";
+				message = "Workflow was cancelled";
+				job.error = message;
 			} else if (job.controller.signal.aborted || job.status === "interrupted") {
 				job.status = "interrupted";
-				job.error = "Workflow was interrupted";
+				message = "Workflow was interrupted";
+				job.error = message;
 			} else {
-				const message = error instanceof Error ? error.message : String(error);
+				message = error instanceof Error ? error.message : String(error);
 				job.status = "error";
 				job.error = message;
-				job.snapshot.logs.push(`[error] ${message}`);
 			}
-			for (const agent of job.snapshot.agents) {
-				if (agent.status === "running" || agent.status === "queued") {
-					agent.status = job.status === "cancelled" || job.status === "interrupted" ? "skipped" : "error";
-					agent.endedAt = agent.endedAt ?? Date.now();
-				}
-			}
+			applyWorkflowSnapshotFailure(job.snapshot, job.status, message);
 		} finally {
 			job.finishedAt = Date.now();
 			this.touch(job);
@@ -311,9 +281,13 @@ function isSafeRunId(value: unknown): boolean {
 	return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
 }
 
-function parseStoredJobManifest(path: string, expectedRunId: string): WorkflowJob | undefined {
+function parseStoredJobManifest(
+	path: string,
+	expectedRunId: string,
+	operations: WorkflowStoreFileOperations,
+): WorkflowJob | undefined {
 	try {
-		const job = JSON.parse(readFileSync(path, "utf8")) as WorkflowJob;
+		const job = JSON.parse(operations.readFile(path)) as WorkflowJob;
 		if (job.runId !== expectedRunId) return undefined;
 		return isWorkflowJobStatus(job.status) ? job : undefined;
 	} catch {
@@ -321,8 +295,11 @@ function parseStoredJobManifest(path: string, expectedRunId: string): WorkflowJo
 	}
 }
 
-export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
-	mkdirSync(rootDir, { recursive: true });
+export function createFileWorkflowStore(
+	rootDir: string,
+	operations: WorkflowStoreFileOperations = defaultWorkflowStoreFileOperations,
+): WorkflowJobStore {
+	operations.ensureDir(rootDir);
 	const runDir = (runId: string) => {
 		if (!isSafeRunId(runId)) throw new Error(`unsafe workflow runId: ${runId}`);
 		return join(rootDir, runId);
@@ -331,19 +308,20 @@ export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 	const scriptPath = (name: string) => join(rootDir, "scripts", `${name}.workflow.js`);
 	return {
 		loadJobs() {
-			if (!existsSync(rootDir)) return [];
-			return readdirSync(rootDir, { withFileTypes: true })
-				.filter((entry) => entry.isDirectory() && isSafeRunId(entry.name))
-				.flatMap((entry): WorkflowJob[] => {
-					const path = manifestPath(entry.name);
-					if (!existsSync(path)) return [];
-					const job = parseStoredJobManifest(path, entry.name);
+			if (!operations.exists(rootDir)) return [];
+			return operations
+				.listDirectories(rootDir)
+				.filter((name) => isSafeRunId(name))
+				.flatMap((name): WorkflowJob[] => {
+					const path = manifestPath(name);
+					if (!operations.exists(path)) return [];
+					const job = parseStoredJobManifest(path, name, operations);
 					return job ? [job] : [];
 				})
 				.sort((a, b) => a.startedAt - b.startedAt || a.id - b.id);
 		},
 		saveJob(job) {
-			mkdirSync(runDir(job.runId), { recursive: true });
+			operations.ensureDir(runDir(job.runId));
 			const {
 				id,
 				runId,
@@ -359,7 +337,7 @@ export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 				error,
 				result,
 			} = job;
-			writeFileSync(
+			operations.writeFile(
 				manifestPath(runId),
 				`${JSON.stringify(
 					{
@@ -380,17 +358,16 @@ export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 					null,
 					2,
 				)}\n`,
-				"utf8",
 			);
 		},
 		saveScript(job) {
 			const path = scriptPath(job.name);
-			mkdirSync(join(rootDir, "scripts"), { recursive: true });
-			writeFileSync(path, job.script, "utf8");
+			operations.ensureDir(join(rootDir, "scripts"));
+			operations.writeFile(path, job.script);
 			return path;
 		},
 		createJournal(runId) {
-			return createFileWorkflowJournal(join(runDir(runId), "journal.jsonl"));
+			return operations.createJournal(join(runDir(runId), "journal.jsonl"));
 		},
 	};
 }

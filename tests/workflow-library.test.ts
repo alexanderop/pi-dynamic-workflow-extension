@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
-import { createFileWorkflowLibrary } from "../src/index.js";
+import { createFileWorkflowLibrary, type WorkflowLibraryFileOperations } from "../src/index.js";
 
 test("file workflow library saves scripts as reusable command entries", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-workflow-library-"));
@@ -58,4 +58,48 @@ return await agent('audit and verify ' + (args ?? ''))
 	assert.equal(updatedEntry.path, entry.path);
 	assert.equal(await readFile(entry.path, "utf8"), updated);
 	assert.equal(library.get("saved_audit")?.script, updated);
+});
+
+test("file workflow library can run through injected file operations", () => {
+	const files = new Map<string, string>();
+	const dirs = new Set<string>();
+	const operations: WorkflowLibraryFileOperations = {
+		ensureDir(path) {
+			dirs.add(path);
+		},
+		exists(path) {
+			return dirs.has(path) || files.has(path);
+		},
+		listFiles(path) {
+			return Array.from(files.keys())
+				.filter((file) => file.startsWith(`${path}/`))
+				.map((file) => file.slice(path.length + 1));
+		},
+		readFile(path) {
+			const value = files.get(path);
+			if (value === undefined) throw new Error(`missing fake file: ${path}`);
+			return value;
+		},
+		writeFile(path, value) {
+			files.set(path, value);
+		},
+		deleteFile(path) {
+			files.delete(path);
+		},
+	};
+	const library = createFileWorkflowLibrary("/fake/workflows", operations);
+	const script = `export const meta = { name: 'fake_saved', description: 'Fake saved workflow' }
+return await agent('fake')
+`;
+
+	const saved = library.save(script);
+
+	assert.equal(saved.path, "/fake/workflows/fake_saved.workflow.js");
+	assert.equal(files.get(saved.path), script);
+	assert.deepEqual(
+		library.list().map((entry) => entry.name),
+		["fake_saved"],
+	);
+	assert.equal(library.delete("fake_saved"), true);
+	assert.deepEqual(library.list(), []);
 });

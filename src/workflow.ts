@@ -94,6 +94,28 @@ export interface WorkflowJournal {
 	appendResult(record: WorkflowJournalResultRecord): void;
 }
 
+export interface WorkflowJournalFileOperations {
+	ensureDir(path: string): void;
+	exists(path: string): boolean;
+	readFile(path: string): string;
+	appendFile(path: string, value: string): void;
+}
+
+export const defaultWorkflowJournalFileOperations: WorkflowJournalFileOperations = {
+	ensureDir(path) {
+		mkdirSync(path, { recursive: true });
+	},
+	exists(path) {
+		return existsSync(path);
+	},
+	readFile(path) {
+		return readFileSync(path, "utf8");
+	},
+	appendFile(path, value) {
+		appendFileSync(path, value, "utf8");
+	},
+};
+
 export interface RunWorkflowOptions {
 	cwd?: string;
 	args?: unknown;
@@ -188,18 +210,21 @@ export function createInMemoryWorkflowJournal(): WorkflowJournal {
 	};
 }
 
-export function createFileWorkflowJournal(path: string): WorkflowJournal {
-	mkdirSync(dirname(path), { recursive: true });
+export function createFileWorkflowJournal(
+	path: string,
+	operations: WorkflowJournalFileOperations = defaultWorkflowJournalFileOperations,
+): WorkflowJournal {
+	operations.ensureDir(dirname(path));
 	const results = new Map<string, unknown>();
-	if (existsSync(path)) {
-		for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+	if (operations.exists(path)) {
+		for (const line of operations.readFile(path).split(/\r?\n/)) {
 			if (!line.trim()) continue;
 			const record = JSON.parse(line) as WorkflowJournalStartedRecord | WorkflowJournalResultRecord;
 			if (record.type === "result") results.set(record.key, record.result);
 		}
 	}
 	const append = (record: WorkflowJournalStartedRecord | WorkflowJournalResultRecord) => {
-		appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
+		operations.appendFile(path, `${JSON.stringify(record)}\n`);
 	};
 	return {
 		getResult(key) {

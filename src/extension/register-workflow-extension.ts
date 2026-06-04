@@ -4,6 +4,7 @@ import type { SavedWorkflowEntry } from "../workflow-library.js";
 import type { WorkflowJob } from "../workflow-manager.js";
 import { highlightWorkflowTriggerWords, transformNativeWorkflowInput } from "../workflow-trigger.js";
 import { createDefaultWorkflowExtensionDeps, type WorkflowExtensionDeps } from "./workflow-extension-deps.js";
+import { sendWorkflowCompletionNotification, updateWorkflowFooterStatus } from "./workflow-extension-status.js";
 
 class WorkflowTriggerEditor extends CustomEditor {
 	render(width: number): string[] {
@@ -271,16 +272,6 @@ export function registerWorkflowExtension(
 		}
 	}
 
-	function updateStatus(ctx: ExtensionContext): void {
-		const jobs = manager.getJobs();
-		const running = jobs.filter((job) => job.status === "running").length;
-		if (running > 0) {
-			ctx.ui.setStatus("workflow", ctx.ui.theme.fg("accent", `workflows:${running}`));
-			return;
-		}
-		ctx.ui.setStatus("workflow", undefined);
-	}
-
 	function announceCompletedWorkflow(job: WorkflowJob, ctx: ExtensionContext): void {
 		if (
 			job.status === "running" ||
@@ -299,24 +290,7 @@ export function registerWorkflowExtension(
 		});
 
 		const message = formatCompletion(job);
-		ctx.ui.notify(
-			`Workflow #${job.id} ${job.status === "done" ? "completed" : job.status}`,
-			job.status === "done" ? "info" : "warning",
-		);
-		pi.sendMessage(
-			{
-				customType: "workflow-completion",
-				content: message,
-				display: true,
-				details: {
-					jobId: job.id,
-					runId: job.runId,
-					name: job.name,
-					status: job.status,
-				},
-			},
-			ctx.isIdle() ? { triggerTurn: true } : { triggerTurn: true, deliverAs: "followUp" },
-		);
+		sendWorkflowCompletionNotification({ pi, ctx, job, message });
 	}
 
 	pi.on("session_start", (_event, ctx) => {
@@ -340,10 +314,10 @@ export function registerWorkflowExtension(
 		unsubscribeStatus?.();
 		unsubscribeStatus = manager.onChange((job) => {
 			if (job.status === "running") currentSessionRunIds.add(job.runId);
-			updateStatus(ctx);
+			updateWorkflowFooterStatus(ctx, manager);
 			announceCompletedWorkflow(job, ctx);
 		});
-		updateStatus(ctx);
+		updateWorkflowFooterStatus(ctx, manager);
 	});
 
 	pi.on("session_shutdown", () => {

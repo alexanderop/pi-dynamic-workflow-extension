@@ -7,6 +7,7 @@ import {
 	createFileWorkflowJournal,
 	createInMemoryWorkflowJournal,
 	runWorkflow,
+	type WorkflowJournalFileOperations,
 	type WorkflowAgentLike,
 } from "../src/workflow.js";
 
@@ -147,4 +148,35 @@ return await agent('durable')
 
 	assert.equal(replay.result, "persisted:durable");
 	assert.equal(calls, 1);
+});
+
+test("file workflow journal can run through injected file operations", () => {
+	const files = new Map<string, string>();
+	const dirs = new Set<string>();
+	const operations: WorkflowJournalFileOperations = {
+		ensureDir(path) {
+			dirs.add(path);
+		},
+		exists(path) {
+			return files.has(path);
+		},
+		readFile(path) {
+			return files.get(path) ?? "";
+		},
+		appendFile(path, value) {
+			files.set(path, `${files.get(path) ?? ""}${value}`);
+		},
+	};
+
+	const journal = createFileWorkflowJournal("/fake/run/journal.jsonl", operations);
+	journal.appendResult({
+		type: "result",
+		key: "k1",
+		agentId: 1,
+		result: { answer: 42 },
+	});
+	const replay = createFileWorkflowJournal("/fake/run/journal.jsonl", operations);
+
+	assert.ok(dirs.has("/fake/run"));
+	assert.deepEqual(replay.getResult("k1")?.result, { answer: 42 });
 });
