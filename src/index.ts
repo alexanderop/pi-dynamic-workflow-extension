@@ -43,12 +43,7 @@ export { WorkflowBrowser } from "./workflow-browser.js";
 export { WorkflowDashboard } from "./workflow-dashboard.js";
 export type { SavedWorkflowEntry, WorkflowLibrary } from "./workflow-library.js";
 export { createFileWorkflowLibrary, normalizeWorkflowCommandName } from "./workflow-library.js";
-export type {
-	WorkflowJob,
-	WorkflowJobStatus,
-	WorkflowJobStore,
-	WorkflowManagerOptions,
-} from "./workflow-manager.js";
+export type { WorkflowJob, WorkflowJobStatus, WorkflowJobStore, WorkflowManagerOptions } from "./workflow-manager.js";
 export {
 	cloneWorkflowSnapshot,
 	createFileWorkflowStore,

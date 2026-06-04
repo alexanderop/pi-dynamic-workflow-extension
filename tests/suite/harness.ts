@@ -13,12 +13,7 @@ import {
 import { createTempDir } from "../support/temp-dir.js";
 
 export * from "../support/extension-harness.js";
-export {
-	fauxAssistantMessage,
-	fauxText,
-	fauxThinking,
-	fauxToolCall,
-} from "../support/faux-pi-ai-provider.js";
+export { fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall } from "../support/faux-pi-ai-provider.js";
 export * from "../support/faux-workflow-agent.js";
 export * from "../support/temp-dir.js";
 

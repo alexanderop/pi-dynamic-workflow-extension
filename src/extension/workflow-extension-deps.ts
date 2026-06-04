@@ -17,15 +17,15 @@ export interface WorkflowExtensionDeps {
 	manager: WorkflowManager;
 	workflowTool: ToolDefinition;
 	globalWorkflowLibrary: WorkflowLibrary;
-	createWorkflowStore(cwd: string): WorkflowJobStore;
-	createBrowser(
+	createWorkflowStore: (cwd: string) => WorkflowJobStore;
+	createBrowser: (
 		manager: WorkflowManager,
 		tui: ConstructorParameters<typeof WorkflowBrowser>[1],
 		theme: ConstructorParameters<typeof WorkflowBrowser>[2],
 		done: () => void,
 		actions: WorkflowBrowserActions,
-	): WorkflowBrowser;
-	formatCompletion(job: Parameters<typeof formatWorkflowCompletion>[0]): string;
+	) => WorkflowBrowser;
+	formatCompletion: (job: Parameters<typeof formatWorkflowCompletion>[0]) => string;
 	startOptions?: Pick<StartWorkflowJobOptions, "agent" | "concurrency" | "maxEstimatedTokens" | "journal">;
 }
 

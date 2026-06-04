@@ -49,13 +49,13 @@ export function createDeferredWorkflowAgent(): FauxWorkflowAgent {
 			});
 		},
 		resolveAll(value: unknown = "ok") {
-			for (const entry of [...pending]) {
+			for (const entry of Array.from(pending)) {
 				pending.delete(entry);
 				entry.resolve(value);
 			}
 		},
 		rejectAll(error: Error) {
-			for (const entry of [...pending]) {
+			for (const entry of Array.from(pending)) {
 				pending.delete(entry);
 				entry.reject(error);
 			}

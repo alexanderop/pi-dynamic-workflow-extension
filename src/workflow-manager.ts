@@ -42,11 +42,10 @@ export interface WorkflowManagerOptions {
 
 export type WorkflowJobListener = (job: WorkflowJob) => void;
 
-export interface StartWorkflowJobOptions
-	extends Omit<
-		RunWorkflowOptions,
-		"args" | "signal" | "onPhase" | "onLog" | "onAgentStart" | "onAgentEnd" | "onAgentActivity"
-	> {
+export interface StartWorkflowJobOptions extends Omit<
+	RunWorkflowOptions,
+	"args" | "signal" | "onPhase" | "onLog" | "onAgentStart" | "onAgentEnd" | "onAgentActivity"
+> {
 	args?: unknown;
 }
 
@@ -288,7 +287,7 @@ export class WorkflowManager {
 		job.snapshot.durationMs = Date.now() - job.startedAt;
 		updateSnapshotStats(job.snapshot);
 		this.store?.saveJob(job);
-		for (const listener of [...this.listeners]) {
+		for (const listener of Array.from(this.listeners)) {
 			try {
 				listener(job);
 			} catch {
@@ -308,7 +307,7 @@ function isWorkflowJobStatus(value: unknown): value is WorkflowJobStatus {
 	);
 }
 
-function isSafeRunId(value: unknown): value is string {
+function isSafeRunId(value: unknown): boolean {
 	return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
 }
 

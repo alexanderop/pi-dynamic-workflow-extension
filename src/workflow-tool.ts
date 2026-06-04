@@ -29,8 +29,10 @@ const workflowToolSchema = Type.Object({
 
 export type WorkflowToolInput = Static<typeof workflowToolSchema>;
 
-export interface WorkflowToolOptions
-	extends Pick<RunWorkflowOptions, "cwd" | "agent" | "concurrency" | "maxEstimatedTokens"> {
+export interface WorkflowToolOptions extends Pick<
+	RunWorkflowOptions,
+	"cwd" | "agent" | "concurrency" | "maxEstimatedTokens"
+> {
 	/** Shared manager used by /workflows to show live background runs. */
 	manager?: WorkflowManager;
 	/** Defaults to true when a manager is provided, otherwise false. */

@@ -4,7 +4,7 @@ declare global {
 		phase?: string;
 		agentType?: string;
 		model?: string;
-		isolation?: "worktree" | string;
+		isolation?: string;
 		instructions?: string;
 		schema?: unknown;
 	}
@@ -36,9 +36,9 @@ declare global {
 	function artifact(name: string, value: unknown, options?: ArtifactOptions): void;
 	function agent<T = unknown>(prompt: string, options?: WorkflowAgentOptions): Promise<T>;
 	function parallel<T>(thunks: Array<() => Promise<T>>): Promise<T[]>;
-	function pipeline<T, R>(
+	function pipeline<T, R = unknown>(
 		items: T[],
-		...stages: Array<(value: unknown, item: T, index: number) => Promise<unknown> | unknown>
+		...stages: Array<(value: unknown, item: T, index: number) => R | Promise<R>>
 	): Promise<R[]>;
 }
 

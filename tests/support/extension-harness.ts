@@ -12,7 +12,7 @@ import { createResolvingWorkflowAgent } from "./faux-workflow-agent.js";
 import { createTempDir } from "./temp-dir.js";
 import { waitForCondition } from "./wait.js";
 
-type HarnessHandler = (...args: unknown[]) => unknown | Promise<unknown>;
+type HarnessHandler = (...args: unknown[]) => unknown;
 
 export interface RegisteredCommand {
 	description?: string;

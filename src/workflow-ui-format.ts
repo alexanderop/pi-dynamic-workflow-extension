@@ -51,9 +51,19 @@ export function formatTokens(value: number | undefined): string | undefined {
 }
 
 export function singleLine(value: unknown): string {
-	return String(value ?? "")
-		.replace(/\s+/g, " ")
-		.trim();
+	let text = "";
+	if (typeof value === "string") {
+		text = value;
+	} else if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+		text = value.toString();
+	} else if (value !== undefined && value !== null) {
+		try {
+			text = JSON.stringify(value) ?? "";
+		} catch {
+			text = "[unserializable]";
+		}
+	}
+	return text.replace(/\s+/g, " ").trim();
 }
 
 export function fitLine(value: string, width: number): string {

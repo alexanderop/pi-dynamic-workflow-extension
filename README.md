@@ -21,6 +21,15 @@ pi -e ./extensions/workflow.ts
 
 The automated end-to-end smoke test launches the real Pi CLI in JSON mode with only this extension and a test probe loaded. It verifies that the `workflow` tool and public slash commands are registered without making an LLM call.
 
+For a local-only live API check using your existing Pi login/subscription, run:
+
+```bash
+npm run test:e2e:live
+# optionally: PI_E2E_LIVE_MODEL="openai/<model>" npm run test:e2e:live
+```
+
+The live test is skipped unless `PI_E2E_LIVE=1` is set and is skipped under `CI`; it uses stored Pi auth rather than requiring an API key.
+
 ## Example workflow script
 
 ```js

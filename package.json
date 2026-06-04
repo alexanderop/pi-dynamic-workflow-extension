@@ -1,6 +1,6 @@
 {
 	"name": "pi-dynamic-workflow-extension",
-	"version": "0.1.15",
+	"version": "0.1.16",
 	"description": "Pi extension that runs dynamic JavaScript workflows with isolated subagents and live progress rendering.",
 	"keywords": [
 		"agents",
@@ -31,11 +31,13 @@
 	},
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
-		"lint": "biome check --error-on-warnings .",
-		"lint:fix": "biome check --write --error-on-warnings .",
-		"check": "npm run lint && tsc -p tsconfig.json --noEmit",
+		"lint": "vp lint",
+		"lint:fix": "vp lint --fix",
+		"format": "vp fmt --write",
+		"check": "vp check && tsc -p tsconfig.json --noEmit",
 		"test:unit": "vitest --run tests/*.test.ts",
 		"test:e2e": "vitest --run tests/e2e/*.test.ts",
+		"test:e2e:live": "PI_E2E_LIVE=1 vitest --run tests/e2e/*.live.test.ts",
 		"test": "npm run check && npm run build && vitest --run",
 		"test:suite": "vitest --run tests/suite/*.test.ts tests/suite/regressions/*.test.ts"
 	},
@@ -43,14 +45,14 @@
 		"acorn": "^8.16.0"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.16",
 		"@earendil-works/pi-ai": "^0.78.0",
 		"@earendil-works/pi-coding-agent": "^0.78.0",
 		"@earendil-works/pi-tui": "^0.78.0",
 		"@types/node": "^24.0.0",
 		"typebox": "*",
 		"typescript": "^5.9.3",
-		"vitest": "^3.2.4"
+		"vite-plus": "^0.1.24",
+		"vitest": "^4.1.8"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-ai": "^0.78.0",

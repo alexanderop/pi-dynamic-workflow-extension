@@ -693,7 +693,7 @@ export async function runWorkflow(script: string, options: RunWorkflowOptions = 
 		stoppedError = error;
 	});
 
-	await Promise.allSettled([...pendingAgentRuns]);
+	await Promise.allSettled(pendingAgentRuns);
 	const jsonResult = assertJsonSerializable(result, "workflow result");
 	const clonedResult = assertStructuredCloneable(jsonResult, "workflow result");
 	return {

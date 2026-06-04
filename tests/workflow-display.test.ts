@@ -85,7 +85,9 @@ test("cloneWorkflowSnapshot deep-clones workflow artifacts", () => {
 
 	const cloned = cloneWorkflowSnapshot(original);
 	cloned.artifacts?.push({ name: "extra.txt", type: "text", value: "extra" });
-	(cloned.artifacts?.[0]?.value as { nested: { count: number } }).nested.count = 2;
+	const clonedArtifact = cloned.artifacts?.[0];
+	assert.ok(clonedArtifact);
+	(clonedArtifact.value as { nested: { count: number } }).nested.count = 2;
 
 	assert.equal(original.artifacts?.length, 1);
 	assert.deepEqual(original.artifacts?.[0]?.value, { nested: { count: 1 } });
