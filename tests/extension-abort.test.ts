@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
+import { test } from "vitest";
 
 const extensionSource = () =>
-	readFile(new URL("../extensions/workflow.ts", import.meta.url), "utf8");
+	readFile(new URL("../src/extension/register-workflow-extension.ts", import.meta.url), "utf8");
 
 test("main agent abort signal does not interrupt background workflows", async () => {
 	const source = await extensionSource();

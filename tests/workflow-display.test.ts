@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { test } from "vitest";
 import {
 	cloneWorkflowSnapshot,
 	renderWorkflowLines,
@@ -9,9 +9,7 @@ import {
 } from "../src/display.js";
 import { WorkflowDashboard } from "../src/workflow-dashboard.js";
 
-function agent(
-	overrides: Partial<WorkflowAgentSnapshot> = {},
-): WorkflowAgentSnapshot {
+function agent(overrides: Partial<WorkflowAgentSnapshot> = {}): WorkflowAgentSnapshot {
 	return {
 		id: 1,
 		label: "repo inventory",
@@ -87,8 +85,7 @@ test("cloneWorkflowSnapshot deep-clones workflow artifacts", () => {
 
 	const cloned = cloneWorkflowSnapshot(original);
 	cloned.artifacts?.push({ name: "extra.txt", type: "text", value: "extra" });
-	(cloned.artifacts?.[0]?.value as { nested: { count: number } }).nested.count =
-		2;
+	(cloned.artifacts?.[0]?.value as { nested: { count: number } }).nested.count = 2;
 
 	assert.equal(original.artifacts?.length, 1);
 	assert.deepEqual(original.artifacts?.[0]?.value, { nested: { count: 1 } });

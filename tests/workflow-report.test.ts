@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { WorkflowJob } from "../src/workflow-manager.js";
-import {
-	renderWorkflowReportText,
-	selectWorkflowReport,
-} from "../src/workflow-report.js";
+import { renderWorkflowReportText, selectWorkflowReport } from "../src/workflow-report.js";
 
 function job(): WorkflowJob {
 	return {
@@ -13,8 +10,7 @@ function job(): WorkflowJob {
 		name: "portfolio_research",
 		description: "Research a portfolio",
 		status: "done",
-		script:
-			"export const meta = { name: 'portfolio_research', description: 'x' };\nawait agent('x')",
+		script: "export const meta = { name: 'portfolio_research', description: 'x' };\nawait agent('x')",
 		startedAt: 1_000,
 		finishedAt: 66_000,
 		result: { ok: true, summary: "Finished" },
@@ -73,9 +69,7 @@ test("workflow completion report summarizes artifacts", () => {
 		},
 	});
 
-	assert.deepEqual(report.artifacts, [
-		{ name: "review.md", type: "markdown", description: "Human report" },
-	]);
+	assert.deepEqual(report.artifacts, [{ name: "review.md", type: "markdown", description: "Human report" }]);
 	const text = renderWorkflowReportText(report);
 	assert.match(text, /Artifacts/);
 	assert.match(text, /review\.md/);

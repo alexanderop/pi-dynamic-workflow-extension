@@ -1,15 +1,7 @@
-import type {
-	AgentToolResult,
-	AgentToolUpdateCallback,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-coding-agent";
 import { safeJsonStringify, type WorkflowArtifact } from "./workflow.js";
 
-export type WorkflowAgentStatus =
-	| "queued"
-	| "running"
-	| "done"
-	| "error"
-	| "skipped";
+export type WorkflowAgentStatus = "queued" | "running" | "done" | "error" | "skipped";
 
 export interface WorkflowAgentActivity {
 	type: "text" | "tool" | "log";
@@ -74,25 +66,15 @@ export function createWorkflowSnapshot(meta: {
 	};
 }
 
-export function updateSnapshotStats(
-	snapshot: WorkflowSnapshot,
-): WorkflowSnapshot {
+export function updateSnapshotStats(snapshot: WorkflowSnapshot): WorkflowSnapshot {
 	snapshot.agentCount = snapshot.agents.length;
 	snapshot.runningCount = snapshot.agents.filter(
 		(agent) => agent.status === "running" || agent.status === "queued",
 	).length;
-	snapshot.doneCount = snapshot.agents.filter(
-		(agent) => agent.status === "done",
-	).length;
-	snapshot.errorCount = snapshot.agents.filter(
-		(agent) => agent.status === "error",
-	).length;
+	snapshot.doneCount = snapshot.agents.filter((agent) => agent.status === "done").length;
+	snapshot.errorCount = snapshot.agents.filter((agent) => agent.status === "error").length;
 	snapshot.toolCount = snapshot.agents.reduce(
-		(total, agent) =>
-			total +
-			(agent.toolCount ??
-				agent.activity?.filter((item) => item.type === "tool").length ??
-				0),
+		(total, agent) => total + (agent.toolCount ?? agent.activity?.filter((item) => item.type === "tool").length ?? 0),
 		0,
 	);
 	return snapshot;
@@ -107,15 +89,10 @@ export function formatWorkflowArtifactSummary(
 
 export function preview(value: unknown, maxLength = 180): string {
 	if (value === undefined) return "";
-	const text =
-		typeof value === "string"
-			? value
-			: safeJsonStringify(value, "workflow preview", 2);
+	const text = typeof value === "string" ? value : safeJsonStringify(value, "workflow preview", 2);
 	if (!text) return "";
 	const compact = text.replace(/\s+/g, " ").trim();
-	return compact.length > maxLength
-		? `${compact.slice(0, maxLength - 1)}…`
-		: compact;
+	return compact.length > maxLength ? `${compact.slice(0, maxLength - 1)}…` : compact;
 }
 
 function statusIcon(status: WorkflowAgentStatus): string {
@@ -137,16 +114,11 @@ function phaseNames(snapshot: WorkflowSnapshot): string[] {
 	return [
 		...snapshot.phases,
 		...(snapshot.currentPhase ? [snapshot.currentPhase] : []),
-		...snapshot.agents
-			.map((agent) => agent.phase)
-			.filter((phase): phase is string => Boolean(phase)),
+		...snapshot.agents.map((agent) => agent.phase).filter((phase): phase is string => Boolean(phase)),
 	].filter((phase, index, all) => all.indexOf(phase) === index);
 }
 
-export function renderWorkflowLines(
-	snapshot: WorkflowSnapshot,
-	completed = false,
-): string[] {
+export function renderWorkflowLines(snapshot: WorkflowSnapshot, completed = false): string[] {
 	updateSnapshotStats(snapshot);
 	const header = completed ? "Workflow completed" : "Workflow running";
 	const lines = [
@@ -160,19 +132,10 @@ export function renderWorkflowLines(
 		const agents = snapshot.agents.filter((agent) => agent.phase === phase);
 		if (agents.length === 0 && snapshot.currentPhase !== phase) continue;
 		const done = agents.filter((agent) => agent.status === "done").length;
-		const running = agents.filter(
-			(agent) => agent.status === "running" || agent.status === "queued",
-		).length;
+		const running = agents.filter((agent) => agent.status === "running" || agent.status === "queued").length;
 		const errored = agents.filter((agent) => agent.status === "error").length;
-		const marker =
-			snapshot.currentPhase === phase || running > 0
-				? "▶"
-				: errored > 0
-					? "✗"
-					: "✓";
-		lines.push(
-			`  ${marker} ${phase} ${done}/${agents.length}${running ? ` · ${running} running` : ""}`,
-		);
+		const marker = snapshot.currentPhase === phase || running > 0 ? "▶" : errored > 0 ? "✗" : "✓";
+		lines.push(`  ${marker} ${phase} ${done}/${agents.length}${running ? ` · ${running} running` : ""}`);
 		for (const agent of agents) {
 			lines.push(`    #${agent.id} ${statusIcon(agent.status)} ${agent.label}`);
 		}
@@ -181,8 +144,7 @@ export function renderWorkflowLines(
 	const unphased = snapshot.agents.filter((agent) => !agent.phase);
 	if (unphased.length > 0) {
 		lines.push("  Unphased");
-		for (const agent of unphased)
-			lines.push(`    #${agent.id} ${statusIcon(agent.status)} ${agent.label}`);
+		for (const agent of unphased) lines.push(`    #${agent.id} ${statusIcon(agent.status)} ${agent.label}`);
 	}
 
 	const artifacts = snapshot.artifacts ?? [];
@@ -199,16 +161,11 @@ export function renderWorkflowLines(
 	return lines;
 }
 
-export function renderWorkflowText(
-	snapshot: WorkflowSnapshot,
-	completed = false,
-): string {
+export function renderWorkflowText(snapshot: WorkflowSnapshot, completed = false): string {
 	return renderWorkflowLines(snapshot, completed).join("\n");
 }
 
-export function cloneWorkflowSnapshot(
-	snapshot: WorkflowSnapshot,
-): WorkflowSnapshot {
+export function cloneWorkflowSnapshot(snapshot: WorkflowSnapshot): WorkflowSnapshot {
 	return {
 		...snapshot,
 		phases: [...snapshot.phases],
@@ -224,9 +181,7 @@ export function cloneWorkflowSnapshot(
 	};
 }
 
-export function createToolUpdateWorkflowDisplay(
-	onUpdate: AgentToolUpdateCallback<WorkflowSnapshot> | undefined,
-): {
+export function createToolUpdateWorkflowDisplay(onUpdate: AgentToolUpdateCallback<WorkflowSnapshot> | undefined): {
 	update(snapshot: WorkflowSnapshot): void;
 	complete(snapshot: WorkflowSnapshot): void;
 	clear(): void;

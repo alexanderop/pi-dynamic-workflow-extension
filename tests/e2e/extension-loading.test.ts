@@ -3,11 +3,9 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 
-function runPiE2E(
-	outputPath: string,
-): Promise<{ code: number | null; stderr: string }> {
+function runPiE2E(outputPath: string): Promise<{ code: number | null; stderr: string }> {
 	return new Promise((resolve, reject) => {
 		const child = spawn(
 			"pi",

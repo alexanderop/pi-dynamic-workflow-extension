@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import {
 	createFileWorkflowJournal,
 	createInMemoryWorkflowJournal,
@@ -74,13 +74,7 @@ return { first, second, third }
 		second: "live:after edit",
 		third: "live:same tail",
 	});
-	assert.deepEqual(livePrompts, [
-		"same",
-		"before edit",
-		"same tail",
-		"after edit",
-		"same tail",
-	]);
+	assert.deepEqual(livePrompts, ["same", "before edit", "same tail", "after edit", "same tail"]);
 });
 
 test("runWorkflow reuses undefined journaled results", async () => {
@@ -109,9 +103,7 @@ test("runWorkflow does not reuse text results for present undefined schemas", as
 	const agent: WorkflowAgentLike = {
 		async run(_prompt, options): Promise<unknown> {
 			calls++;
-			return Object.hasOwn(options ?? {}, "schema")
-				? { summary: "structured" }
-				: "plain text";
+			return Object.hasOwn(options ?? {}, "schema") ? { summary: "structured" } : "plain text";
 		},
 	};
 

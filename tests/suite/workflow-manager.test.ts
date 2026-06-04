@@ -2,24 +2,32 @@ import assert from "node:assert/strict";
 import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import {
 	createFileWorkflowStore,
 	createWorkflowManager,
 	type WorkflowAgentLike,
 	type WorkflowJob,
-} from "../src/index.js";
+} from "../../src/index.js";
+import { waitForCondition } from "../support/wait.js";
 
 async function waitForFinished(job: WorkflowJob): Promise<void> {
-	while (job.status === "running")
-		await new Promise((resolve) => setTimeout(resolve, 5));
+	await waitForCondition(() => job.status !== "running", "timed out waiting for workflow job to finish", {
+		describe: () => `status=${job.status}; error=${job.error ?? "none"}`,
+	});
 }
 
 async function waitForSettled(job: WorkflowJob): Promise<void> {
-	const deadline = Date.now() + 500;
-	while (job.finishedAt === undefined && Date.now() < deadline)
-		await new Promise((resolve) => setTimeout(resolve, 5));
-	assert.ok(job.finishedAt, "expected workflow job to settle");
+	await waitForCondition(() => job.finishedAt !== undefined, "timed out waiting for workflow job to settle", {
+		timeoutMs: 500,
+		describe: () => `status=${job.status}; error=${job.error ?? "none"}`,
+	});
+}
+
+async function waitForAgentStarted(job: WorkflowJob): Promise<void> {
+	await waitForCondition(() => job.snapshot.agents.length > 0, "timed out waiting for workflow agent to start", {
+		describe: () => `status=${job.status}; agents=${job.snapshot.agents.length}`,
+	});
 }
 
 test("WorkflowManager persists completed jobs and restores them for dashboards", async () => {
@@ -108,8 +116,7 @@ test("WorkflowManager skips persisted workflow manifests with invalid status", a
 			runId: "wf_bad_status",
 			name: "bad_status",
 			status: "paused",
-			script:
-				"export const meta = { name: 'bad_status', description: 'demo' }\nreturn null\n",
+			script: "export const meta = { name: 'bad_status', description: 'demo' }\nreturn null\n",
 			snapshot: { phases: [], logs: [], agents: [] },
 			startedAt: 1,
 		}),
@@ -134,8 +141,7 @@ test("WorkflowManager skips persisted manifests whose runId does not match their
 			runId: "wf_other",
 			name: "wrong_runid",
 			status: "done",
-			script:
-				"export const meta = { name: 'wrong_runid', description: 'demo' }\nreturn null\n",
+			script: "export const meta = { name: 'wrong_runid', description: 'demo' }\nreturn null\n",
 			snapshot: { phases: [], logs: [], agents: [] },
 			startedAt: 1,
 		}),
@@ -161,8 +167,7 @@ test("WorkflowManager skips persisted manifests with unsafe run IDs", async () =
 			runId: `../${escapeName}`,
 			name: "unsafe_load",
 			status: "done",
-			script:
-				"export const meta = { name: 'unsafe_load', description: 'demo' }\nreturn null\n",
+			script: "export const meta = { name: 'unsafe_load', description: 'demo' }\nreturn null\n",
 			snapshot: { phases: [], logs: [], agents: [] },
 			startedAt: 1,
 		}),
@@ -186,8 +191,7 @@ test("file workflow store rejects unsafe run IDs when saving jobs", async () => 
 		runId: `../${escapeName}`,
 		name: "unsafe_save",
 		status: "done",
-		script:
-			"export const meta = { name: 'unsafe_save', description: 'demo' }\nreturn null\n",
+		script: "export const meta = { name: 'unsafe_save', description: 'demo' }\nreturn null\n",
 		snapshot: { phases: [], logs: [], agents: [] },
 		startedAt: 1,
 	};
@@ -201,10 +205,7 @@ test("file workflow store rejects unsafe run IDs when creating journals", async 
 	const store = createFileWorkflowStore(dir);
 	const escapeName = `escape_${basename(dir)}`;
 
-	assert.throws(
-		() => store.createJournal(`../${escapeName}`),
-		/unsafe workflow runId/,
-	);
+	assert.throws(() => store.createJournal(`../${escapeName}`), /unsafe workflow runId/);
 	await assert.rejects(access(join(dir, "..", escapeName, "journal.jsonl")));
 });
 
@@ -224,10 +225,7 @@ return await agent('inspect')
 	const job = manager.start(script, { agent });
 	await waitForFinished(job);
 
-	assert.equal(
-		job.scriptPath,
-		join(dir, "scripts", "visible_script.workflow.js"),
-	);
+	assert.equal(job.scriptPath, join(dir, "scripts", "visible_script.workflow.js"));
 	assert.equal(await readFile(job.scriptPath, "utf8"), script);
 });
 
@@ -245,8 +243,7 @@ return await agent('inspect')
 		{ agent },
 	);
 
-	while (job.snapshot.agents.length === 0)
-		await new Promise((resolve) => setTimeout(resolve, 5));
+	await waitForAgentStarted(job);
 
 	assert.equal(manager.cancel(job.id), true);
 	await waitForSettled(job);
@@ -255,9 +252,7 @@ return await agent('inspect')
 	assert.equal(job.error, "Workflow was cancelled");
 	assert.equal(manager.cancel(job.id), false);
 	assert.equal(
-		job.snapshot.agents.some(
-			(agent) => agent.status === "running" || agent.status === "queued",
-		),
+		job.snapshot.agents.some((agent) => agent.status === "running" || agent.status === "queued"),
 		false,
 	);
 });
@@ -276,8 +271,7 @@ return await agent('inspect')
 		{ agent },
 	);
 
-	while (job.snapshot.agents.length === 0)
-		await new Promise((resolve) => setTimeout(resolve, 5));
+	await waitForAgentStarted(job);
 
 	assert.equal(manager.interrupt(job.id), true);
 	await waitForSettled(job);
@@ -286,9 +280,7 @@ return await agent('inspect')
 	assert.equal(job.error, "Workflow was interrupted");
 	assert.equal(manager.interrupt(job.id), false);
 	assert.equal(
-		job.snapshot.agents.some(
-			(agent) => agent.status === "running" || agent.status === "queued",
-		),
+		job.snapshot.agents.some((agent) => agent.status === "running" || agent.status === "queued"),
 		false,
 	);
 });

@@ -1,22 +1,40 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
-	"files": {
-		"includes": ["**", "!dist", "!node_modules", "!.pi"]
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab"
-	},
 	"linter": {
 		"enabled": true,
 		"rules": {
 			"recommended": true,
-			"suspicious": {
-				"noExplicitAny": "off"
-			},
 			"style": {
-				"noNonNullAssertion": "off"
+				"noNonNullAssertion": "off",
+				"useConst": "error",
+				"useNodejsImportProtocol": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off",
+				"noControlCharactersInRegex": "off",
+				"noEmptyInterface": "off"
 			}
 		}
+	},
+	"formatter": {
+		"enabled": true,
+		"formatWithErrors": false,
+		"indentStyle": "tab",
+		"indentWidth": 3,
+		"lineWidth": 120
+	},
+	"files": {
+		"includes": [
+			"src/**/*.ts",
+			"extensions/**/*.ts",
+			"tests/**/*.ts",
+			"types/**/*.ts",
+			"*.json",
+			"*.md",
+			"!dist/**/*",
+			"!node_modules/**/*",
+			"!.pi/**/*",
+			"!!**/node_modules"
+		]
 	}
 }

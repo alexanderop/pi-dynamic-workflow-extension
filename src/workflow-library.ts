@@ -1,11 +1,4 @@
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	unlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseWorkflowScript } from "./workflow.js";
 
@@ -49,9 +42,7 @@ export function createFileWorkflowLibrary(rootDir: string): WorkflowLibrary {
 			const parsed = parseWorkflowScript(script);
 			const filename = basename(path);
 			const name = normalizeWorkflowCommandName(
-				filename.endsWith(".workflow.js")
-					? filename.slice(0, -".workflow.js".length)
-					: parsed.meta.name,
+				filename.endsWith(".workflow.js") ? filename.slice(0, -".workflow.js".length) : parsed.meta.name,
 			);
 			return {
 				name,
@@ -67,9 +58,7 @@ export function createFileWorkflowLibrary(rootDir: string): WorkflowLibrary {
 		list() {
 			if (!existsSync(rootDir)) return [];
 			return readdirSync(rootDir, { withFileTypes: true })
-				.filter(
-					(entry) => entry.isFile() && entry.name.endsWith(".workflow.js"),
-				)
+				.filter((entry) => entry.isFile() && entry.name.endsWith(".workflow.js"))
 				.map((entry) => readEntry(join(rootDir, entry.name)))
 				.filter((entry): entry is SavedWorkflowEntry => Boolean(entry))
 				.sort((a, b) => a.name.localeCompare(b.name));
@@ -103,9 +92,7 @@ export function createFileWorkflowLibrary(rootDir: string): WorkflowLibrary {
 		},
 		save(script, name) {
 			const parsed = parseWorkflowScript(script);
-			const commandName = normalizeWorkflowCommandName(
-				name ?? parsed.meta.name,
-			);
+			const commandName = normalizeWorkflowCommandName(name ?? parsed.meta.name);
 			const path = pathFor(commandName);
 			writeFileSync(path, script, "utf8");
 			return {

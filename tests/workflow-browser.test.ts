@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import type {
-	WorkflowAgentSnapshot,
-	WorkflowSnapshot,
-} from "../src/display.js";
+import { test } from "vitest";
+import type { WorkflowAgentSnapshot, WorkflowSnapshot } from "../src/display.js";
 import { WorkflowBrowser } from "../src/workflow-browser.js";
 import type { WorkflowJob, WorkflowManager } from "../src/workflow-manager.js";
 
@@ -17,16 +14,12 @@ const theme = {
 	},
 };
 
-function agent(
-	overrides: Partial<WorkflowAgentSnapshot>,
-): WorkflowAgentSnapshot {
+function agent(overrides: Partial<WorkflowAgentSnapshot>): WorkflowAgentSnapshot {
 	return {
 		id: overrides.id ?? 1,
 		label: overrides.label ?? "research_agent",
 		phase: overrides.phase ?? "Research",
-		prompt:
-			overrides.prompt ??
-			"Research public information and return a concise summary with evidence.",
+		prompt: overrides.prompt ?? "Research public information and return a concise summary with evidence.",
 		status: overrides.status ?? "done",
 		activity: overrides.activity ?? [],
 		...overrides,
@@ -71,8 +64,7 @@ function job(overrides: Partial<WorkflowJob> = {}): WorkflowJob {
 		name: "portfolio_research",
 		description: "Research a portfolio",
 		status: "running",
-		script:
-			"export const meta = { name: 'portfolio_research', description: 'x' };\nawait agent('x')",
+		script: "export const meta = { name: 'portfolio_research', description: 'x' };\nawait agent('x')",
 		snapshot: snapshot(),
 		startedAt: 0,
 		...overrides,
@@ -171,8 +163,7 @@ test("WorkflowBrowser header keeps selected workflow and switch hint visible", (
 	assert.match(text, /Runs 9\/9/);
 	assert.match(text, /#9 very_long_completed_workflow_name_9/);
 	assert.match(text, /p\/n or \[\/\]\/<> switch workflow/);
-	for (const line of instance.render(96))
-		assert.ok(visibleWidth(line) <= 96, line);
+	for (const line of instance.render(96)) assert.ok(visibleWidth(line) <= 96, line);
 
 	instance.handleInput("q");
 });
@@ -261,10 +252,7 @@ test("WorkflowBrowser supports p and n workflow navigation", () => {
 });
 
 test("WorkflowBrowser supports prompt expansion and detail scrolling", () => {
-	const longPrompt = Array.from(
-		{ length: 12 },
-		(_, index) => `line ${index + 1}`,
-	).join("\n");
+	const longPrompt = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n");
 	const { instance } = browser(
 		new FakeManager([
 			job({

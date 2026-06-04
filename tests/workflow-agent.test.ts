@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import {
-	runWorkflowAgentPrompts,
-	type WorkflowAgentPromptSession,
-} from "../src/agent.js";
+import { test } from "vitest";
+import { runWorkflowAgentPrompts, type WorkflowAgentPromptSession } from "../src/agent.js";
 import { STRUCTURED_OUTPUT_TOOL_NAME } from "../src/prompts/structured-output.js";
 import type { StructuredOutputCapture } from "../src/structured-output.js";
 
-function fakeSession(
-	onPrompt: (prompt: string, count: number) => void | Promise<void>,
-): WorkflowAgentPromptSession & {
+function fakeSession(onPrompt: (prompt: string, count: number) => void | Promise<void>): WorkflowAgentPromptSession & {
 	prompts: string[];
 	activeToolSets: string[][];
 } {
@@ -47,10 +42,7 @@ test("WorkflowAgent retries once with only structured_output active when it was 
 	assert.deepEqual(capture.value, { ok: true });
 	assert.equal(session.prompts.length, 2);
 	assert.match(session.prompts[0] ?? "", /verify finding/);
-	assert.match(
-		session.prompts[1] ?? "",
-		/finished without calling structured_output/i,
-	);
+	assert.match(session.prompts[1] ?? "", /finished without calling structured_output/i);
 	assert.match(session.prompts[1] ?? "", /exactly one structured_output/i);
 	assert.deepEqual(session.activeToolSets, [[STRUCTURED_OUTPUT_TOOL_NAME]]);
 });

@@ -1,18 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-	createWorkflowSnapshot,
-	preview,
-	updateSnapshotStats,
-	type WorkflowSnapshot,
-} from "./display.js";
+import { createWorkflowSnapshot, preview, updateSnapshotStats, type WorkflowSnapshot } from "./display.js";
 import {
 	createFileWorkflowJournal,
 	parseWorkflowScript,
@@ -22,12 +11,7 @@ import {
 	type WorkflowJournal,
 } from "./workflow.js";
 
-export type WorkflowJobStatus =
-	| "running"
-	| "done"
-	| "error"
-	| "cancelled"
-	| "interrupted";
+export type WorkflowJobStatus = "running" | "done" | "error" | "cancelled" | "interrupted";
 
 export interface WorkflowJob {
 	id: number;
@@ -61,13 +45,7 @@ export type WorkflowJobListener = (job: WorkflowJob) => void;
 export interface StartWorkflowJobOptions
 	extends Omit<
 		RunWorkflowOptions,
-		| "args"
-		| "signal"
-		| "onPhase"
-		| "onLog"
-		| "onAgentStart"
-		| "onAgentEnd"
-		| "onAgentActivity"
+		"args" | "signal" | "onPhase" | "onLog" | "onAgentStart" | "onAgentEnd" | "onAgentActivity"
 	> {
 	args?: unknown;
 }
@@ -125,10 +103,7 @@ export class WorkflowManager {
 		return this.jobs.find((job) => job.id === id);
 	}
 
-	resume(
-		id: number,
-		options: StartWorkflowJobOptions = {},
-	): WorkflowJob | undefined {
+	resume(id: number, options: StartWorkflowJobOptions = {}): WorkflowJob | undefined {
 		const job = this.jobs.find((item) => item.id === id);
 		if (!job || job.status === "running") return job;
 		const parsed = parseWorkflowScript(job.script);
@@ -183,10 +158,7 @@ export class WorkflowManager {
 		return () => this.listeners.delete(listener);
 	}
 
-	private async runJob(
-		job: InternalWorkflowJob,
-		options: StartWorkflowJobOptions,
-	): Promise<void> {
+	private async runJob(job: InternalWorkflowJob, options: StartWorkflowJobOptions): Promise<void> {
 		try {
 			const result = await runWorkflow(job.script, {
 				cwd: options.cwd,
@@ -199,8 +171,7 @@ export class WorkflowManager {
 				signal: job.controller.signal,
 				onPhase: (title) => {
 					job.snapshot.currentPhase = title;
-					if (!job.snapshot.phases.includes(title))
-						job.snapshot.phases.push(title);
+					if (!job.snapshot.phases.includes(title)) job.snapshot.phases.push(title);
 					this.touch(job);
 				},
 				onLog: (message) => {
@@ -208,10 +179,7 @@ export class WorkflowManager {
 					this.touch(job);
 				},
 				onArtifact: (artifact) => {
-					job.snapshot.artifacts = [
-						...(job.snapshot.artifacts ?? []),
-						artifact,
-					];
+					job.snapshot.artifacts = [...(job.snapshot.artifacts ?? []), artifact];
 					this.touch(job);
 				},
 				onAgentStart: (event) => {
@@ -231,12 +199,9 @@ export class WorkflowManager {
 					this.touch(job);
 				},
 				onAgentActivity: (event) => {
-					const agent = job.snapshot.agents.find(
-						(item) => item.id === event.id,
-					);
+					const agent = job.snapshot.agents.find((item) => item.id === event.id);
 					if (!agent) return;
-					if (event.type === "tool")
-						agent.toolCount = (agent.toolCount ?? 0) + 1;
+					if (event.type === "tool") agent.toolCount = (agent.toolCount ?? 0) + 1;
 					agent.activity = [
 						...(agent.activity ?? []),
 						{
@@ -249,9 +214,7 @@ export class WorkflowManager {
 					this.touch(job);
 				},
 				onAgentEnd: (event) => {
-					const agent = job.snapshot.agents.find(
-						(item) => item.id === event.id,
-					);
+					const agent = job.snapshot.agents.find((item) => item.id === event.id);
 					if (agent) {
 						agent.status = event.error ? "error" : "done";
 						agent.endedAt = Date.now();
@@ -284,10 +247,7 @@ export class WorkflowManager {
 		} catch (error) {
 			if (job.status === "cancelled") {
 				job.error = "Workflow was cancelled";
-			} else if (
-				job.controller.signal.aborted ||
-				job.status === "interrupted"
-			) {
+			} else if (job.controller.signal.aborted || job.status === "interrupted") {
 				job.status = "interrupted";
 				job.error = "Workflow was interrupted";
 			} else {
@@ -298,10 +258,7 @@ export class WorkflowManager {
 			}
 			for (const agent of job.snapshot.agents) {
 				if (agent.status === "running" || agent.status === "queued") {
-					agent.status =
-						job.status === "cancelled" || job.status === "interrupted"
-							? "skipped"
-							: "error";
+					agent.status = job.status === "cancelled" || job.status === "interrupted" ? "skipped" : "error";
 					agent.endedAt = agent.endedAt ?? Date.now();
 				}
 			}
@@ -341,32 +298,21 @@ export class WorkflowManager {
 	}
 }
 
-export function createWorkflowManager(
-	options: WorkflowManagerOptions = {},
-): WorkflowManager {
+export function createWorkflowManager(options: WorkflowManagerOptions = {}): WorkflowManager {
 	return new WorkflowManager(options.store);
 }
 
 function isWorkflowJobStatus(value: unknown): value is WorkflowJobStatus {
 	return (
-		value === "running" ||
-		value === "done" ||
-		value === "error" ||
-		value === "cancelled" ||
-		value === "interrupted"
+		value === "running" || value === "done" || value === "error" || value === "cancelled" || value === "interrupted"
 	);
 }
 
 function isSafeRunId(value: unknown): value is string {
-	return (
-		typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)
-	);
+	return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
 }
 
-function parseStoredJobManifest(
-	path: string,
-	expectedRunId: string,
-): WorkflowJob | undefined {
+function parseStoredJobManifest(path: string, expectedRunId: string): WorkflowJob | undefined {
 	try {
 		const job = JSON.parse(readFileSync(path, "utf8")) as WorkflowJob;
 		if (job.runId !== expectedRunId) return undefined;
@@ -383,8 +329,7 @@ export function createFileWorkflowStore(rootDir: string): WorkflowJobStore {
 		return join(rootDir, runId);
 	};
 	const manifestPath = (runId: string) => join(runDir(runId), "manifest.json");
-	const scriptPath = (name: string) =>
-		join(rootDir, "scripts", `${name}.workflow.js`);
+	const scriptPath = (name: string) => join(rootDir, "scripts", `${name}.workflow.js`);
 	return {
 		loadJobs() {
 			if (!existsSync(rootDir)) return [];

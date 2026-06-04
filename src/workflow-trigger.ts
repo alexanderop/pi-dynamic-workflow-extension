@@ -1,7 +1,4 @@
-import {
-	buildNativeWorkflowPrompt,
-	type NativeWorkflowMode,
-} from "./prompts/workflow-trigger.js";
+import { buildNativeWorkflowPrompt, type NativeWorkflowMode } from "./prompts/workflow-trigger.js";
 
 export type NativeWorkflowInput = {
 	text: string;
@@ -15,23 +12,18 @@ export const WORKFLOW_TRIGGER_HIGHLIGHT_END = "\x1b[25;39m";
 export function highlightWorkflowTriggerWords(line: string): string {
 	return line.replace(
 		SPECIAL_TRIGGER,
-		(match) =>
-			`${WORKFLOW_TRIGGER_HIGHLIGHT_START}${match}${WORKFLOW_TRIGGER_HIGHLIGHT_END}`,
+		(match) => `${WORKFLOW_TRIGGER_HIGHLIGHT_START}${match}${WORKFLOW_TRIGGER_HIGHLIGHT_END}`,
 	);
 }
 
-export type NativeWorkflowInputTransform =
-	| { action: "continue" }
-	| { action: "transform"; text: string };
+export type NativeWorkflowInputTransform = { action: "continue" } | { action: "transform"; text: string };
 
 type NativeWorkflowTrigger = {
 	mode: NativeWorkflowMode;
 	task: string;
 };
 
-function matchNativeWorkflowTrigger(
-	text: string,
-): NativeWorkflowTrigger | undefined {
+function matchNativeWorkflowTrigger(text: string): NativeWorkflowTrigger | undefined {
 	const trimmed = text.trim();
 	if (trimmed.startsWith("/")) return undefined;
 
@@ -51,9 +43,7 @@ function matchNativeWorkflowTrigger(
 	return undefined;
 }
 
-export function transformNativeWorkflowInput(
-	input: NativeWorkflowInput,
-): NativeWorkflowInputTransform {
+export function transformNativeWorkflowInput(input: NativeWorkflowInput): NativeWorkflowInputTransform {
 	if (input.source === "extension") return { action: "continue" };
 
 	const trigger = matchNativeWorkflowTrigger(input.text);

@@ -142,15 +142,9 @@ const DETERMINISTIC_MATH = Object.freeze(
 		Object.create(null),
 		Object.fromEntries(
 			Object.getOwnPropertyNames(Math).map((name) => {
-				if (name === "random")
-					return [name, forbiddenDeterminismApi(name, "Math")];
+				if (name === "random") return [name, forbiddenDeterminismApi(name, "Math")];
 				const value = (Math as unknown as Record<string, unknown>)[name];
-				return [
-					name,
-					typeof value === "function"
-						? forbidConstructorEscape(value.bind(Math))
-						: value,
-				];
+				return [name, typeof value === "function" ? forbidConstructorEscape(value.bind(Math)) : value];
 			}),
 		),
 	),
@@ -165,15 +159,11 @@ const DETERMINISTIC_DATE = Object.freeze(
 
 function forbiddenDeterminismApi(name: string, object: string): () => never {
 	return forbidConstructorEscape(() => {
-		throw new Error(
-			`workflow scripts must be deterministic; ${object}.${name}() is not allowed`,
-		);
+		throw new Error(`workflow scripts must be deterministic; ${object}.${name}() is not allowed`);
 	});
 }
 
-function forbidConstructorEscape<T extends (...args: any[]) => unknown>(
-	fn: T,
-): T {
+function forbidConstructorEscape<T extends (...args: any[]) => unknown>(fn: T): T {
 	if (Object.hasOwn(fn, "constructor")) return fn;
 	Object.defineProperty(fn, "constructor", {
 		value: () => {
@@ -204,15 +194,11 @@ export function createFileWorkflowJournal(path: string): WorkflowJournal {
 	if (existsSync(path)) {
 		for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
 			if (!line.trim()) continue;
-			const record = JSON.parse(line) as
-				| WorkflowJournalStartedRecord
-				| WorkflowJournalResultRecord;
+			const record = JSON.parse(line) as WorkflowJournalStartedRecord | WorkflowJournalResultRecord;
 			if (record.type === "result") results.set(record.key, record.result);
 		}
 	}
-	const append = (
-		record: WorkflowJournalStartedRecord | WorkflowJournalResultRecord,
-	) => {
+	const append = (record: WorkflowJournalStartedRecord | WorkflowJournalResultRecord) => {
 		appendFileSync(path, `${JSON.stringify(record)}\n`, "utf8");
 	};
 	return {
@@ -288,18 +274,14 @@ export function parseWorkflowScript(script: string): {
 			allowReturnOutsideFunction: true,
 		}) as AnyNode;
 	} catch (error) {
-		throw new Error(
-			`Failed to parse workflow script: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		throw new Error(`Failed to parse workflow script: ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	assertDeterministicAst(ast);
 
 	const first = ast.body?.[0] as AnyNode | undefined;
 	if (first?.type !== "ExportNamedDeclaration") {
-		throw new Error(
-			"`export const meta = { name, description }` must be the first statement",
-		);
+		throw new Error("`export const meta = { name, description }` must be the first statement");
 	}
 
 	const declaration = first.declaration as AnyNode | undefined;
@@ -308,9 +290,7 @@ export function parseWorkflowScript(script: string): {
 		declaration.kind !== "const" ||
 		declaration.declarations?.length !== 1
 	) {
-		throw new Error(
-			"workflow metadata must be exactly `export const meta = { ... }`",
-		);
+		throw new Error("workflow metadata must be exactly `export const meta = { ... }`");
 	}
 
 	const declarator = declaration.declarations[0] as AnyNode | undefined;
@@ -319,8 +299,7 @@ export function parseWorkflowScript(script: string): {
 	}
 
 	const value = evaluateLiteralNode(declarator.init, "meta");
-	if (!isPlainRecord(value))
-		throw new Error("workflow metadata must be a literal object");
+	if (!isPlainRecord(value)) throw new Error("workflow metadata must be a literal object");
 	const meta = value as WorkflowMeta;
 	validateWorkflowMeta(meta);
 
@@ -331,80 +310,53 @@ export function parseWorkflowScript(script: string): {
 }
 
 function validateWorkflowMeta(meta: WorkflowMeta): void {
-	if (
-		typeof meta.name !== "string" ||
-		!/^[a-z][a-z0-9_]{1,63}$/.test(meta.name)
-	) {
-		throw new Error(
-			"workflow meta.name must be short snake_case starting with a lowercase letter",
-		);
+	if (typeof meta.name !== "string" || !/^[a-z][a-z0-9_]{1,63}$/.test(meta.name)) {
+		throw new Error("workflow meta.name must be short snake_case starting with a lowercase letter");
 	}
-	if (
-		typeof meta.description !== "string" ||
-		meta.description.trim().length === 0
-	) {
+	if (typeof meta.description !== "string" || meta.description.trim().length === 0) {
 		throw new Error("workflow meta.description must be a non-empty string");
 	}
 	if (meta.phases !== undefined) {
-		if (!Array.isArray(meta.phases))
-			throw new Error("workflow meta.phases must be an array when provided");
+		if (!Array.isArray(meta.phases)) throw new Error("workflow meta.phases must be an array when provided");
 		for (const phase of meta.phases) {
-			if (
-				!isPlainRecord(phase) ||
-				typeof phase.title !== "string" ||
-				phase.title.trim().length === 0
-			) {
-				throw new Error(
-					"workflow meta.phases entries must include a non-empty literal title",
-				);
+			if (!isPlainRecord(phase) || typeof phase.title !== "string" || phase.title.trim().length === 0) {
+				throw new Error("workflow meta.phases entries must include a non-empty literal title");
 			}
 		}
 	}
 }
 
-function evaluateLiteralNode(
-	node: AnyNode | null | undefined,
-	path: string,
-): unknown {
+function evaluateLiteralNode(node: AnyNode | null | undefined, path: string): unknown {
 	if (!node) throw new Error(`${path} is missing`);
 	switch (node.type) {
 		case "Literal":
 			return node.value;
 		case "TemplateLiteral": {
-			if (node.expressions.length !== 0)
-				throw new Error(`${path} template literal must not interpolate values`);
-			return node.quasis
-				.map((quasi: AnyNode) => quasi.value.cooked ?? quasi.value.raw)
-				.join("");
+			if (node.expressions.length !== 0) throw new Error(`${path} template literal must not interpolate values`);
+			return node.quasis.map((quasi: AnyNode) => quasi.value.cooked ?? quasi.value.raw).join("");
 		}
 		case "ObjectExpression": {
 			const output: Record<string, unknown> = Object.create(null);
 			for (const property of node.properties as AnyNode[]) {
-				if (property.type === "SpreadElement")
-					throw new Error(`${path} must not use object spreads`);
+				if (property.type === "SpreadElement") throw new Error(`${path} must not use object spreads`);
 				if (property.type !== "Property")
-					throw new Error(
-						`${path} contains unsupported object property ${property.type}`,
-					);
+					throw new Error(`${path} contains unsupported object property ${property.type}`);
 				if (property.kind !== "init" || property.method)
 					throw new Error(`${path} must only contain data properties`);
 				const key = getObjectKey(property, path);
-				if (RESERVED_OBJECT_KEYS.has(key))
-					throw new Error(`${path} must not contain reserved key ${key}`);
+				if (RESERVED_OBJECT_KEYS.has(key)) throw new Error(`${path} must not contain reserved key ${key}`);
 				output[key] = evaluateLiteralNode(property.value, `${path}.${key}`);
 			}
 			return output;
 		}
 		case "ArrayExpression":
 			return (node.elements as Array<AnyNode | null>).map((element, index) => {
-				if (!element)
-					throw new Error(`${path}[${index}] must not be a sparse array hole`);
+				if (!element) throw new Error(`${path}[${index}] must not be a sparse array hole`);
 				return evaluateLiteralNode(element, `${path}[${index}]`);
 			});
 		case "UnaryExpression": {
 			const value = evaluateLiteralNode(node.argument, path);
-			if (typeof value !== "number")
-				throw new Error(`${path} unary expression must target a number`);
+			if (typeof value !== "number") throw new Error(`${path} unary expression must target a number`);
 			if (node.operator === "-") return -value;
 			if (node.operator === "+") return value;
 			throw new Error(`${path} unsupported unary operator ${node.operator}`);
@@ -415,8 +367,7 @@ function evaluateLiteralNode(
 }
 
 function getObjectKey(property: AnyNode, path: string): string {
-	if (property.computed)
-		throw new Error(`${path} must not use computed object keys`);
+	if (property.computed) throw new Error(`${path} must not use computed object keys`);
 	const key = property.key;
 	if (key.type === "Identifier") return key.name;
 	if (key.type === "Literal" && typeof key.value === "string") return key.value;
@@ -433,31 +384,19 @@ function assertDeterministicAst(ast: AnyNode): void {
 			const callee = node.callee as AnyNode;
 			const member = staticMember(callee);
 			if (member?.object === "Date" && member.property === "now") {
-				throw new Error(
-					"workflow scripts must be deterministic; Date.now() is not allowed",
-				);
+				throw new Error("workflow scripts must be deterministic; Date.now() is not allowed");
 			}
 			if (member?.object === "Math" && member.property === "random") {
-				throw new Error(
-					"workflow scripts must be deterministic; Math.random() is not allowed",
-				);
+				throw new Error("workflow scripts must be deterministic; Math.random() is not allowed");
 			}
 		}
-		if (
-			node.type === "NewExpression" &&
-			node.callee?.type === "Identifier" &&
-			node.callee.name === "Date"
-		) {
-			throw new Error(
-				"workflow scripts must be deterministic; new Date() is not allowed",
-			);
+		if (node.type === "NewExpression" && node.callee?.type === "Identifier" && node.callee.name === "Date") {
+			throw new Error("workflow scripts must be deterministic; new Date() is not allowed");
 		}
 	});
 }
 
-function staticMember(
-	node: AnyNode,
-): { object: string; property: string } | undefined {
+function staticMember(node: AnyNode): { object: string; property: string } | undefined {
 	if (node.type !== "MemberExpression") return undefined;
 	if (node.object?.type !== "Identifier") return undefined;
 	const property = staticPropertyName(node);
@@ -465,19 +404,15 @@ function staticMember(
 }
 
 function staticPropertyName(node: AnyNode): string | undefined {
-	if (!node.computed && node.property?.type === "Identifier")
-		return node.property.name;
+	if (!node.computed && node.property?.type === "Identifier") return node.property.name;
 	return staticString(node.property);
 }
 
 function staticString(node: AnyNode | undefined): string | undefined {
 	if (!node) return undefined;
-	if (node.type === "Literal" && typeof node.value === "string")
-		return node.value;
+	if (node.type === "Literal" && typeof node.value === "string") return node.value;
 	if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
-		return node.quasis
-			.map((quasi: AnyNode) => quasi.value.cooked ?? quasi.value.raw)
-			.join("");
+		return node.quasis.map((quasi: AnyNode) => quasi.value.cooked ?? quasi.value.raw).join("");
 	}
 	if (node.type === "BinaryExpression" && node.operator === "+") {
 		const left = staticString(node.left);
@@ -492,22 +427,14 @@ function walkAst(node: AnyNode, visit: (node: AnyNode) => void): void {
 	for (const [key, value] of Object.entries(node)) {
 		if (key === "parent") continue;
 		if (Array.isArray(value)) {
-			for (const child of value)
-				if (child && typeof child.type === "string") walkAst(child, visit);
-		} else if (
-			value &&
-			typeof value === "object" &&
-			typeof (value as AnyNode).type === "string"
-		) {
+			for (const child of value) if (child && typeof child.type === "string") walkAst(child, visit);
+		} else if (value && typeof value === "object" && typeof (value as AnyNode).type === "string") {
 			walkAst(value as AnyNode, visit);
 		}
 	}
 }
 
-export async function runWorkflow(
-	script: string,
-	options: RunWorkflowOptions = {},
-): Promise<WorkflowResult> {
+export async function runWorkflow(script: string, options: RunWorkflowOptions = {}): Promise<WorkflowResult> {
 	const parsed = parseWorkflowScript(script);
 	const state: RuntimeState = {
 		logs: [],
@@ -521,11 +448,7 @@ export async function runWorkflow(
 	const concurrency = Math.max(
 		1,
 		Math.min(
-			options.concurrency ??
-				Math.max(
-					1,
-					((globalThis.navigator?.hardwareConcurrency ?? 8) as number) - 2,
-				),
+			options.concurrency ?? Math.max(1, ((globalThis.navigator?.hardwareConcurrency ?? 8) as number) - 2),
 			16,
 		),
 	);
@@ -556,9 +479,7 @@ export async function runWorkflow(
 
 	const getBudgetSpent = forbidConstructorEscape(() => state.spent);
 	const getBudgetMax = forbidConstructorEscape(() => maxEstimatedTokens);
-	const getBudgetRemaining = forbidConstructorEscape(() =>
-		Math.max(0, maxEstimatedTokens - state.spent),
-	);
+	const getBudgetRemaining = forbidConstructorEscape(() => Math.max(0, maxEstimatedTokens - state.spent));
 	const budget = Object.freeze(
 		Object.defineProperties(Object.create(null), {
 			spent: { enumerable: true, get: getBudgetSpent },
@@ -567,17 +488,11 @@ export async function runWorkflow(
 		}),
 	);
 
-	const artifact = (
-		name: unknown,
-		value: unknown,
-		artifactOptions: unknown = {},
-	) => {
+	const artifact = (name: unknown, value: unknown, artifactOptions: unknown = {}) => {
 		throwIfAborted();
 		const artifactName = requireString(name, "artifact name");
 		if (!isSafeArtifactName(artifactName)) {
-			throw new Error(
-				`artifact name must be a safe relative path: ${artifactName}`,
-			);
+			throw new Error(`artifact name must be a safe relative path: ${artifactName}`);
 		}
 		if (state.artifacts.some((item) => item.name === artifactName)) {
 			throw new Error(`artifact name must be unique: ${artifactName}`);
@@ -588,9 +503,7 @@ export async function runWorkflow(
 		const registered: WorkflowArtifact = {
 			name: artifactName,
 			type: normalizedOptions.type,
-			...(normalizedOptions.description !== undefined
-				? { description: normalizedOptions.description }
-				: {}),
+			...(normalizedOptions.description !== undefined ? { description: normalizedOptions.description } : {}),
 			value: clonedValue,
 		};
 		state.artifacts.push(registered);
@@ -599,25 +512,17 @@ export async function runWorkflow(
 
 	const agent = (prompt: unknown, agentOptions: unknown = {}) => {
 		throwIfAborted();
-		if (state.spent >= maxEstimatedTokens)
-			throw new Error("workflow estimated token budget exceeded");
+		if (state.spent >= maxEstimatedTokens) throw new Error("workflow estimated token budget exceeded");
 		const taskPrompt = requireString(prompt, "agent prompt");
 		const normalizedOptions = normalizeAgentOptions(agentOptions);
 		const assignedPhase = normalizedOptions.phase ?? state.currentPhase;
 		const id = state.nextAgentId++;
 		state.agentCount++;
-		const label =
-			normalizedOptions.label || defaultAgentLabel(assignedPhase, id);
-		const journalKey = computeWorkflowAgentKey(
-			taskPrompt,
-			previousJournalKey,
-			normalizedOptions,
-		);
+		const label = normalizedOptions.label || defaultAgentLabel(assignedPhase, id);
+		const journalKey = computeWorkflowAgentKey(taskPrompt, previousJournalKey, normalizedOptions);
 		previousJournalKey = journalKey;
 
-		const cached = !journalDiverged
-			? (options.journal?.getResult(journalKey) ?? JOURNAL_MISSING)
-			: JOURNAL_MISSING;
+		const cached = !journalDiverged ? (options.journal?.getResult(journalKey) ?? JOURNAL_MISSING) : JOURNAL_MISSING;
 		if (cached !== JOURNAL_MISSING) {
 			options.onAgentStart?.({
 				id,
@@ -637,8 +542,7 @@ export async function runWorkflow(
 				});
 				return Promise.resolve(result);
 			} catch (error) {
-				const actualError =
-					error instanceof Error ? error : new Error(String(error));
+				const actualError = error instanceof Error ? error : new Error(String(error));
 				log(`agent ${label} failed: ${actualError.message}`);
 				options.onAgentEnd?.({
 					id,
@@ -673,17 +577,13 @@ export async function runWorkflow(
 				const runOptions: WorkflowAgentRunOptions = {
 					label,
 					signal: options.signal,
-					instructions: buildAgentInstructions(
-						assignedPhase,
-						normalizedOptions,
-					),
+					instructions: buildAgentInstructions(assignedPhase, normalizedOptions),
 					onActivity: (activity) => {
 						if (options.signal?.aborted || stoppedError) return;
 						options.onAgentActivity?.({ id, label, ...activity });
 					},
 				};
-				if (normalizedOptions.hasSchema)
-					runOptions.schema = normalizedOptions.schema;
+				if (normalizedOptions.hasSchema) runOptions.schema = normalizedOptions.schema;
 				const rawResult = await agentRunner.run(taskPrompt, runOptions);
 				throwIfAborted();
 				const result = assertJsonSerializable(rawResult, "agent result");
@@ -698,8 +598,7 @@ export async function runWorkflow(
 				return result;
 			} catch (error) {
 				if (options.signal?.aborted || stoppedError) throw error;
-				const actualError =
-					error instanceof Error ? error : new Error(String(error));
+				const actualError = error instanceof Error ? error : new Error(String(error));
 				log(`agent ${label} failed: ${actualError.message}`);
 				options.onAgentEnd?.({
 					id,
@@ -722,35 +621,25 @@ export async function runWorkflow(
 
 	const parallel = async (thunks: unknown) => {
 		throwIfAborted();
-		if (!Array.isArray(thunks))
-			throw new TypeError("parallel() expects an array of functions");
+		if (!Array.isArray(thunks)) throw new TypeError("parallel() expects an array of functions");
 		if (thunks.some((thunk) => typeof thunk !== "function")) {
-			throw new TypeError(
-				"parallel() expects an array of functions, not promises.",
-			);
+			throw new TypeError("parallel() expects an array of functions, not promises.");
 		}
-		return Promise.all(
-			thunks.map(async (thunk) => await (thunk as () => Promise<unknown>)()),
-		);
+		return Promise.all(thunks.map(async (thunk) => await (thunk as () => Promise<unknown>)()));
 	};
 
 	const pipeline = async (items: unknown, ...stages: unknown[]) => {
 		throwIfAborted();
-		if (!Array.isArray(items))
-			throw new TypeError("pipeline() expects an array");
+		if (!Array.isArray(items)) throw new TypeError("pipeline() expects an array");
 		if (stages.some((stage) => typeof stage !== "function"))
 			throw new TypeError("pipeline() stages must be functions");
-		return Promise.all(
-			items.map(async (item, index) => {
-				let value = item;
-				for (const stage of stages as Array<
-					(value: unknown, item: unknown, index: number) => Promise<unknown>
-				>) {
-					value = await stage(value, item, index);
-				}
-				return value;
-			}),
-		);
+
+		const stageFns = stages as Array<(value: unknown, item: unknown, index: number) => Promise<unknown>>;
+		let values: unknown[] = [...items];
+		for (const stage of stageFns) {
+			values = await Promise.all(values.map(async (value, index) => await stage(value, items[index], index)));
+		}
+		return values;
 	};
 
 	const wrapped = `(async () => {\n${parsed.body}\n})()`;
@@ -764,18 +653,11 @@ export async function runWorkflow(
 		Object.assign(Object.create(null), {
 			log: forbidConstructorEscape(log),
 			info: forbidConstructorEscape(log),
-			warn: forbidConstructorEscape((message: unknown) =>
-				log(`[warn] ${String(message)}`),
-			),
-			error: forbidConstructorEscape((message: unknown) =>
-				log(`[error] ${String(message)}`),
-			),
+			warn: forbidConstructorEscape((message: unknown) => log(`[warn] ${String(message)}`)),
+			error: forbidConstructorEscape((message: unknown) => log(`[error] ${String(message)}`)),
 		}),
 	);
-	const workflowArgsJson =
-		options.args === undefined
-			? undefined
-			: safeJsonStringify(options.args, "workflow args");
+	const workflowArgsJson = options.args === undefined ? undefined : safeJsonStringify(options.args, "workflow args");
 	const context = vm.createContext(
 		{
 			agent: forbidConstructorEscape(agent),
@@ -859,25 +741,16 @@ function raceWithAbortAndTimeout<T>(
 
 		options.signal?.addEventListener("abort", onAbort, { once: true });
 		if (options.timeoutMs !== undefined) {
-			timeout = setTimeout(
-				() => stop(`Workflow timed out after ${options.timeoutMs}ms`),
-				options.timeoutMs,
-			);
+			timeout = setTimeout(() => stop(`Workflow timed out after ${options.timeoutMs}ms`), options.timeoutMs);
 		}
 		promise.then(
 			(value) => finish(resolve, value),
-			(error) =>
-				finish(
-					reject,
-					error instanceof Error ? error : new Error(String(error)),
-				),
+			(error) => finish(reject, error instanceof Error ? error : new Error(String(error))),
 		);
 	});
 }
 
-function createDefaultWorkflowAgent(
-	options: RunWorkflowOptions,
-): WorkflowAgentLike {
+function createDefaultWorkflowAgent(options: RunWorkflowOptions): WorkflowAgentLike {
 	return {
 		async run(prompt, agentOptions) {
 			const { WorkflowAgent } = await import("./agent.js");
@@ -901,20 +774,16 @@ function normalizeAgentOptions(value: unknown): {
 	instructions?: string;
 } {
 	if (value === undefined || value === null) return { hasSchema: false };
-	if (!isPlainRecord(value))
-		throw new TypeError("agent options must be an object");
+	if (!isPlainRecord(value)) throw new TypeError("agent options must be an object");
 	return {
 		label: typeof value.label === "string" ? value.label : undefined,
 		phase: typeof value.phase === "string" ? value.phase : undefined,
-		agentType:
-			typeof value.agentType === "string" ? value.agentType : undefined,
+		agentType: typeof value.agentType === "string" ? value.agentType : undefined,
 		model: typeof value.model === "string" ? value.model : undefined,
-		isolation:
-			typeof value.isolation === "string" ? value.isolation : undefined,
+		isolation: typeof value.isolation === "string" ? value.isolation : undefined,
 		hasSchema: Object.hasOwn(value, "schema"),
 		schema: value.schema,
-		instructions:
-			typeof value.instructions === "string" ? value.instructions : undefined,
+		instructions: typeof value.instructions === "string" ? value.instructions : undefined,
 	};
 }
 
@@ -923,18 +792,12 @@ function normalizeArtifactOptions(value: unknown): {
 	description?: string;
 } {
 	if (value === undefined || value === null) return { type: "json" };
-	if (!isPlainRecord(value))
-		throw new TypeError("artifact options must be an object");
+	if (!isPlainRecord(value)) throw new TypeError("artifact options must be an object");
 	const type = value.type ?? "json";
 	if (type !== "markdown" && type !== "json" && type !== "text") {
-		throw new TypeError(
-			"artifact type must be one of 'markdown', 'json', or 'text'",
-		);
+		throw new TypeError("artifact type must be one of 'markdown', 'json', or 'text'");
 	}
-	if (
-		value.description !== undefined &&
-		typeof value.description !== "string"
-	) {
+	if (value.description !== undefined && typeof value.description !== "string") {
 		throw new TypeError("artifact description must be a string");
 	}
 	return {
@@ -981,11 +844,7 @@ function estimateTokens(value: unknown, label: string): number {
 	return Math.ceil(safeJsonStringify(value ?? "", label).length / 4);
 }
 
-export function safeJsonStringify(
-	value: unknown,
-	label: string,
-	space?: string | number,
-): string {
+export function safeJsonStringify(value: unknown, label: string, space?: string | number): string {
 	assertJsonSerializable(value, label);
 	try {
 		const text = JSON.stringify(value, null, space);
@@ -1008,28 +867,18 @@ export function assertJsonSerializable<T>(value: T, label: string): T {
 				return;
 			case "number":
 				if (!Number.isFinite(item)) {
-					throw new Error(
-						`${label} must be JSON-serializable; ${path} must be a finite number`,
-					);
+					throw new Error(`${label} must be JSON-serializable; ${path} must be a finite number`);
 				}
 				return;
 			case "bigint":
-				throw new Error(
-					`${label} must be JSON-serializable; ${path} is a bigint`,
-				);
+				throw new Error(`${label} must be JSON-serializable; ${path} is a bigint`);
 			case "function":
-				throw new Error(
-					`${label} must be JSON-serializable; ${path} is a function`,
-				);
+				throw new Error(`${label} must be JSON-serializable; ${path} is a function`);
 			case "symbol":
-				throw new Error(
-					`${label} must be JSON-serializable; ${path} is a symbol`,
-				);
+				throw new Error(`${label} must be JSON-serializable; ${path} is a symbol`);
 			case "undefined":
 				if (label === "agent result" && path === "$") return;
-				throw new Error(
-					`${label} must be JSON-serializable; ${path} is undefined`,
-				);
+				throw new Error(`${label} must be JSON-serializable; ${path} is undefined`);
 			case "object":
 				break;
 		}
@@ -1041,45 +890,31 @@ export function assertJsonSerializable<T>(value: T, label: string): T {
 					`${label} must be structured-cloneable; did you forget to await agent(), parallel(), or pipeline()? ${path} is a Promise`,
 				);
 			}
-			throw new Error(
-				`${label} must be JSON-serializable; ${path} is a Promise`,
-			);
+			throw new Error(`${label} must be JSON-serializable; ${path} is a Promise`);
 		}
 		const nonJsonObjectType = getNonJsonObjectType(item);
 		if (nonJsonObjectType) {
-			throw new Error(
-				`${label} must be JSON-serializable; ${path} is a ${nonJsonObjectType}`,
-			);
+			throw new Error(`${label} must be JSON-serializable; ${path} is a ${nonJsonObjectType}`);
 		}
 		if (ancestors.has(item)) {
-			throw new Error(
-				`${label} must be JSON-serializable; ${path} contains a cycle`,
-			);
+			throw new Error(`${label} must be JSON-serializable; ${path} contains a cycle`);
 		}
 
 		ancestors.add(item);
 		if (Array.isArray(item)) {
 			for (let index = 0; index < item.length; index++) {
 				if (!(index in item)) {
-					throw new Error(
-						`${label} must be JSON-serializable; ${path}[${index}] is a sparse array hole`,
-					);
+					throw new Error(`${label} must be JSON-serializable; ${path}[${index}] is a sparse array hole`);
 				}
 				visit(item[index], `${path}[${index}]`, ancestors);
 			}
 		} else {
 			for (const key of Reflect.ownKeys(item)) {
 				if (typeof key === "symbol") {
-					throw new Error(
-						`${label} must be JSON-serializable; ${path} has a symbol key`,
-					);
+					throw new Error(`${label} must be JSON-serializable; ${path} has a symbol key`);
 				}
 				if (!Object.prototype.propertyIsEnumerable.call(item, key)) continue;
-				visit(
-					(item as Record<string, unknown>)[key],
-					`${path}.${key}`,
-					ancestors,
-				);
+				visit((item as Record<string, unknown>)[key], `${path}.${key}`, ancestors);
 			}
 		}
 		ancestors.delete(item);

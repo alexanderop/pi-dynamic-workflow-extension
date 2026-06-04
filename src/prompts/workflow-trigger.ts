@@ -17,22 +17,10 @@ export const WORKFLOW_PROMPT_INSTRUCTIONS = [
 
 export const MODE_GUIDANCE: Record<NativeWorkflowMode, readonly string[]> = {
 	standard: [],
-	quick: [
-		"Use a concise workflow plan; prefer fewer agents and a lower/smaller budget.",
-	],
-	ultracode: [
-		"Strongly bias toward using the workflow tool unless the task is clearly too small.",
-	],
+	quick: ["Use a concise workflow plan; prefer fewer agents and a lower/smaller budget."],
+	ultracode: ["Strongly bias toward using the workflow tool unless the task is clearly too small."],
 };
 
-export function buildNativeWorkflowPrompt(args: {
-	task: string;
-	mode: NativeWorkflowMode;
-}): string {
-	return [
-		`Task: ${args.task}`,
-		"",
-		...WORKFLOW_PROMPT_INSTRUCTIONS,
-		...MODE_GUIDANCE[args.mode],
-	].join("\n");
+export function buildNativeWorkflowPrompt(args: { task: string; mode: NativeWorkflowMode }): string {
+	return [`Task: ${args.task}`, "", ...WORKFLOW_PROMPT_INSTRUCTIONS, ...MODE_GUIDANCE[args.mode]].join("\n");
 }

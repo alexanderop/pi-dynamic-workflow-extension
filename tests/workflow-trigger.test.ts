@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { buildNativeWorkflowPrompt } from "../src/prompts/workflow-trigger.js";
 import {
 	highlightWorkflowTriggerWords,
@@ -53,10 +53,7 @@ test("native workflow input transforms use workflow phrasing", () => {
 		source: "rpc",
 	});
 	assertTransform(withArticle);
-	assertStandardWorkflowPrompt(
-		withArticle.text,
-		"audit extension event handling",
-	);
+	assertStandardWorkflowPrompt(withArticle.text, "audit extension event handling");
 
 	const withoutArticle = transformNativeWorkflowInput({
 		text: "use workflow to write regression tests",
@@ -109,9 +106,7 @@ test("native workflow input leaves slash commands unchanged", () => {
 });
 
 test("workflow trigger words render with purple terminal blink ANSI styling", () => {
-	const highlighted = highlightWorkflowTriggerWords(
-		"ultracode this with a quick workflow",
-	);
+	const highlighted = highlightWorkflowTriggerWords("ultracode this with a quick workflow");
 
 	assert.equal(
 		highlighted,

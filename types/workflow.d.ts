@@ -33,21 +33,12 @@ declare global {
 
 	function phase(title: string): void;
 	function log(message: unknown): void;
-	function artifact(
-		name: string,
-		value: unknown,
-		options?: ArtifactOptions,
-	): void;
-	function agent<T = unknown>(
-		prompt: string,
-		options?: WorkflowAgentOptions,
-	): Promise<T>;
+	function artifact(name: string, value: unknown, options?: ArtifactOptions): void;
+	function agent<T = unknown>(prompt: string, options?: WorkflowAgentOptions): Promise<T>;
 	function parallel<T>(thunks: Array<() => Promise<T>>): Promise<T[]>;
 	function pipeline<T, R>(
 		items: T[],
-		...stages: Array<
-			(value: unknown, item: T, index: number) => Promise<unknown> | unknown
-		>
+		...stages: Array<(value: unknown, item: T, index: number) => Promise<unknown> | unknown>
 	): Promise<R[]>;
 }
 

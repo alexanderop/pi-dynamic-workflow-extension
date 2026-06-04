@@ -16,34 +16,21 @@ import {
 	WORKFLOW_TOOL_PROMPT_SNIPPET,
 	WORKFLOW_TOOL_SCRIPT_DESCRIPTION,
 } from "./prompts/workflow-tool.js";
-import {
-	parseWorkflowScript,
-	type RunWorkflowOptions,
-	runWorkflow,
-	safeJsonStringify,
-} from "./workflow.js";
+import { parseWorkflowScript, type RunWorkflowOptions, runWorkflow, safeJsonStringify } from "./workflow.js";
 import { WorkflowDashboard } from "./workflow-dashboard.js";
-import {
-	createWorkflowManager,
-	type WorkflowManager,
-} from "./workflow-manager.js";
+import { createWorkflowManager, type WorkflowManager } from "./workflow-manager.js";
 
 const workflowToolSchema = Type.Object({
 	script: Type.String({
 		description: WORKFLOW_TOOL_SCRIPT_DESCRIPTION,
 	}),
-	args: Type.Optional(
-		Type.Any({ description: "Optional JSON value exposed as global `args`." }),
-	),
+	args: Type.Optional(Type.Any({ description: "Optional JSON value exposed as global `args`." })),
 });
 
 export type WorkflowToolInput = Static<typeof workflowToolSchema>;
 
 export interface WorkflowToolOptions
-	extends Pick<
-		RunWorkflowOptions,
-		"cwd" | "agent" | "concurrency" | "maxEstimatedTokens"
-	> {
+	extends Pick<RunWorkflowOptions, "cwd" | "agent" | "concurrency" | "maxEstimatedTokens"> {
 	/** Shared manager used by /workflows to show live background runs. */
 	manager?: WorkflowManager;
 	/** Defaults to true when a manager is provided, otherwise false. */
@@ -98,9 +85,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 					},
 				});
 				const snapshot = cloneWorkflowSnapshot(job.snapshot);
-				snapshot.logs.push(
-					"Open /workflows for the interactive live dashboard.",
-				);
+				snapshot.logs.push("Open /workflows for the interactive live dashboard.");
 				createToolUpdateWorkflowDisplay(onUpdate).update(snapshot);
 				return {
 					content: [
@@ -172,8 +157,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 				onAgentActivity(event) {
 					const agent = snapshot.agents.find((item) => item.id === event.id);
 					if (!agent) return;
-					if (event.type === "tool")
-						agent.toolCount = (agent.toolCount ?? 0) + 1;
+					if (event.type === "tool") agent.toolCount = (agent.toolCount ?? 0) + 1;
 					agent.activity = [
 						...(agent.activity ?? []),
 						{
@@ -239,8 +223,7 @@ export function createWorkflowTool(options: WorkflowToolOptions = {}) {
 
 		renderResult(result, { isPartial }, theme) {
 			const snapshot = result.details as WorkflowSnapshot | undefined;
-			if (snapshot?.name)
-				return new WorkflowDashboard(snapshot, theme, !isPartial);
+			if (snapshot?.name) return new WorkflowDashboard(snapshot, theme, !isPartial);
 			const text = result.content?.[0];
 			return new Text(text?.type === "text" ? text.text : "workflow", 0, 0);
 		},

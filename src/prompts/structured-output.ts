@@ -1,13 +1,10 @@
 export const STRUCTURED_OUTPUT_TOOL_NAME = "structured_output";
 
-export const STRUCTURED_OUTPUT_ANY_SCHEMA_DESCRIPTION =
-	"Final structured output value";
+export const STRUCTURED_OUTPUT_ANY_SCHEMA_DESCRIPTION = "Final structured output value";
 
-export const STRUCTURED_OUTPUT_TOOL_DESCRIPTION =
-	"Return the final machine-readable result for this subagent task.";
+export const STRUCTURED_OUTPUT_TOOL_DESCRIPTION = "Return the final machine-readable result for this subagent task.";
 
-export const STRUCTURED_OUTPUT_TOOL_PROMPT_SNIPPET =
-	"Return the final machine-readable result for this subagent task";
+export const STRUCTURED_OUTPUT_TOOL_PROMPT_SNIPPET = "Return the final machine-readable result for this subagent task";
 
 export function structuredOutputToolPromptGuidelines(name: string): string[] {
 	return [
@@ -25,9 +22,7 @@ export const STRUCTURED_OUTPUT_PROMPT_CONTRACT = [
 	"Do not call structured_output until you have completed the task.",
 ] as const;
 
-export function buildStructuredOutputRepairPrompt(
-	name = STRUCTURED_OUTPUT_TOOL_NAME,
-): string {
+export function buildStructuredOutputRepairPrompt(name = STRUCTURED_OUTPUT_TOOL_NAME): string {
 	return [
 		`You finished without calling ${name}.`,
 		"The parent workflow cannot continue until it receives the structured tool arguments.",
@@ -37,9 +32,7 @@ export function buildStructuredOutputRepairPrompt(
 }
 
 export function structuredOutputMissingError(): Error {
-	const error = new Error(
-		"Subagent finished without calling structured_output",
-	);
+	const error = new Error("Subagent finished without calling structured_output");
 	error.name = "StructuredOutputMissingError";
 	return error;
 }

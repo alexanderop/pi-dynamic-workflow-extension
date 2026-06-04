@@ -12,10 +12,7 @@ import {
 	structuredOutputMissingError,
 } from "./prompts/structured-output.js";
 import { buildWorkflowSubagentPrompt } from "./prompts/workflow-agent.js";
-import {
-	createStructuredOutputTool,
-	type StructuredOutputCapture,
-} from "./structured-output.js";
+import { createStructuredOutputTool, type StructuredOutputCapture } from "./structured-output.js";
 
 export interface AgentRunOptions {
 	label?: string;
@@ -83,22 +80,15 @@ export class WorkflowAgent {
 		const wantsStructuredOutput = Object.hasOwn(options, "schema");
 		const capture: StructuredOutputCapture = { called: false };
 		const runTools = [...this.baseTools, ...(options.tools ?? [])];
-		if (wantsStructuredOutput)
-			runTools.push(
-				createStructuredOutputTool({ schema: options.schema, capture }),
-			);
+		if (wantsStructuredOutput) runTools.push(createStructuredOutputTool({ schema: options.schema, capture }));
 
-		const { customTools: sessionCustomTools, ...restSessionOptions } =
-			this.sessionOptions;
+		const { customTools: sessionCustomTools, ...restSessionOptions } = this.sessionOptions;
 		const { session } = await createAgentSession({
 			cwd: this.cwd,
 			agentDir: getAgentDir(),
 			sessionManager: SessionManager.inMemory(this.cwd),
 			settingsManager: SettingsManager.create(this.cwd, getAgentDir()),
-			customTools: [
-				...((sessionCustomTools as ToolDefinition[] | undefined) ?? []),
-				...runTools,
-			],
+			customTools: [...((sessionCustomTools as ToolDefinition[] | undefined) ?? []), ...runTools],
 			...restSessionOptions,
 		});
 
@@ -108,16 +98,12 @@ export class WorkflowAgent {
 				const onAbort = () => void session.abort();
 				if (options.signal.aborted) onAbort();
 				else options.signal.addEventListener("abort", onAbort, { once: true });
-				removeAbortListener = () =>
-					options.signal?.removeEventListener("abort", onAbort);
+				removeAbortListener = () => options.signal?.removeEventListener("abort", onAbort);
 			}
 
 			const unsubscribe = session.subscribe((event) => {
 				if (!options.onActivity) return;
-				if (
-					event.type === "message_update" &&
-					event.assistantMessageEvent.type === "text_delta"
-				) {
+				if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 					options.onActivity({
 						type: "text",
 						text: event.assistantMessageEvent.delta,
@@ -135,11 +121,7 @@ export class WorkflowAgent {
 			try {
 				await runWorkflowAgentPrompts({
 					session,
-					initialPrompt: this.buildPrompt(
-						prompt,
-						options,
-						wantsStructuredOutput,
-					),
+					initialPrompt: this.buildPrompt(prompt, options, wantsStructuredOutput),
 					wantsStructuredOutput,
 					capture,
 					onActivity: options.onActivity,
@@ -160,11 +142,7 @@ export class WorkflowAgent {
 		}
 	}
 
-	private buildPrompt(
-		prompt: string,
-		options: AgentRunOptions,
-		wantsStructuredOutput: boolean,
-	): string {
+	private buildPrompt(prompt: string, options: AgentRunOptions, wantsStructuredOutput: boolean): string {
 		return buildWorkflowSubagentPrompt({
 			prompt,
 			label: options.label,
@@ -175,9 +153,7 @@ export class WorkflowAgent {
 
 	private lastAssistantText(messages: unknown[]): string {
 		for (let i = messages.length - 1; i >= 0; i--) {
-			const message = messages[i] as
-				| { role?: string; content?: unknown }
-				| undefined;
+			const message = messages[i] as { role?: string; content?: unknown } | undefined;
 			if (message?.role !== "assistant") continue;
 			const parts = Array.isArray(message.content) ? message.content : [];
 			const text = parts

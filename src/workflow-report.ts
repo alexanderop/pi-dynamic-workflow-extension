@@ -1,15 +1,6 @@
-import {
-	formatWorkflowArtifactSummary,
-	preview,
-	type WorkflowAgentStatus,
-} from "./display.js";
+import { formatWorkflowArtifactSummary, preview, type WorkflowAgentStatus } from "./display.js";
 import type { WorkflowJob, WorkflowJobStatus } from "./workflow-manager.js";
-import {
-	formatDuration,
-	phaseStatus,
-	phaseSummaries,
-	statusGlyph,
-} from "./workflow-ui-format.js";
+import { formatDuration, phaseStatus, phaseSummaries, statusGlyph } from "./workflow-ui-format.js";
 
 export interface WorkflowPhaseReportRow {
 	label: string;
@@ -69,40 +60,24 @@ export function selectWorkflowReport(job: WorkflowJob): WorkflowReport {
 		status: agent.status,
 		durationMs:
 			agent.startedAt !== undefined
-				? Math.max(
-						0,
-						(agent.endedAt ?? job.finishedAt ?? Date.now()) - agent.startedAt,
-					)
+				? Math.max(0, (agent.endedAt ?? job.finishedAt ?? Date.now()) - agent.startedAt)
 				: undefined,
-		toolCount:
-			agent.toolCount ??
-			agent.activity?.filter((item) => item.type === "tool").length ??
-			0,
+		toolCount: agent.toolCount ?? agent.activity?.filter((item) => item.type === "tool").length ?? 0,
 	}));
-	const toolCount =
-		snapshot.toolCount ??
-		agents.reduce((total, agent) => total + agent.toolCount, 0);
+	const toolCount = snapshot.toolCount ?? agents.reduce((total, agent) => total + agent.toolCount, 0);
 	const artifacts = (snapshot.artifacts ?? []).map((artifact) => ({
 		name: artifact.name,
 		type: artifact.type,
-		...(artifact.description !== undefined
-			? { description: artifact.description }
-			: {}),
+		...(artifact.description !== undefined ? { description: artifact.description } : {}),
 	}));
 	const result = job.result ?? snapshot.result;
-	const cancelledAgents = snapshot.agents.filter(
-		(agent) => agent.status === "skipped",
-	).length;
+	const cancelledAgents = snapshot.agents.filter((agent) => agent.status === "skipped").length;
 
 	return {
 		id: job.id,
 		name: job.name,
 		status: job.status,
-		durationMs:
-			snapshot.durationMs ??
-			(job.finishedAt
-				? Math.max(0, job.finishedAt - job.startedAt)
-				: undefined),
+		durationMs: snapshot.durationMs ?? (job.finishedAt ? Math.max(0, job.finishedAt - job.startedAt) : undefined),
 		totalAgents: snapshot.agentCount || snapshot.agents.length,
 		doneAgents: snapshot.doneCount,
 		errorAgents: snapshot.errorCount,

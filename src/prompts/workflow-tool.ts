@@ -10,8 +10,7 @@ export const WORKFLOW_TOOL_SCRIPT_DESCRIPTION = [
 export const WORKFLOW_TOOL_DESCRIPTION =
 	"Execute a deterministic JavaScript workflow that orchestrates multiple isolated Pi subagents.";
 
-export const WORKFLOW_TOOL_PROMPT_SNIPPET =
-	"Run a JavaScript orchestration workflow with isolated subagents";
+export const WORKFLOW_TOOL_PROMPT_SNIPPET = "Run a JavaScript orchestration workflow with isolated subagents";
 
 export const WORKFLOW_TOOL_BACKGROUND_FOLLOWUP_INSTRUCTION =
 	"Use /workflows to watch progress, navigate agents, cancel, and inspect the final result. End your turn and yield control after starting the background workflow. If the user says nothing, stay idle instead of continuing the task on your own. Do not poll, busy-wait, or re-run it; resume only when the user sends a new message or the extension sends a workflow-completion message. When you receive that message, summarize the outcome for the user and suggest a useful next step.";
@@ -21,17 +20,13 @@ export function buildWorkflowToolBackgroundStartMessage(args: {
 	id: number;
 	scriptPath?: string;
 }): string {
-	const scriptNote = args.scriptPath
-		? ` The reusable workflow script was saved at ${args.scriptPath}.`
-		: "";
+	const scriptNote = args.scriptPath ? ` The reusable workflow script was saved at ${args.scriptPath}.` : "";
 	return `Workflow ${args.name} started in the background as #${args.id}.${scriptNote} ${WORKFLOW_TOOL_BACKGROUND_FOLLOWUP_INSTRUCTION}`;
 }
 
 export const WORKFLOW_TOOL_AUTHORING_PROMPT = readWorkflowToolAuthoringPrompt();
 
-export const WORKFLOW_TOOL_PROMPT_GUIDELINES = [
-	WORKFLOW_TOOL_AUTHORING_PROMPT,
-] as const;
+export const WORKFLOW_TOOL_PROMPT_GUIDELINES = [WORKFLOW_TOOL_AUTHORING_PROMPT] as const;
 
 function readWorkflowToolAuthoringPrompt(): string {
 	const candidates = [
@@ -46,7 +41,6 @@ function readWorkflowToolAuthoringPrompt(): string {
 			lastError = error;
 		}
 	}
-	const reason =
-		lastError instanceof Error ? lastError.message : String(lastError);
+	const reason = lastError instanceof Error ? lastError.message : String(lastError);
 	throw new Error(`Unable to load workflow tool authoring prompt: ${reason}`);
 }

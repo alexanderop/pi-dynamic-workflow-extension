@@ -1,9 +1,5 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type {
-	WorkflowAgentSnapshot,
-	WorkflowAgentStatus,
-	WorkflowSnapshot,
-} from "./display.js";
+import type { WorkflowAgentSnapshot, WorkflowAgentStatus, WorkflowSnapshot } from "./display.js";
 import type { WorkflowJobStatus } from "./workflow-manager.js";
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -18,10 +14,7 @@ export interface WorkflowPhaseSummary {
 	queued: number;
 }
 
-export function statusGlyph(
-	status: WorkflowAgentStatus | WorkflowJobStatus,
-	frame = 0,
-): string {
+export function statusGlyph(status: WorkflowAgentStatus | WorkflowJobStatus, frame = 0): string {
 	switch (status) {
 		case "running":
 			return SPINNER[Math.abs(frame) % SPINNER.length] ?? "⠋";
@@ -53,8 +46,7 @@ export function formatDuration(ms: number | undefined): string {
 export function formatTokens(value: number | undefined): string | undefined {
 	if (value === undefined || !Number.isFinite(value)) return undefined;
 	if (Math.abs(value) < 1000) return `${value}`;
-	if (Math.abs(value) < 1_000_000)
-		return `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`;
+	if (Math.abs(value) < 1_000_000) return `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k`;
 	return `${(value / 1_000_000).toFixed(1)}m`;
 }
 
@@ -88,36 +80,25 @@ export function cell(value: string, width: number): string {
 	return clipped + " ".repeat(Math.max(0, safeWidth - visibleWidth(clipped)));
 }
 
-export function windowAround<T>(
-	items: T[],
-	selected: number,
-	size: number,
-): Array<[T, number]> {
+export function windowAround<T>(items: T[], selected: number, size: number): Array<[T, number]> {
 	if (size <= 0) return [];
 	if (items.length <= size) return items.map((item, index) => [item, index]);
 	const safeSelected = Math.max(0, Math.min(selected, items.length - 1));
 	const half = Math.floor(size / 2);
 	const start = Math.max(0, Math.min(safeSelected - half, items.length - size));
-	return items
-		.slice(start, start + size)
-		.map((item, offset) => [item, start + offset]);
+	return items.slice(start, start + size).map((item, offset) => [item, start + offset]);
 }
 
-export function phaseSummaries(
-	snapshot: WorkflowSnapshot,
-): WorkflowPhaseSummary[] {
+export function phaseSummaries(snapshot: WorkflowSnapshot): WorkflowPhaseSummary[] {
 	const names = [
 		...snapshot.phases,
 		...(snapshot.currentPhase ? [snapshot.currentPhase] : []),
-		...snapshot.agents
-			.map((agent) => agent.phase)
-			.filter((phase): phase is string => Boolean(phase)),
+		...snapshot.agents.map((agent) => agent.phase).filter((phase): phase is string => Boolean(phase)),
 	].filter((phase, index, all) => all.indexOf(phase) === index);
 
 	const summaries = names.map((name) => buildPhaseSummary(snapshot, name));
 	const unphased = snapshot.agents.filter((agent) => !agent.phase);
-	if (unphased.length > 0)
-		summaries.push(buildPhaseSummary(snapshot, undefined));
+	if (unphased.length > 0) summaries.push(buildPhaseSummary(snapshot, undefined));
 	return summaries.length > 0
 		? summaries
 		: [
@@ -133,10 +114,7 @@ export function phaseSummaries(
 			];
 }
 
-function buildPhaseSummary(
-	snapshot: WorkflowSnapshot,
-	name: string | undefined,
-): WorkflowPhaseSummary {
+function buildPhaseSummary(snapshot: WorkflowSnapshot, name: string | undefined): WorkflowPhaseSummary {
 	const agents = snapshot.agents.filter((agent) => agent.phase === name);
 	return {
 		name,
@@ -149,19 +127,10 @@ function buildPhaseSummary(
 	};
 }
 
-export function phaseStatus(
-	summary: WorkflowPhaseSummary,
-	currentPhase?: string,
-): WorkflowAgentStatus {
+export function phaseStatus(summary: WorkflowPhaseSummary, currentPhase?: string): WorkflowAgentStatus {
 	if (summary.error > 0) return "error";
-	if (
-		summary.running > 0 ||
-		summary.queued > 0 ||
-		currentPhase === summary.name
-	)
-		return "running";
-	if (summary.agents.length > 0 && summary.done === summary.agents.length)
-		return "done";
+	if (summary.running > 0 || summary.queued > 0 || currentPhase === summary.name) return "running";
+	if (summary.agents.length > 0 && summary.done === summary.agents.length) return "done";
 	return "queued";
 }
 

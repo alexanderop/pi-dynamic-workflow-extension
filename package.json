@@ -1,7 +1,22 @@
 {
 	"name": "pi-dynamic-workflow-extension",
-	"version": "0.1.12",
+	"version": "0.1.15",
 	"description": "Pi extension that runs dynamic JavaScript workflows with isolated subagents and live progress rendering.",
+	"keywords": [
+		"agents",
+		"pi",
+		"pi-package",
+		"subagents",
+		"workflow"
+	],
+	"license": "MIT",
+	"files": [
+		"dist",
+		"extensions",
+		"src",
+		"types",
+		"README.md"
+	],
 	"type": "module",
 	"main": "./dist/src/index.js",
 	"types": "./dist/src/index.d.ts",
@@ -14,35 +29,28 @@
 			"types": "./types/workflow.d.ts"
 		}
 	},
-	"files": [
-		"dist",
-		"extensions",
-		"src",
-		"types",
-		"README.md"
-	],
-	"keywords": [
-		"pi-package",
-		"pi",
-		"workflow",
-		"agents",
-		"subagents"
-	],
-	"pi": {
-		"extensions": [
-			"extensions/workflow.ts"
-		]
-	},
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
-		"lint": "biome check .",
-		"check": "npm run lint",
-		"test:unit": "tsx --test tests/*.test.ts",
-		"test:e2e": "tsx --test tests/e2e/*.test.ts",
-		"test": "npm run check && npm run build && npm run test:unit && npm run test:e2e"
+		"lint": "biome check --error-on-warnings .",
+		"lint:fix": "biome check --write --error-on-warnings .",
+		"check": "npm run lint && tsc -p tsconfig.json --noEmit",
+		"test:unit": "vitest --run tests/*.test.ts",
+		"test:e2e": "vitest --run tests/e2e/*.test.ts",
+		"test": "npm run check && npm run build && vitest --run",
+		"test:suite": "vitest --run tests/suite/*.test.ts tests/suite/regressions/*.test.ts"
 	},
 	"dependencies": {
 		"acorn": "^8.16.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.16",
+		"@earendil-works/pi-ai": "^0.78.0",
+		"@earendil-works/pi-coding-agent": "^0.78.0",
+		"@earendil-works/pi-tui": "^0.78.0",
+		"@types/node": "^24.0.0",
+		"typebox": "*",
+		"typescript": "^5.9.3",
+		"vitest": "^3.2.4"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-ai": "^0.78.0",
@@ -50,18 +58,12 @@
 		"@earendil-works/pi-tui": "^0.78.0",
 		"typebox": "*"
 	},
-	"devDependencies": {
-		"@biomejs/biome": "^2.2.5",
-		"@earendil-works/pi-ai": "^0.78.0",
-		"@earendil-works/pi-coding-agent": "^0.78.0",
-		"@earendil-works/pi-tui": "^0.78.0",
-		"@types/node": "^24.0.0",
-		"tsx": "^4.20.6",
-		"typebox": "*",
-		"typescript": "^5.9.3"
-	},
 	"engines": {
 		"node": ">=22.19.0"
 	},
-	"license": "MIT"
+	"pi": {
+		"extensions": [
+			"extensions/workflow.ts"
+		]
+	}
 }

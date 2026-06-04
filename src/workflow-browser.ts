@@ -1,8 +1,5 @@
 import { type Component, Key, matchesKey } from "@earendil-works/pi-tui";
-import {
-	formatWorkflowArtifactSummary,
-	type WorkflowAgentSnapshot,
-} from "./display.js";
+import { formatWorkflowArtifactSummary, type WorkflowAgentSnapshot } from "./display.js";
 import type { WorkflowJob, WorkflowManager } from "./workflow-manager.js";
 import {
 	cell,
@@ -69,8 +66,7 @@ export class WorkflowBrowser implements Component {
 		const initialJobs = this.manager.getJobs();
 		this.nav.selectedJobIndex = Math.max(0, initialJobs.length - 1);
 		const initialJob = initialJobs[this.nav.selectedJobIndex];
-		if (initialJob)
-			this.nav.selectedPhaseIndex = this.activePhaseIndex(initialJob);
+		if (initialJob) this.nav.selectedPhaseIndex = this.activePhaseIndex(initialJob);
 		this.unsubscribe = this.manager.onChange(() => {
 			this.clampSelection();
 			this.updateTimer();
@@ -135,26 +131,11 @@ export class WorkflowBrowser implements Component {
 		const jobs = this.manager.getJobs();
 		const lines: string[] = [];
 
-		lines.push(
-			this.theme.fg(
-				"toolTitle",
-				this.theme.bold(fitLine("◆ Workflows", width)),
-			),
-		);
+		lines.push(this.theme.fg("toolTitle", this.theme.bold(fitLine("◆ Workflows", width))));
 
 		if (jobs.length === 0) {
-			lines.push(
-				this.theme.fg(
-					"muted",
-					fitLine("No workflows have been started in this session.", width),
-				),
-			);
-			lines.push(
-				this.theme.fg(
-					"dim",
-					fitLine("Run a workflow tool call, then reopen /workflows.", width),
-				),
-			);
+			lines.push(this.theme.fg("muted", fitLine("No workflows have been started in this session.", width)));
+			lines.push(this.theme.fg("dim", fitLine("Run a workflow tool call, then reopen /workflows.", width)));
 			return lines;
 		}
 
@@ -190,18 +171,11 @@ export class WorkflowBrowser implements Component {
 
 	private renderHeader(job: WorkflowJob, width: number): string[] {
 		const snapshot = job.snapshot;
-		const duration = formatDuration(
-			job.status === "running"
-				? Date.now() - job.startedAt
-				: snapshot.durationMs,
-		);
+		const duration = formatDuration(job.status === "running" ? Date.now() - job.startedAt : snapshot.durationMs);
 		const title = `${statusGlyph(job.status, this.frame)} #${job.id} ${job.name} — ${snapshot.doneCount}/${snapshot.agentCount} agents · ${job.status} · ${duration}`;
 		const status = snapshot.description ?? job.description ?? "Workflow status";
 		return [
-			this.theme.fg(
-				job.status === "error" ? "error" : "accent",
-				fitLine(title, width),
-			),
+			this.theme.fg(job.status === "error" ? "error" : "accent", fitLine(title, width)),
 			this.theme.fg("muted", fitLine(status, width)),
 		];
 	}
@@ -211,14 +185,8 @@ export class WorkflowBrowser implements Component {
 		const selected = jobs[selectedIndex];
 		if (!selected) return "";
 
-		const selectedChip = truncatePlainLine(
-			this.jobChip(selected),
-			Math.max(16, Math.floor(width * 0.5)),
-		);
-		const selectedLabel = this.theme.fg(
-			"accent",
-			this.theme.bold(`[${selectedChip}]`),
-		);
+		const selectedChip = truncatePlainLine(this.jobChip(selected), Math.max(16, Math.floor(width * 0.5)));
+		const selectedLabel = this.theme.fg("accent", this.theme.bold(`[${selectedChip}]`));
 		const hint = jobs.length > 1 ? "p/n or [/]/<> switch workflow · " : "";
 		const olderJob = jobs[selectedIndex - 1];
 		const newerJob = jobs[selectedIndex + 1];
@@ -242,12 +210,7 @@ export class WorkflowBrowser implements Component {
 		const phaseRows = this.renderPhasesPane(job, phaseWidth, height);
 		const agentRows = this.renderAgentsPane(agents, agentWidth, height);
 		const detailRows = this.renderDetailPane(job, detailWidth, height);
-		const rows = Math.max(
-			phaseRows.length,
-			agentRows.length,
-			detailRows.length,
-			1,
-		);
+		const rows = Math.max(phaseRows.length, agentRows.length, detailRows.length, 1);
 		const lines = [
 			this.theme.fg(
 				"muted",
@@ -283,9 +246,7 @@ export class WorkflowBrowser implements Component {
 			),
 		];
 		for (let i = 0; i < rows; i++) {
-			lines.push(
-				`${cell(leftRows[i] ?? "", leftWidth)} │ ${cell(detailRows[i] ?? "", detailWidth)}`,
-			);
+			lines.push(`${cell(leftRows[i] ?? "", leftWidth)} │ ${cell(detailRows[i] ?? "", detailWidth)}`);
 		}
 		return lines;
 	}
@@ -301,37 +262,18 @@ export class WorkflowBrowser implements Component {
 		return lines.map((item) => fitLine(item, width));
 	}
 
-	private renderPhasesPane(
-		job: WorkflowJob,
-		width: number,
-		height: number,
-	): string[] {
+	private renderPhasesPane(job: WorkflowJob, width: number, height: number): string[] {
 		const phases = phaseSummaries(job.snapshot);
-		return windowAround(phases, this.nav.selectedPhaseIndex, height).map(
-			([summary, index]) =>
-				this.phaseRow(
-					job,
-					summary,
-					index === this.nav.selectedPhaseIndex,
-					width,
-				),
+		return windowAround(phases, this.nav.selectedPhaseIndex, height).map(([summary, index]) =>
+			this.phaseRow(job, summary, index === this.nav.selectedPhaseIndex, width),
 		);
 	}
 
-	private phaseRow(
-		job: WorkflowJob,
-		summary: WorkflowPhaseSummary,
-		selected: boolean,
-		width: number,
-	): string {
+	private phaseRow(job: WorkflowJob, summary: WorkflowPhaseSummary, selected: boolean, width: number): string {
 		const prefix = selected ? "›" : " ";
 		const status = phaseStatus(summary, job.snapshot.currentPhase);
 		const running = summary.running + summary.queued;
-		const suffix = summary.error
-			? ` · ${summary.error} error`
-			: running
-				? ` · ${running} running`
-				: "";
+		const suffix = summary.error ? ` · ${summary.error} error` : running ? ` · ${running} running` : "";
 		const text = `${prefix} ${statusGlyph(status, this.frame)} ${summary.label} ${summary.done}/${summary.agents.length}${suffix}`;
 		return selected && this.nav.focus === "phases"
 			? this.theme.fg("accent", this.theme.bold(fitLine(text, width)))
@@ -340,23 +282,14 @@ export class WorkflowBrowser implements Component {
 				: fitLine(text, width);
 	}
 
-	private renderAgentsPane(
-		agents: WorkflowAgentSnapshot[],
-		width: number,
-		height: number,
-	): string[] {
+	private renderAgentsPane(agents: WorkflowAgentSnapshot[], width: number, height: number): string[] {
 		if (agents.length === 0) return ["No agents in phase"];
-		return windowAround(agents, this.nav.selectedAgentIndex, height).map(
-			([agent, index]) =>
-				this.agentRow(agent, index === this.nav.selectedAgentIndex, width),
+		return windowAround(agents, this.nav.selectedAgentIndex, height).map(([agent, index]) =>
+			this.agentRow(agent, index === this.nav.selectedAgentIndex, width),
 		);
 	}
 
-	private agentRow(
-		agent: WorkflowAgentSnapshot,
-		selected: boolean,
-		width: number,
-	): string {
+	private agentRow(agent: WorkflowAgentSnapshot, selected: boolean, width: number): string {
 		const prefix = selected ? "›" : " ";
 		const metrics = this.agentMetrics(agent);
 		const text = `${prefix} ${statusGlyph(agent.status, this.frame)} #${agent.id} ${agent.label}${metrics ? ` ${metrics}` : ""}`;
@@ -367,11 +300,7 @@ export class WorkflowBrowser implements Component {
 				: fitLine(text, width);
 	}
 
-	private renderDetailPane(
-		job: WorkflowJob,
-		width: number,
-		height: number,
-	): string[] {
+	private renderDetailPane(job: WorkflowJob, width: number, height: number): string[] {
 		const rows = this.detailRows(job);
 		const safeHeight = Math.max(1, height);
 		const maxScroll = Math.max(0, rows.length - safeHeight);
@@ -394,9 +323,7 @@ export class WorkflowBrowser implements Component {
 				`Workflow: ${job.name}`,
 				`Status: ${job.status}`,
 				`Agents: ${job.snapshot.doneCount}/${job.snapshot.agentCount}`,
-				...(result !== undefined
-					? ["Outcome", `  ${singleLine(JSON.stringify(result))}`]
-					: []),
+				...(result !== undefined ? ["Outcome", `  ${singleLine(JSON.stringify(result))}`] : []),
 				...(job.error ? ["Error", `  ${job.error}`] : []),
 				...this.artifactRows(job),
 			];
@@ -410,14 +337,9 @@ export class WorkflowBrowser implements Component {
 			...this.artifactRows(job),
 			"Prompt",
 			...this.promptRows(agent.prompt),
-			...(agent.activity?.length
-				? ["Activity", ...this.activityRows(agent)]
-				: []),
+			...(agent.activity?.length ? ["Activity", ...this.activityRows(agent)] : []),
 			...(agent.resultText || agent.resultPreview
-				? [
-						"Outcome",
-						`  ${singleLine(agent.resultText ?? agent.resultPreview)}`,
-					]
+				? ["Outcome", `  ${singleLine(agent.resultText ?? agent.resultPreview)}`]
 				: []),
 			...(agent.error ? ["Error", `  ${agent.error}`] : []),
 			...(job.result !== undefined && job.status !== "running"
@@ -430,12 +352,7 @@ export class WorkflowBrowser implements Component {
 	private artifactRows(job: WorkflowJob): string[] {
 		const artifacts = job.snapshot.artifacts ?? [];
 		if (artifacts.length === 0) return [];
-		return [
-			"Artifacts",
-			...artifacts.map(
-				(artifact) => `  ${formatWorkflowArtifactSummary(artifact)}`,
-			),
-		];
+		return ["Artifacts", ...artifacts.map((artifact) => `  ${formatWorkflowArtifactSummary(artifact)}`)];
 	}
 
 	private promptRows(prompt: string): string[] {
@@ -448,8 +365,7 @@ export class WorkflowBrowser implements Component {
 
 	private activityRows(agent: WorkflowAgentSnapshot): string[] {
 		return (agent.activity ?? []).slice(-8).map((item) => {
-			if (item.type === "tool")
-				return `  Tool: ${item.toolName ?? "tool"} ${item.argsPreview ?? ""}`;
+			if (item.type === "tool") return `  Tool: ${item.toolName ?? "tool"} ${item.argsPreview ?? ""}`;
 			return `  ${item.type}: ${item.text ?? ""}`;
 		});
 	}
@@ -466,14 +382,9 @@ export class WorkflowBrowser implements Component {
 	private agentMetrics(agent: WorkflowAgentSnapshot): string {
 		const parts: string[] = [];
 		if (agent.model) parts.push(agent.model);
-		const tokens = formatTokens(
-			agent.liveTokens ?? agent.inputTokens ?? agent.outputTokens,
-		);
+		const tokens = formatTokens(agent.liveTokens ?? agent.inputTokens ?? agent.outputTokens);
 		if (tokens) parts.push(`${tokens} tok`);
-		const tools =
-			agent.toolCount ??
-			agent.activity?.filter((item) => item.type === "tool").length ??
-			0;
+		const tools = agent.toolCount ?? agent.activity?.filter((item) => item.type === "tool").length ?? 0;
 		parts.push(`${tools} tools`);
 		const elapsed = this.agentElapsed(agent);
 		if (elapsed) parts.push(elapsed);
@@ -506,20 +417,14 @@ export class WorkflowBrowser implements Component {
 		if (!job) return;
 		if (this.nav.focus === "phases") {
 			const phases = phaseSummaries(job.snapshot);
-			this.nav.selectedPhaseIndex = clampIndex(
-				this.nav.selectedPhaseIndex + delta,
-				phases.length,
-			);
+			this.nav.selectedPhaseIndex = clampIndex(this.nav.selectedPhaseIndex + delta, phases.length);
 			this.nav.selectedAgentIndex = 0;
 			this.nav.detailScroll = 0;
 			return;
 		}
 		if (this.nav.focus === "agents") {
 			const agents = this.filteredAgents(job);
-			this.nav.selectedAgentIndex = clampIndex(
-				this.nav.selectedAgentIndex + delta,
-				agents.length,
-			);
+			this.nav.selectedAgentIndex = clampIndex(this.nav.selectedAgentIndex + delta, agents.length);
 			this.nav.detailScroll = 0;
 			return;
 		}
@@ -530,15 +435,12 @@ export class WorkflowBrowser implements Component {
 		const job = this.currentJob();
 		if (!job) return;
 		if (this.nav.focus === "phases") {
-			this.nav.selectedPhaseIndex =
-				position === "start" ? 0 : phaseSummaries(job.snapshot).length - 1;
+			this.nav.selectedPhaseIndex = position === "start" ? 0 : phaseSummaries(job.snapshot).length - 1;
 			this.nav.selectedAgentIndex = 0;
 		} else if (this.nav.focus === "agents") {
-			this.nav.selectedAgentIndex =
-				position === "start" ? 0 : this.filteredAgents(job).length - 1;
+			this.nav.selectedAgentIndex = position === "start" ? 0 : this.filteredAgents(job).length - 1;
 		} else {
-			this.nav.detailScroll =
-				position === "start" ? 0 : Number.MAX_SAFE_INTEGER;
+			this.nav.detailScroll = position === "start" ? 0 : Number.MAX_SAFE_INTEGER;
 		}
 	}
 
@@ -554,13 +456,9 @@ export class WorkflowBrowser implements Component {
 
 	private activePhaseIndex(job: WorkflowJob): number {
 		const phases = phaseSummaries(job.snapshot);
-		const currentIndex = phases.findIndex(
-			(phase) => phase.name === job.snapshot.currentPhase,
-		);
+		const currentIndex = phases.findIndex((phase) => phase.name === job.snapshot.currentPhase);
 		if (currentIndex >= 0) return currentIndex;
-		const runningIndex = phases.findIndex(
-			(phase) => phase.running > 0 || phase.queued > 0,
-		);
+		const runningIndex = phases.findIndex((phase) => phase.running > 0 || phase.queued > 0);
 		return runningIndex >= 0 ? runningIndex : 0;
 	}
 
@@ -578,28 +476,17 @@ export class WorkflowBrowser implements Component {
 			this.nav.detailScroll = 0;
 			return;
 		}
-		this.nav.selectedJobIndex = clampIndex(
-			this.nav.selectedJobIndex,
-			jobs.length,
-		);
+		this.nav.selectedJobIndex = clampIndex(this.nav.selectedJobIndex, jobs.length);
 		const job = jobs[this.nav.selectedJobIndex];
 		const phases = job ? phaseSummaries(job.snapshot) : [];
-		this.nav.selectedPhaseIndex = clampIndex(
-			this.nav.selectedPhaseIndex,
-			phases.length,
-		);
+		this.nav.selectedPhaseIndex = clampIndex(this.nav.selectedPhaseIndex, phases.length);
 		const agents = job ? this.filteredAgents(job) : [];
-		this.nav.selectedAgentIndex = clampIndex(
-			this.nav.selectedAgentIndex,
-			agents.length,
-		);
+		this.nav.selectedAgentIndex = clampIndex(this.nav.selectedAgentIndex, agents.length);
 		this.nav.detailScroll = Math.max(0, this.nav.detailScroll);
 	}
 
 	private updateTimer(): void {
-		const running = this.manager
-			.getJobs()
-			.some((job) => job.status === "running");
+		const running = this.manager.getJobs().some((job) => job.status === "running");
 		if (!running || this.closed) {
 			if (this.timer) clearInterval(this.timer);
 			this.timer = undefined;

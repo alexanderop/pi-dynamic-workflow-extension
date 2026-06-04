@@ -1,24 +1,16 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import type { WorkflowAgentLike, WorkflowSnapshot } from "../src/index.js";
+import { test } from "vitest";
+import type { WorkflowAgentLike, WorkflowSnapshot } from "../../src/index.js";
 import {
 	buildWorkflowToolBackgroundStartMessage,
 	WORKFLOW_TOOL_BACKGROUND_FOLLOWUP_INSTRUCTION,
-} from "../src/prompts/workflow-tool.js";
-import {
-	createWorkflowTool,
-	normalizeWorkflowToolArgs,
-} from "../src/workflow-tool.js";
+} from "../../src/prompts/workflow-tool.js";
+import { createWorkflowTool, normalizeWorkflowToolArgs } from "../../src/workflow-tool.js";
 
 test("normalizeWorkflowToolArgs accepts legacy raw string", () => {
-	assert.deepEqual(
-		normalizeWorkflowToolArgs(
-			"export const meta = { name: 'x', description: 'y' }",
-		),
-		{
-			script: "export const meta = { name: 'x', description: 'y' }",
-		},
-	);
+	assert.deepEqual(normalizeWorkflowToolArgs("export const meta = { name: 'x', description: 'y' }"), {
+		script: "export const meta = { name: 'x', description: 'y' }",
+	});
 });
 
 test("foreground workflow tool treats a successful null agent result as done", async () => {
@@ -52,9 +44,7 @@ test("foreground workflow tool exposes artifacts in live and completion snapshot
 	const agent: WorkflowAgentLike = {
 		async run(prompt: string): Promise<string> {
 			assert.ok(
-				updates.some(
-					(snapshot) => snapshot.artifacts?.[0]?.name === "review.md",
-				),
+				updates.some((snapshot) => snapshot.artifacts?.[0]?.name === "review.md"),
 				"expected an artifact update before the agent completed",
 			);
 			return `done:${prompt}`;
@@ -96,9 +86,7 @@ test("workflow tool has explicit prompt guidelines", () => {
 	const normalizedGuideline = guideline.toLowerCase();
 	assert.match(guideline, /workflow/);
 	assert.ok(normalizedGuideline.includes("workflow overview"));
-	assert.ok(
-		guideline.includes("deterministic JavaScript orchestration script"),
-	);
+	assert.ok(guideline.includes("deterministic JavaScript orchestration script"));
 	assert.ok(normalizedGuideline.includes("workflow script contract"));
 	assert.ok(normalizedGuideline.includes("do not poll"));
 	assert.ok(guideline.includes("yield control"));
@@ -126,9 +114,7 @@ test("background workflow start message tells the agent to stay idle", () => {
 		id: 7,
 	});
 
-	assert.ok(
-		WORKFLOW_TOOL_BACKGROUND_FOLLOWUP_INSTRUCTION.includes("yield control"),
-	);
+	assert.ok(WORKFLOW_TOOL_BACKGROUND_FOLLOWUP_INSTRUCTION.includes("yield control"));
 	assert.ok(message.includes("Workflow demo started in the background as #7"));
 	assert.ok(message.includes("stay idle"));
 	assert.ok(message.includes("resume only"));

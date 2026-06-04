@@ -1,7 +1,4 @@
-import {
-	defineTool,
-	type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type TSchema, Type } from "typebox";
 import {
 	STRUCTURED_OUTPUT_ANY_SCHEMA_DESCRIPTION,

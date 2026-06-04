@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
 	createInMemoryWorkflowJournal,
 	runWorkflow,
 	type WorkflowAgentLike,
 	type WorkflowArtifact,
-} from "../src/workflow.js";
+} from "../../src/workflow.js";
 
 const fakeAgent: WorkflowAgentLike = {
 	async run(prompt: string): Promise<string> {
@@ -13,19 +13,13 @@ const fakeAgent: WorkflowAgentLike = {
 	},
 };
 
-async function rejectIfStillPending<T>(
-	promise: Promise<T>,
-	ms: number,
-): Promise<T> {
+async function rejectIfStillPending<T>(promise: Promise<T>, ms: number): Promise<T> {
 	let timer: NodeJS.Timeout | undefined;
 	try {
 		return await Promise.race([
 			promise,
 			new Promise<never>((_, reject) => {
-				timer = setTimeout(
-					() => reject(new Error(`promise still pending after ${ms}ms`)),
-					ms,
-				);
+				timer = setTimeout(() => reject(new Error(`promise still pending after ${ms}ms`)), ms);
 			}),
 		]);
 	} finally {
@@ -145,8 +139,7 @@ test("runWorkflow rejects invalid artifact registrations", async () => {
 		},
 		{
 			name: "cyclic_artifact",
-			statement:
-				"const value = {}; value.self = value; artifact('cycle.json', value)",
+			statement: "const value = {}; value.self = value; artifact('cycle.json', value)",
 			expected: /artifact value must be JSON-serializable/i,
 		},
 		{
@@ -233,19 +226,13 @@ return { count: findings.findings.length, summary: findings.summary }
 	);
 
 	assert.deepEqual(result.result, { count: 0, summary: "ok" });
-	assert.deepEqual(
-		JSON.parse(JSON.stringify(seenOptions?.schema)),
-		expectedSchema,
-	);
+	assert.deepEqual(JSON.parse(JSON.stringify(seenOptions?.schema)), expectedSchema);
 	const instructions = seenOptions?.instructions ?? "";
 	assert.match(instructions, /structured_output/);
 	assert.match(instructions, /parent workflow only receives/i);
 	assert.match(instructions, /Do not finish with plain prose/);
 	assert.match(instructions, /Do not wrap the result in markdown/);
-	assert.match(
-		instructions,
-		/Do not call structured_output until you have completed the task/,
-	);
+	assert.match(instructions, /Do not call structured_output until you have completed the task/);
 });
 
 test("runWorkflow treats a present null schema as a structured-output request", async () => {
@@ -279,11 +266,7 @@ return out
 		{ agent: fakeAgent, concurrency: 2 },
 	);
 
-	assert.deepEqual(result.result, [
-		"result:check a",
-		"result:check b",
-		"result:check c",
-	]);
+	assert.deepEqual(result.result, ["result:check a", "result:check b", "result:check c"]);
 	assert.equal(result.agentCount, 3);
 });
 
@@ -300,10 +283,7 @@ return out
 		{ agent: fakeAgent, concurrency: 2 },
 	);
 
-	assert.deepEqual(result.result, [
-		"result:summarize a: result:inspect a",
-		"result:summarize b: result:inspect b",
-	]);
+	assert.deepEqual(result.result, ["result:summarize a: result:inspect a", "result:summarize b: result:inspect b"]);
 });
 
 test("runWorkflow rejects when an agent throws", async () => {
@@ -376,10 +356,7 @@ await new Promise(() => {})
 
 	setTimeout(() => controller.abort(), 5);
 
-	await assert.rejects(
-		() => rejectIfStillPending(run, 100),
-		/Workflow was aborted/,
-	);
+	await assert.rejects(() => rejectIfStillPending(run, 100), /Workflow was aborted/);
 });
 
 test("runWorkflow rejects when timeoutMs expires during an async script that never resolves", async () => {
@@ -390,10 +367,7 @@ await new Promise(() => {})
 		{ timeoutMs: 5 },
 	);
 
-	await assert.rejects(
-		() => rejectIfStillPending(run, 100),
-		/Workflow timed out after 5ms/,
-	);
+	await assert.rejects(() => rejectIfStillPending(run, 100), /Workflow timed out after 5ms/);
 });
 
 test("runWorkflow does not replay a failed agent as a cached null result", async () => {
@@ -411,10 +385,7 @@ test("runWorkflow does not replay a failed agent as a cached null result", async
 return await agent('inspect')
 `;
 
-	await assert.rejects(
-		() => runWorkflow(script, { agent, journal }),
-		/transient/,
-	);
+	await assert.rejects(() => runWorkflow(script, { agent, journal }), /transient/);
 	fail = false;
 	const result = await runWorkflow(script, { agent, journal });
 
@@ -455,10 +426,7 @@ test("runWorkflow rejects Date.now aliases at runtime", async () => {
 		{ name: "global_date", body: "return globalThis.Date.now()" },
 	]) {
 		await assert.rejects(
-			() =>
-				runWorkflow(
-					`export const meta = { name: '${item.name}', description: 'demo' }\n${item.body}\n`,
-				),
+			() => runWorkflow(`export const meta = { name: '${item.name}', description: 'demo' }\n${item.body}\n`),
 			/workflow scripts must be deterministic.*Date\.now/s,
 		);
 	}
@@ -476,10 +444,7 @@ test("runWorkflow blocks constructor attempts to access the host process", async
 		},
 	]) {
 		await assert.rejects(
-			() =>
-				runWorkflow(
-					`export const meta = { name: '${item.name}', description: 'demo' }\n${item.body}\n`,
-				),
+			() => runWorkflow(`export const meta = { name: '${item.name}', description: 'demo' }\n${item.body}\n`),
 			/constructor escape is not allowed|Code generation from strings disallowed|process is not defined/,
 		);
 	}
@@ -553,10 +518,7 @@ return await agent('inspect')
 				),
 			/agent result must be JSON-serializable/,
 		);
-		assert.match(
-			agentError?.message ?? "",
-			/agent result must be JSON-serializable/,
-		);
+		assert.match(agentError?.message ?? "", /agent result must be JSON-serializable/);
 	}
 });
 
