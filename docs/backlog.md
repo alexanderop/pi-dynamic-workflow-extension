@@ -431,6 +431,15 @@ Spec coverage:
 - §10 Scheduling.
 - §20 acceptance criteria 8, 10, and 20 partially.
 
+Status: implemented for fake agents. `WorkflowAgentScheduler` enforces the
+recommended default concurrency cap (`min(16, max(1, cpuCores - 2))`), supports
+overrides for concurrency and total-agent caps, starts queued agents in FIFO
+order, updates agent progress rows through queued/running/done/failed/stopped
+states, and the pure runtime now routes `agent()` calls through the scheduler.
+Queued and running fake agents can be stopped through `stopAgent()`, with running
+agents receiving an abort signal. Controller/UI stop wiring remains for Slice
+6.2, and live Pi subagent execution remains for Epic 7.
+
 ## Epic 3: Launcher, Script Evaluation, And Persistence
 
 Goal: launch a workflow in the background and persist enough state to observe it.

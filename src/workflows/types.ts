@@ -48,6 +48,7 @@ export interface WorkflowRuntimeState {
     prompt: string;
     options: AgentOptions;
   }>;
+  workflowProgress: WorkflowProgressEntry[];
   result?: unknown;
 }
 

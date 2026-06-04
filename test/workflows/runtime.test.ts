@@ -90,6 +90,41 @@ return m.random();
       error: { _tag: "WorkflowRuntimeError", message: "boom" },
     });
   });
+
+  it("should route workflow agent calls through the scheduler cap and expose progress rows", async () => {
+    let running = 0;
+    let peak = 0;
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "scheduled-agents" },
+        body: `
+return await parallel([
+  () => agent("first", { label: "one" }),
+  () => agent("second", { label: "two" }),
+  () => agent("third", { label: "three" }),
+]);
+`,
+      }),
+      {
+        maxConcurrentAgents: 1,
+        agentRunner: async (prompt) => {
+          running += 1;
+          peak = Math.max(peak, running);
+          await delay(5);
+          running -= 1;
+          return `done:${prompt}`;
+        },
+      },
+    );
+
+    expect(state.result).toEqual(["done:first", "done:second", "done:third"]);
+    expect(peak).toBe(1);
+    expect(state.workflowProgress).toMatchObject([
+      { type: "workflow_agent", label: "one", state: "done", resultPreview: "done:first" },
+      { type: "workflow_agent", label: "two", state: "done", resultPreview: "done:second" },
+      { type: "workflow_agent", label: "three", state: "done", resultPreview: "done:third" },
+    ]);
+  });
 });
 
 describe("parallel", () => {

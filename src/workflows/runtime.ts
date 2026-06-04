@@ -1,11 +1,14 @@
 import vm from "node:vm";
 import { parseWorkflowScript } from "./parser.ts";
 import { err, ok, type Result } from "./result.ts";
+import { WorkflowAgentScheduler } from "./scheduler.ts";
 import type { AgentOptions, WorkflowBudget, WorkflowRuntimeState } from "./types.ts";
 
 export interface WorkflowRuntimeOptions {
   args?: unknown;
   budgetTotal?: number | null;
+  maxConcurrentAgents?: number;
+  maxTotalAgents?: number;
   agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;
 }
 
@@ -18,6 +21,12 @@ export async function runWorkflowScript(
   const logs: string[] = [];
   const agentCalls: WorkflowRuntimeState["agentCalls"] = [];
   let spentTokens = 0;
+  const scheduler = new WorkflowAgentScheduler({
+    maxConcurrent: options.maxConcurrentAgents,
+    maxTotalAgents: options.maxTotalAgents,
+    runner: async ({ prompt, options: agentOptions }) =>
+      await (options.agentRunner ?? defaultAgentRunner)(prompt, agentOptions),
+  });
 
   const budget: WorkflowBudget = {
     total: options.budgetTotal ?? null,
@@ -29,7 +38,7 @@ export async function runWorkflowScript(
   const agent = async (prompt: string, agentOptions: AgentOptions = {}) => {
     if (typeof prompt !== "string") throw new TypeError("agent(prompt) requires a string prompt.");
     agentCalls.push({ prompt, options: agentOptions });
-    const result = await (options.agentRunner ?? defaultAgentRunner)(prompt, agentOptions);
+    const result = await scheduler.schedule(prompt, agentOptions);
     spentTokens += estimateTokens(prompt, result);
     return result;
   };
@@ -61,6 +70,7 @@ export async function runWorkflowScript(
     phases,
     logs,
     agentCalls,
+    workflowProgress: [...phases, ...scheduler.progress()],
     result,
   };
 }
