@@ -32,7 +32,8 @@ Defaults:
 - Do not overwrite an existing tag.
 - Do not force-push.
 - Do not delete tags or releases.
-- Ask before continuing only when there is an ambiguity that could publish the wrong thing, such as being on a non-`main` branch, a conflicting existing tag/release, or unclear version arguments.
+- Do not create or publish a tag unless `package.json` and the root `package-lock.json` package version both equal the tag version without the leading `v`.
+- Ask before continuing only when there is an ambiguity that could publish the wrong thing, such as being on a non-`main` branch, a conflicting existing tag/release, unclear version arguments, or package metadata that cannot be safely synchronized to the latest tag/version.
 
 ## Release workflow
 
@@ -61,10 +62,24 @@ git pull --ff-only origin main
 
 ### 2. Determine the next version
 
-Read `package.json` and the latest semver tag.
+Read `package.json`, `package-lock.json`, and the latest semver tag.
+
+Before choosing the next release version, synchronize package metadata with the current latest tag:
+
+- Let `latest_tag_version` be the latest semver tag without the leading `v`.
+- If a latest semver tag exists and `package.json` or the root `package-lock.json` package entry does not equal `latest_tag_version`, update package metadata with:
+
+```bash
+npm version latest_tag_version --no-git-tag-version
+```
+
+- Re-read `package.json` and `package-lock.json` after synchronization and confirm both report `latest_tag_version`.
+- If synchronization would overwrite unrelated user changes or the right latest tag is ambiguous, stop and ask.
+
+Then determine the next release version:
 
 - If the user supplied `vX.Y.Z` or `X.Y.Z`, use exactly that version.
-- If the user supplied `major`, `minor`, or `patch`, bump from `package.json`'s current version.
+- If the user supplied `major`, `minor`, or `patch`, bump from the synchronized `package.json` current version.
 - If no bump is supplied, use `patch`.
 
 The tag is always `v<version>`.
@@ -91,7 +106,13 @@ npm version patch --no-git-tag-version
 npm version 0.1.7 --no-git-tag-version
 ```
 
-After this, confirm `package.json` reports the intended version.
+After this, confirm all package metadata reports the intended version:
+
+```bash
+node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if (p.version !== 'X.Y.Z' || l.version !== 'X.Y.Z' || l.packages[''].version !== 'X.Y.Z') process.exit(1)"
+```
+
+Do not continue to tests, commit, tag, push, or GitHub Release creation until `package.json`, `package-lock.json`, and `package-lock.json`'s root package entry all equal the intended tag version without the leading `v`.
 
 ### 4. Test
 

@@ -108,6 +108,136 @@ The extension registers two Pi entry points:
 
 When the tool is called from the installed extension, it does **not** await the whole workflow before returning. Instead, it parses and validates the script, creates a background job in a shared `WorkflowManager`, returns immediately to Pi, and lets the workflow keep running. The `/workflows` command reads that same manager, so you can close and reopen the dashboard without losing the run state.
 
+### Agent orchestration at a glance
+
+```text
+┌────────────┐
+│   User     │
+└─────┬──────┘
+      │ "quick workflow fix X"
+      v
+┌────────────────────┐
+│ Pi main agent      │
+│ normal chat agent  │
+└─────┬──────────────┘
+      │ calls tool: workflow({ script })
+      v
+┌────────────────────┐
+│ workflow tool      │
+└─────┬──────────────┘
+      │ starts background job
+      v
+┌────────────────────┐
+│ WorkflowManager    │
+│ job #1 running     │
+└─────┬──────────────┘
+      │ runs deterministic JS script
+      v
+┌────────────────────┐
+│ Workflow VM        │
+│ phase/agent/etc    │
+└─────┬──────────────┘
+      │ creates isolated subagents
+      v
+┌──────────────────────────────────────────────┐
+│ Subagents                                    │
+│                                              │
+│ ┌─────────────┐ ┌─────────────┐ ┌──────────┐ │
+│ │ agent A     │ │ agent B     │ │ agent C  │ │
+│ │ inspect     │ │ test/review │ │ verify   │ │
+│ └─────────────┘ └─────────────┘ └──────────┘ │
+└──────────────────────────────────────────────┘
+      │ results fan back in
+      v
+┌────────────────────┐
+│ Workflow VM        │
+│ synthesize result  │
+└─────┬──────────────┘
+      v
+┌────────────────────┐
+│ WorkflowManager    │
+│ job #1 done/error  │
+└─────┬──────────────┘
+      │ sends workflow-completion
+      v
+┌────────────────────┐
+│ Pi main agent      │
+│ summarizes outcome │
+└────────────────────┘
+```
+
+A typical fan-out/fan-in workflow looks like this:
+
+```text
+Workflow script
+      |
+      v
+phase("Map")
+      |
+      +-------------------+-------------------+
+      |                   |                   |
+      v                   v                   v
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│ subagent 1  │     │ subagent 2  │     │ subagent 3  │
+│ read src    │     │ read tests  │     │ read docs   │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       |                   |                   |
+       +-------------------+-------------------+
+                           |
+                           v
+                    phase("Verify")
+                           |
+                           v
+                  ┌─────────────────┐
+                  │ verifier agent  │
+                  └────────┬────────┘
+                           |
+                           v
+                  phase("Synthesize")
+                           |
+                           v
+                  ┌─────────────────┐
+                  │ summary agent   │
+                  └────────┬────────┘
+                           |
+                           v
+                    return JSON result
+```
+
+The live `/workflows` dashboard is another view over the same shared manager:
+
+```text
+                 ┌────────────────────┐
+                 │ /workflows command │
+                 └─────────┬──────────┘
+                           │ reads same manager
+                           v
+┌─────────────────────────────────────────────────────┐
+│ WorkflowBrowser TUI                                 │
+│                                                     │
+│ Job #1: running                                     │
+│ ├─ Phase: Map                                       │
+│ │  ├─ agent: inspect files                          │
+│ │  └─ agent: inspect tests                          │
+│ ├─ Phase: Verify                                    │
+│ │  └─ agent: adversarial reviewer                   │
+│ └─ Phase: Synthesize                                │
+│    └─ agent: final report                           │
+│                                                     │
+│ keys: c cancel · s save · r rerun · R resume        │
+└─────────────────────────────────────────────────────┘
+```
+
+In short:
+
+```text
+Main agent      = conductor starter
+Workflow script = deterministic plan
+Subagents       = isolated workers
+WorkflowManager = job/state/persistence owner
+/workflows      = live window into the manager
+```
+
 Project workflow runs are persisted under `.pi/workflows` in the current project. Globally saved reusable workflow commands are stored under `~/.pi/agent/workflows`.
 
 Internally:
