@@ -11,10 +11,10 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "fmt": "oxfmt package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test .pi/workflows/scripts",
-    "fmt:check": "oxfmt --check package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test .pi/workflows/scripts",
-    "lint": "oxlint src test .pi/workflows/scripts",
-    "lint:fix": "oxlint --fix src test .pi/workflows/scripts",
+    "fmt": "oxfmt package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test tools .pi/workflows/scripts",
+    "fmt:check": "oxfmt --check package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test tools .pi/workflows/scripts",
+    "lint": "oxlint src test tools .pi/workflows/scripts",
+    "lint:fix": "oxlint --fix src test tools .pi/workflows/scripts",
     "test": "vitest --run"
   },
   "dependencies": {

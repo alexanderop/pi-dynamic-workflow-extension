@@ -7,5 +7,14 @@
   "env": {
     "node": true
   },
-  "ignorePatterns": ["node_modules/**", "repos/**", ".pnpm-store/**", ".pi/workflows/wf_*/**"]
+  "ignorePatterns": ["node_modules/**", "repos/**", ".pnpm-store/**", ".pi/workflows/wf_*/**"],
+  "jsPlugins": ["./tools/oxlint-plugin-local.js"],
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.spec.ts"],
+      "rules": {
+        "local/test-name-should": "error"
+      }
+    }
+  ]
 }

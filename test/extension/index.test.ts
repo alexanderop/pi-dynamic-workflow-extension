@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import dynamicWorkflowExtension from "../../src/extension/index.ts";
 
 describe("dynamicWorkflowExtension", () => {
-  it("registers the workflows command", () => {
+  it("should register the workflows command when extension loads", () => {
     const registerCommand = vi.fn();
 
     dynamicWorkflowExtension({

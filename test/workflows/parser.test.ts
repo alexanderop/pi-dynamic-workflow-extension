@@ -7,7 +7,7 @@ import {
 import { invalidWorkflowScript, workflowScript } from "./workflow-factory.ts";
 
 describe("parseWorkflowScript", () => {
-  it("extracts literal meta and executable body", () => {
+  it("should extract literal meta and executable body when script starts with exported meta", () => {
     const parsed = parseWorkflowScript(
       workflowScript({
         meta: {
@@ -33,7 +33,7 @@ return "done";
     expect(parsed.body).toContain('phase("Scan")');
   });
 
-  it("requires meta as the first statement", () => {
+  it("should require meta as the first statement when script has code before exported meta", () => {
     expect(() =>
       parseWorkflowScript(
         workflowScript({
@@ -49,7 +49,7 @@ return before;
     ).toThrow(WorkflowParseError);
   });
 
-  it("rejects non-literal meta values", () => {
+  it("should reject non-literal meta values when exported meta uses dynamic expressions", () => {
     expect(() =>
       parseWorkflowScript(
         invalidWorkflowScript({
@@ -70,7 +70,7 @@ const name = "dynamic";
     ).toThrow(/literal/);
   });
 
-  it("rejects spreads, computed keys, and template interpolation in meta", () => {
+  it("should reject spreads, computed keys, and template interpolation when parsing workflow meta", () => {
     expect(() =>
       parseWorkflowScript(invalidWorkflowScript({ metaSource: '{ name: "spread", ...extra }' })),
     ).toThrow(/spreads/);
@@ -84,7 +84,7 @@ const name = "dynamic";
     ).toThrow(/literal/);
   });
 
-  it("rejects nondeterministic workflow primitives", () => {
+  it("should reject nondeterministic workflow primitives when parsing script body", () => {
     expect(() =>
       parseWorkflowScript(
         workflowScript({
@@ -119,7 +119,7 @@ return new Date();
     ).toThrow(/new Date/);
   });
 
-  it("can return parse errors as Result values", () => {
+  it("should return parse errors as Result values when workflow script is invalid", () => {
     const result = tryParseWorkflowScript("return null;");
 
     expect(result).toMatchObject({

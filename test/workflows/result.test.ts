@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { err, isErr, isOk, match, ok, tryPromise, tryResult } from "../../src/workflows/result.ts";
 
 describe("Result", () => {
-  it("represents success and error as return values", () => {
+  it("should represent success and error as return values when callers create Results", () => {
     const success = ok(42);
     const failure = err(new Error("boom"));
 
@@ -11,7 +11,7 @@ describe("Result", () => {
     expect(match(success, { ok: (value) => value + 1, err: () => 0 })).toBe(43);
   });
 
-  it("captures thrown sync and async failures with caller-defined error types", async () => {
+  it("should capture thrown sync and async failures when callers provide error mappers", async () => {
     const parsed = tryResult(
       () => JSON.parse("{"),
       (cause) => ({

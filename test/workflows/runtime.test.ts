@@ -8,7 +8,7 @@ import {
 import { workflowScript } from "./workflow-factory.ts";
 
 describe("runWorkflowScript", () => {
-  it("runs a simple workflow with fake agents, phases, logs, and args", async () => {
+  it("should capture workflow phases, logs, agent calls, and result when script runs with args", async () => {
     const state = await runWorkflowScript(
       workflowScript({
         meta: {
@@ -38,7 +38,7 @@ return { result };
     expect(state.result).toEqual({ result: "fake:Scan src" });
   });
 
-  it("does not expose process or require to workflow scripts", async () => {
+  it("should hide process and require when workflow script checks sandbox globals", async () => {
     await expect(
       runWorkflowScript(
         workflowScript({
@@ -51,7 +51,7 @@ return typeof process + ":" + typeof require;
     ).resolves.toMatchObject({ result: "undefined:undefined" });
   });
 
-  it("blocks nondeterminism even through runtime aliases", async () => {
+  it("should block nondeterminism when workflow script calls runtime aliases", async () => {
     await expect(
       runWorkflowScript(
         workflowScript({
@@ -77,7 +77,7 @@ return m.random();
     ).rejects.toThrow(/Math.random/);
   });
 
-  it("can return runtime failures as Result values", async () => {
+  it("should return runtime failures as Result values when workflow script throws", async () => {
     const result = await tryRunWorkflowScript(
       workflowScript({
         meta: { name: "runtime-failure" },
@@ -93,7 +93,7 @@ return m.random();
 });
 
 describe("parallel", () => {
-  it("preserves result order and resolves throwing thunks to null", async () => {
+  it("should preserve result order and resolve throwing thunks to null when tasks run in parallel", async () => {
     const result = await parallel([
       async () => {
         await delay(20);
@@ -108,13 +108,13 @@ describe("parallel", () => {
     expect(result).toEqual(["slow", "fast", null]);
   });
 
-  it("rejects already-started promises", async () => {
+  it("should reject already-started promises when parallel receives non-thunk inputs", async () => {
     await expect(parallel([Promise.resolve("started") as any])).rejects.toThrow(/thunks/);
   });
 });
 
 describe("pipeline", () => {
-  it("threads previous result, original item, and index through multiple stages", async () => {
+  it("should pass previous result, original item, and index when item moves through multiple stages", async () => {
     const result = await pipeline(
       ["a", "b"],
       async (_previous, item, index) => `${item}:${index}`,
@@ -125,7 +125,7 @@ describe("pipeline", () => {
     expect(result).toEqual(["a:0:A:done", "b:1:B:done"]);
   });
 
-  it("starts stage 2 for a completed item before slower item stage 1 finishes", async () => {
+  it("should start the next stage for a completed item when another item is still in an earlier stage", async () => {
     const events: string[] = [];
     const result = await pipeline(
       ["fast", "slow"],
@@ -144,7 +144,7 @@ describe("pipeline", () => {
     expect(events.indexOf("stage2:fast")).toBeLessThan(events.indexOf("stage1:slow"));
   });
 
-  it("drops a failed item to null and keeps other items running", async () => {
+  it("should drop a failed item to null and keep other items running when a stage throws", async () => {
     const result = await pipeline(
       ["ok", "fail"],
       async (_previous, item) => {

@@ -169,3 +169,28 @@ Map tests back to `spec.md` acceptance criteria:
 - Resume reuses completed results and reruns incomplete calls.
 - `/workflows` renders from run JSON without reading transcripts.
 - Terminal runs produce a task notification with an output file pointer.
+
+## Test Naming Convention
+
+Name tests from the behavior being protected:
+
+- Every `it(...)` name should start with `should` followed by an action verb.
+- Include the trigger, precondition, or error condition when it affects the behavior.
+- Use workflow and extension language from `spec.md` instead of implementation mechanics.
+- Describe user-visible or contract-visible outcomes, not private state updates.
+- Group related tests with `describe("when ...")` contexts when a file grows beyond a small set of direct contract checks.
+
+Preferred pattern:
+
+```ts
+describe("workflow runtime", () => {
+  describe("when workflow script starts", () => {
+    it("should write initial run state before agents are queued", () => {});
+  });
+});
+```
+
+`pnpm run lint` enforces only the first mechanical part of this convention for
+static `it(...)`, `it.only(...)`, `it.skip(...)`, `test(...)`, `test.only(...)`,
+and `test.skip(...)` names. It intentionally ignores dynamic test names and does
+not try to enforce subjective naming quality.
