@@ -114,7 +114,11 @@ Spec coverage:
 
 - Supports §12, §13, §17, and §18 by making implementation-specific mappings explicit.
 
-Status: pending.
+Status: partially done. ADRs exist for using ADRs, the parser/runtime strategy,
+and explicit workflow state machines. Remaining decisions still need ADRs for
+Pi-native storage layout, saved workflow locations, notification mechanism,
+stable key hashing inputs, structured-output retry count, and `agentType`
+mapping.
 
 ## Epic 0.5: First Thin Vertical Workflow
 
@@ -182,6 +186,11 @@ Spec coverage:
 - §18 Storage Layout.
 - §20 acceptance criterion 11.
 
+Status: implemented for project-local `.pi/workflows/<runId>/manifest.json`
+discovery. The store reads typed run-state manifests, normalizes the current
+exploratory manifest shape, skips invalid manifests during list operations, and
+does not require journals or transcripts for the overview read model.
+
 ### Slice 1.2: `/workflows` List Command
 
 User value: users can run `/workflows` and see existing workflow runs.
@@ -206,6 +215,12 @@ Spec coverage:
 
 - §12 Run State Model.
 - §20 acceptance criterion 11.
+
+Status: implemented as a non-interactive command that reads project-local
+`.pi/workflows/<runId>/manifest.json` files through `WorkflowRunStore`, renders
+an empty state, and summarizes run id, status, workflow name, agent count,
+duration, and manifest-provided output path without reading journals or
+transcripts.
 
 ### Slice 1.3: Custom TUI Viewer
 
@@ -263,6 +278,44 @@ Spec coverage:
 ## Epic 2: Pure Workflow Runtime Semantics
 
 Goal: implement the host API against fake agents before involving Pi sessions.
+
+### Slice 2.0: Workflow And Agent State Machines
+
+User value: workflow lifecycle edge cases are explicit before launcher,
+scheduler, persistence, and UI code start depending on them.
+
+Scope:
+
+- Add a run state machine for created, starting, running, pausing, paused,
+  resuming, completing, completed, failing, failed, stopping, and stopped.
+- Add an agent progress state machine for queued, running, done, failed, and
+  stopped.
+- Keep `/workflows` UI navigation as a separate future state machine.
+- Return typed transition errors through the local `Result<T, E>` pattern.
+- Document the decision in an ADR.
+
+Tests:
+
+- Run start, pause, resume, and completion transitions.
+- Invalid run transitions return typed errors.
+- Completed, failed, and stopped runs are terminal.
+- Run failure path records failures and terminal duration.
+- Agent queued/running/done transition.
+- Late agent results after stop are rejected.
+- Failed or stopped agents can restart with a new attempt and new agent id.
+
+Dependencies:
+
+- Slice 0.3 in partial form.
+
+Spec coverage:
+
+- §12 Run State Model.
+- §16 Controller Operations.
+- §20 acceptance criteria 10, 11, 13, 14, and 15 in pure state-machine form.
+
+Status: implemented with pure transition functions and ADR 0003. Not wired into
+launcher, scheduler, persistence, journal replay, or `/workflows` UI yet.
 
 ### Slice 2.1: Runtime Types And Host API Skeleton
 

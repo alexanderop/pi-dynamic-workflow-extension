@@ -1,13 +1,62 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { join } from "node:path";
+import { WorkflowRunStore } from "../workflows/run-store.ts";
+import type { WorkflowRunState } from "../workflows/types.ts";
 
 export default function dynamicWorkflowExtension(pi: ExtensionAPI) {
   pi.registerCommand("workflows", {
     description: "Show dynamic workflow runs",
     handler: async (_args, ctx) => {
-      ctx.ui.notify(
-        "Dynamic workflows are not implemented yet. This package currently provides the scaffold.",
-        "info",
-      );
+      const store = new WorkflowRunStore({ rootDir: join(ctx.cwd, ".pi", "workflows") });
+      const result = await store.listRuns();
+
+      if (result.status === "error") {
+        ctx.ui.notify(`Could not read workflow runs: ${result.error.message}`, "error");
+        return;
+      }
+
+      ctx.ui.notify(formatWorkflowRuns(result.value), "info");
     },
   });
+}
+
+function formatWorkflowRuns(runs: WorkflowRunState[]): string {
+  if (runs.length === 0) return "No workflow runs found in .pi/workflows.";
+
+  return [
+    "Workflow runs",
+    "",
+    ...runs
+      .map((run) => formatWorkflowRun(run))
+      .join("\n\n")
+      .split("\n"),
+  ].join("\n");
+}
+
+function formatWorkflowRun(run: WorkflowRunState): string {
+  return [
+    run.runId,
+    `  Status: ${run.status}`,
+    `  Workflow: ${run.workflowName}`,
+    `  Agents: ${run.agentCount}`,
+    run.durationMs === undefined ? undefined : `  Duration: ${formatDuration(run.durationMs)}`,
+    run.outputPath === undefined ? undefined : `  Output: ${run.outputPath}`,
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n");
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${durationMs}ms`;
+
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds}s`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${minutes}m ${seconds}s`;
+
+  return `${hours}h ${remainingMinutes}m ${seconds}s`;
 }

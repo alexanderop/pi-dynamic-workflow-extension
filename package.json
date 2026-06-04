@@ -15,6 +15,7 @@
     "fmt:check": "oxfmt --check package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test tools .pi/workflows/scripts",
     "lint": "oxlint src test tools .pi/workflows/scripts",
     "lint:fix": "oxlint --fix src test tools .pi/workflows/scripts",
+    "pi": "pi --no-extensions -e .",
     "test": "vitest --run"
   },
   "dependencies": {

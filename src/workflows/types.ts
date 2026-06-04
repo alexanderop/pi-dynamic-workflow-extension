@@ -1,4 +1,16 @@
-export type WorkflowRunStatus = "running" | "paused" | "completed" | "failed" | "stopped";
+export type WorkflowRunStatus =
+  | "created"
+  | "starting"
+  | "running"
+  | "pausing"
+  | "paused"
+  | "resuming"
+  | "completing"
+  | "completed"
+  | "failing"
+  | "failed"
+  | "stopping"
+  | "stopped";
 
 export interface WorkflowPhase {
   title: string;
@@ -55,6 +67,7 @@ export interface WorkflowRunState {
   startTime: number;
   timestamp?: string;
   durationMs?: number;
+  outputPath?: string;
   result?: unknown;
   failures?: WorkflowFailure[];
 }

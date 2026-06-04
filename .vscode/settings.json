@@ -1,0 +1,18 @@
+{
+  "files.exclude": {
+    "**/.pnpm-store": true,
+    "**/node_modules": true
+  },
+  "files.watcherExclude": {
+    "**/.pnpm-store/**": true,
+    "**/node_modules/**": true
+  },
+  "git.repositoryScanIgnoredFolders": [
+    ".pnpm-store",
+    "node_modules"
+  ],
+  "search.exclude": {
+    "**/.pnpm-store": true,
+    "**/node_modules": true
+  }
+}

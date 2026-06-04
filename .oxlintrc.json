@@ -9,6 +9,7 @@
   },
   "ignorePatterns": ["node_modules/**", "repos/**", ".pnpm-store/**", ".pi/workflows/wf_*/**"],
   "jsPlugins": ["./tools/oxlint-plugin-local.js"],
+  "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "vitest"],
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/*.spec.ts"],
@@ -16,5 +17,14 @@
         "local/test-name-should": "error"
       }
     }
-  ]
+  ],
+  "rules": {
+    "eqeqeq": "error",
+    "no-implicit-coercion": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "no-throw-literal": "error",
+    "no-var": "error",
+    "prefer-const": "error"
+  }
 }

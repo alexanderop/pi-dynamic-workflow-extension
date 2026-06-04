@@ -425,6 +425,7 @@ interface WorkflowRunState {
   startTime: number;
   timestamp?: string;
   durationMs?: number;
+  outputPath?: string;
   defaultModel?: string;
   agentCount: number;
   totalTokens: number;
@@ -654,7 +655,7 @@ Requirements:
 
 ## 18. Storage Layout
 
-Use this layout:
+The Claude-like artifact layout is:
 
 ```text
 <claude-project-root>/
@@ -687,6 +688,36 @@ Saved workflows live outside run state:
 .claude/workflows/<workflowName>.js
 ~/.claude/workflows/<workflowName>.js
 ```
+
+Pi extension mapping:
+
+```text
+<pi-project-root>/
+  .pi/workflows/
+    <runId>/
+      manifest.json
+        Run state/read model for `/workflows`.
+
+      script.js
+        Exact script executed by this run.
+
+      journal.jsonl
+        Append-only resume/cache journal.
+
+      output.json
+        Full terminal workflow result.
+
+      transcripts/
+        Full subagent transcripts and metadata.
+
+  .pi/workflows/scripts/
+    <workflowName>.workflow.js
+      Project-local saved workflow scripts.
+```
+
+The Pi `/workflows` list view MUST read only `manifest.json` files. Journals,
+outputs, and transcripts are detailed/audit artifacts and MUST NOT be required
+to render the overview.
 
 ## 19. Security Requirements
 
