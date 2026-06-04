@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "node": true
+  },
+  "ignorePatterns": ["node_modules/**", "repos/**", ".pnpm-store/**", ".pi/workflows/wf_*/**"]
+}

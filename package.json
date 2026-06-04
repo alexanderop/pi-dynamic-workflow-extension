@@ -1,0 +1,45 @@
+{
+  "name": "pi-dynamic-workflow-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Pi package scaffold for Claude-Code-like dynamic workflows.",
+  "keywords": [
+    "pi-extension",
+    "pi-package",
+    "workflows"
+  ],
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "fmt": "oxfmt package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test .pi/workflows/scripts",
+    "fmt:check": "oxfmt --check package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test .pi/workflows/scripts",
+    "lint": "oxlint src test .pi/workflows/scripts",
+    "lint:fix": "oxlint --fix src test .pi/workflows/scripts",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "acorn": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "oxfmt": "^0.53.0",
+    "oxlint": "^1.68.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": [
+      "./src/extension/index.ts"
+    ]
+  }
+}
