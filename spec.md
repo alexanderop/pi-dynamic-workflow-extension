@@ -163,11 +163,22 @@ values would change the computed agent keys and break the journal cache. Pass
 timestamps in through `args` and stamp results after the workflow returns; vary
 per-iteration work by index rather than by random values.
 
-Saved workflow locations:
+Observed Claude Code saved workflow locations:
 
 - Project workflows: `.claude/workflows/*.js`
 - Personal workflows: `~/.claude/workflows/*.js`
 - If names conflict, project workflow wins.
+
+This Pi extension keeps the Claude-like lookup behavior but uses the Pi namespace
+shown in §18.
+
+Observed local artifacts include project saved workflows such as
+`<project>/.claude/workflows/webfetch-quality-audit.js` and personal saved
+workflows such as `~/.claude/workflows/deep-research2.js`. Most observed saved
+workflow file basenames match `meta.name`; one personal artifact has file
+basename `deep-research2.js` with `meta.name: 'deep-research'`, so command
+identity SHOULD come from `meta.name`, while filenames are lookup/storage
+details.
 
 ## 7. Runtime API
 
@@ -596,10 +607,13 @@ Saving a workflow copies only the executed script to a saved workflow location.
 
 Requirements:
 
-- Save to project scope:
+- Claude Code saves to project scope:
   `.claude/workflows/<meta.name>.js`
-- Save to personal scope:
+- Claude Code saves to personal scope:
   `~/.claude/workflows/<meta.name>.js`
+- This Pi extension maps those locations to:
+  `.pi/workflows/<meta.name>.js` and `~/.pi/workflows/<meta.name>.js`.
+- Observed local saved files are plain `.js` modules, not `.workflow.js` files.
 - Do not copy run JSON.
 - Do not copy journal files.
 - Do not copy transcripts.
@@ -701,7 +715,7 @@ The Claude-like artifact layout is:
         Minimal agent metadata.
 ```
 
-Saved workflows live outside run state:
+Observed Claude Code saved workflows live outside run state:
 
 ```text
 .claude/workflows/<workflowName>.js
@@ -729,9 +743,13 @@ Pi extension mapping:
       transcripts/
         Full subagent transcripts and metadata.
 
-  .pi/workflows/scripts/
-    <workflowName>.workflow.js
-      Project-local saved workflow scripts.
+  .pi/workflows/
+    <workflowName>.js
+      Project-local saved workflow scripts, using Claude-like plain `.js` files.
+
+~/.pi/workflows/
+  <workflowName>.js
+    Personal saved workflow scripts, using Claude-like plain `.js` files.
 ```
 
 The Pi `/workflows` list view MUST read only `manifest.json` files. Journals,

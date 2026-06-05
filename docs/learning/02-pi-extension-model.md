@@ -94,17 +94,14 @@ is the only registered command today. The launcher exists only as a module:
 src/workflows/launch/launcher.ts
 ```
 
-`launchWorkflow(request, options)` (`src/workflows/launch/launcher.ts:78`) accepts a
-`WorkflowLaunchRequest` with `script`, `name`, or `scriptPath` — but only the
-inline `script` source is implemented. The `name` and `scriptPath` sources
-return `WorkflowLaunchUnsupportedSourceError` today (`src/workflows/launch/launcher.ts:195-198`),
-so launch-by-name and launch-by-file do not work yet.
+`launchWorkflow(request, options)` accepts a `WorkflowLaunchRequest` with
+`script`, `name`, or `scriptPath`. Inline launch, saved workflow launch by name,
+and explicit script-path launch are implemented for fake-agent runs.
 
 Future extension work will likely add commands or tools that wrap the launcher.
 The exact command names are not decided; hypothetical examples could be a
-"run inline script" command plus a "run saved workflow" command once the `name`
-source is implemented. When that happens, the command layer should translate Pi
-context into `WorkflowLaunchOptions`, then delegate to
+"run inline script" command plus a "run saved workflow" command. The command
+layer should translate Pi context into `WorkflowLaunchOptions`, then delegate to
 `src/workflows/launch/launcher.ts`.
 
 ## Future rich UI

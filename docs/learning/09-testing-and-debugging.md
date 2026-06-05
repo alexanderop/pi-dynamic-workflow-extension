@@ -159,7 +159,7 @@ src/workflows/launch/launcher.ts
 
 Check the launch sequence (`launchWorkflow`, `launcher.ts:78`):
 
-1. select source (only the inline `script` source works today; `name` and `scriptPath` return `WorkflowLaunchUnsupportedSourceError`, `launcher.ts:195-198`)
+1. select source (`script`, saved workflow `name`, or explicit `scriptPath`)
 2. parse before touching disk (a parse error fails the launch and writes nothing)
 3. prepare run files (`rootDir/<runId>/script.js` and `transcripts/`)
 4. write initial manifest with `status: "running"`

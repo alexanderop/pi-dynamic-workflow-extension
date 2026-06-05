@@ -49,15 +49,14 @@ The code currently supports:
 - A real `agent()` scheduler enforcing concurrency and total-agent caps (`src/workflows/agent/scheduler.ts`); only the agent _runner_ it calls is fake/injected today.
 - `parallel()` and `pipeline()` runtime helpers.
 - Explicit run and agent state machines (`src/workflows/run/state-machine.ts`).
-- Inline workflow launch (from an inline `script` source only) with fake agents and manifest persistence (`src/workflows/launch/launcher.ts`).
+- Workflow launch from inline `script`, saved workflow `name`, or explicit `scriptPath` with fake agents and manifest persistence (`src/workflows/launch/launcher.ts`).
+- Journal-based resume for inline fake workflow launches.
+- Output files and testable terminal task-notification payloads.
 
 The code does **not** yet support:
 
 - Real Pi subagent sessions.
-- Journal-based resume.
-- Saved workflow launch by name.
-- Launch by script path.
-- Output files and terminal task notifications.
+- Pi `sendMessage()` notification wiring.
 - Rich interactive `/workflows` TUI.
 - Pause/resume/stop/restart controllers wired into UI.
 

@@ -2,6 +2,10 @@ import type { Result } from "../result.ts";
 import type { WorkflowFailure, WorkflowRunState } from "../run/model.ts";
 import type { WorkflowParseError } from "../script/parser.ts";
 import type { WorkflowRuntimeOptions } from "../script/model.ts";
+import type {
+  WorkflowSavedWorkflowError,
+  WorkflowSavedWorkflowLocations,
+} from "../saved/resolver.ts";
 
 export interface WorkflowLaunchRequest {
   readonly script?: string;
@@ -26,6 +30,7 @@ export interface WorkflowLaunchOptions {
   readonly budgetTotal?: number | null;
   readonly notifyTerminal?: WorkflowTerminalNotifier;
   readonly inlineResultMaxChars?: number;
+  readonly savedWorkflowDirs?: WorkflowSavedWorkflowLocations;
 }
 
 export interface WorkflowLaunch {
@@ -81,19 +86,13 @@ export interface WorkflowTaskNotificationDetails {
 
 export type WorkflowLaunchError =
   | WorkflowLaunchInvalidRequestError
-  | WorkflowLaunchUnsupportedSourceError
+  | WorkflowSavedWorkflowError
   | WorkflowLaunchParseError
   | WorkflowLaunchPersistenceError;
 
 export interface WorkflowLaunchInvalidRequestError {
   readonly _tag: "WorkflowLaunchInvalidRequestError";
   readonly message: string;
-}
-
-export interface WorkflowLaunchUnsupportedSourceError {
-  readonly _tag: "WorkflowLaunchUnsupportedSourceError";
-  readonly message: string;
-  readonly source: "name" | "scriptPath";
 }
 
 export interface WorkflowLaunchParseError {

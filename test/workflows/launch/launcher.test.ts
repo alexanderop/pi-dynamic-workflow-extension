@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,9 +11,18 @@ import {
   type WorkflowTaskNotification,
 } from "../../../src/workflows/launch/launcher.ts";
 import { WorkflowRunStore } from "../../../src/workflows/run/store.ts";
+import {
+  projectSavedWorkflowDir,
+  savedWorkflowPath,
+} from "../../../src/workflows/saved/resolver.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "../script/workflow-factory.ts";
 import { delay, pathExists, unwrap } from "../../support.ts";
+
+async function writeSavedWorkflow(dir: string, name: string, source: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await writeFile(savedWorkflowPath(dir, name), source, "utf8");
+}
 
 describe("launchWorkflow", () => {
   let tempDir: string;
@@ -46,21 +55,28 @@ describe("launchWorkflow", () => {
     });
   });
 
-  it("should return clear errors for saved workflow sources that are not implemented yet", async () => {
-    const byName = await launchWorkflow({ name: "saved-review" }, launchOptions());
+  it("should return clear errors for missing saved workflow sources before run storage is created", async () => {
+    const personalDir = join(tempDir, "home", ".pi", "workflows");
+    const byName = await launchWorkflow(
+      { name: "saved-review" },
+      launchOptions({
+        savedWorkflowDirs: { projectDir: projectSavedWorkflowDir(rootDir), personalDir },
+      }),
+    );
     const byPath = await launchWorkflow(
-      { scriptPath: join(tempDir, "review.workflow.js") },
+      { scriptPath: join(tempDir, "review.js") },
       launchOptions(),
     );
 
     expect(byName).toMatchObject({
       status: "error",
-      error: { _tag: "WorkflowLaunchUnsupportedSourceError", source: "name" },
+      error: { _tag: "WorkflowSavedWorkflowNotFoundError", name: "saved-review" },
     });
     expect(byPath).toMatchObject({
       status: "error",
-      error: { _tag: "WorkflowLaunchUnsupportedSourceError", source: "scriptPath" },
+      error: { _tag: "WorkflowSavedWorkflowReadError", path: join(tempDir, "review.js") },
     });
+    expect(await pathExists(rootDir)).toBe(false);
   });
 
   it("should reject nondeterministic inline scripts before run storage is created", async () => {
@@ -79,6 +95,92 @@ describe("launchWorkflow", () => {
       error: { _tag: "WorkflowLaunchParseError", message: expect.stringMatching(/Date\.now/) },
     });
     expect(await pathExists(rootDir)).toBe(false);
+  });
+
+  it("should launch a saved workflow by name from project scripts before personal scripts", async () => {
+    const projectScript = workflowScript({
+      meta: {
+        name: "review",
+        description: "Review source files",
+        phases: [{ title: "Review" }],
+      },
+      body: `
+phase("Review");
+const result = await agent("review " + args.target, { label: "review-agent", phase: "Review" });
+return { result };
+`,
+    });
+    const personalScript = workflowScript({
+      meta: { name: "review" },
+      body: "return await agent('personal workflow should not run');",
+    });
+    const personalDir = join(tempDir, "home", ".pi", "workflows");
+    await writeSavedWorkflow(projectSavedWorkflowDir(rootDir), "review", projectScript);
+    await writeSavedWorkflow(personalDir, "review", personalScript);
+    const agents = setupAgentMock(
+      agent.call({ prompt: "review src", label: "review-agent", phase: "Review" }, () =>
+        AgentResponse.text("project review result"),
+      ),
+    );
+
+    const result = await launchWorkflow(
+      { name: "review", args: { target: "src" } },
+      launchOptions({
+        savedWorkflowDirs: { personalDir },
+        schedulerRunner: agents.schedulerRunner,
+      }),
+    );
+
+    const launch = unwrap(result);
+    expect(launch.scriptPath).toBe(workflowRunScriptPath(rootDir, "wf_test"));
+    await expect(readFile(launch.scriptPath, "utf8")).resolves.toBe(projectScript);
+
+    now = 175;
+    const completed = unwrap(await launch.completion);
+    expect(completed).toMatchObject({
+      workflowName: "review",
+      status: "completed",
+      result: { result: "project review result" },
+      phases: [{ title: "Review" }],
+    });
+    expect(agents.calls()).toHaveLength(1);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should launch a workflow from an explicit script path", async () => {
+    const sourcePath = join(tempDir, "saved", "adhoc.js");
+    const script = workflowScript({
+      meta: { name: "adhoc", phases: [{ title: "Scan" }] },
+      body: `
+phase("Scan");
+return await agent("scan explicit path", { label: "scan-agent", phase: "Scan" });
+`,
+    });
+    await mkdir(join(tempDir, "saved"), { recursive: true });
+    await writeFile(sourcePath, script, "utf8");
+    const agents = setupAgentMock(
+      agent.call({ prompt: "scan explicit path", label: "scan-agent" }, () =>
+        AgentResponse.text("path result"),
+      ),
+    );
+
+    const result = await launchWorkflow(
+      { scriptPath: sourcePath },
+      launchOptions({ schedulerRunner: agents.schedulerRunner }),
+    );
+
+    const launch = unwrap(result);
+    await expect(readFile(launch.scriptPath, "utf8")).resolves.toBe(script);
+    now = 150;
+    const completed = unwrap(await launch.completion);
+
+    expect(completed).toMatchObject({
+      workflowName: "adhoc",
+      status: "completed",
+      result: "path result",
+      durationMs: 50,
+    });
+    agents.expectNoUnhandledAgents();
   });
 
   it("should persist the script copy and initial run manifest before fake agents start", async () => {

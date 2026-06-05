@@ -33,15 +33,14 @@ then persists `outputPath` on the terminal `manifest.json`. `manifest.json` is
 the canonical `/workflows` read model; list/overview commands must not require
 journals, outputs, or transcript files.
 
-Reserve these paths for later slices:
+Reserve this run-artifact path for later slices:
 
 ```text
 .pi/workflows/<runId>/journal.jsonl
-.pi/workflows/scripts/<workflowName>.workflow.js
 ```
 
-Personal/global saved workflow resolution remains deferred to the saved-workflow
-slice.
+Saved workflow script locations are a separate decision in ADR 0009 and use
+Pi-namespaced `.pi/workflows/*.js` paths with Claude-like plain JavaScript files.
 
 ## Consequences
 

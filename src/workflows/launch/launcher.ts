@@ -7,6 +7,12 @@ import { tryRunWorkflowScript } from "../script/runtime.ts";
 import { err, ok, type Result } from "../result.ts";
 import { WorkflowRunStore } from "../run/store.ts";
 import { transitionRun } from "../run/state-machine.ts";
+import {
+  personalSavedWorkflowDir,
+  projectSavedWorkflowDir,
+  readSavedWorkflowScriptPath,
+  resolveSavedWorkflowByName,
+} from "../saved/resolver.ts";
 import type {
   WorkflowLaunch,
   WorkflowLaunchBackgroundError,
@@ -15,7 +21,6 @@ import type {
   WorkflowLaunchOptions,
   WorkflowLaunchPersistenceError,
   WorkflowLaunchRequest,
-  WorkflowLaunchUnsupportedSourceError,
   WorkflowTaskNotification,
   WorkflowTaskNotificationDetails,
   WorkflowTaskUsage,
@@ -35,21 +40,27 @@ export type {
   WorkflowLaunchParseError,
   WorkflowLaunchPersistenceError,
   WorkflowLaunchRequest,
-  WorkflowLaunchUnsupportedSourceError,
   WorkflowTaskNotification,
   WorkflowTaskNotificationDetails,
   WorkflowTaskUsage,
   WorkflowTerminalNotifier,
   WorkflowTerminalOutput,
 } from "./model.ts";
+export type {
+  WorkflowSavedWorkflowError,
+  WorkflowSavedWorkflowInvalidError,
+  WorkflowSavedWorkflowInvalidNameError,
+  WorkflowSavedWorkflowLocations,
+  WorkflowSavedWorkflowNotFoundError,
+  WorkflowSavedWorkflowReadError,
+} from "../saved/resolver.ts";
 
 export async function launchWorkflow(
   request: WorkflowLaunchRequest,
   options: WorkflowLaunchOptions,
 ): Promise<Result<WorkflowLaunch, WorkflowLaunchError>> {
-  const source = selectLaunchSource(request);
+  const source = await loadLaunchSource(request, options);
   if (source.status === "error") return source;
-  if (source.value.kind !== "script") return err(unsupportedSourceError(source.value.kind));
 
   const parsed = tryParseWorkflowScript(source.value.script);
   if (parsed.status === "error") {
@@ -165,6 +176,33 @@ async function loadResumeCache(
   }
 }
 
+async function loadLaunchSource(
+  request: WorkflowLaunchRequest,
+  options: WorkflowLaunchOptions,
+): Promise<Result<{ readonly kind: "script"; readonly script: string }, WorkflowLaunchError>> {
+  const selected = selectLaunchSource(request);
+  if (selected.status === "error") return selected;
+
+  switch (selected.value.kind) {
+    case "script":
+      return ok(selected.value);
+    case "name": {
+      const resolved = await resolveSavedWorkflowByName(selected.value.name, {
+        projectDir:
+          options.savedWorkflowDirs?.projectDir ?? projectSavedWorkflowDir(options.rootDir),
+        personalDir: options.savedWorkflowDirs?.personalDir ?? personalSavedWorkflowDir(),
+      });
+      if (resolved.status === "error") return resolved;
+      return ok({ kind: "script", script: resolved.value.source });
+    }
+    case "scriptPath": {
+      const source = await readSavedWorkflowScriptPath(selected.value.scriptPath);
+      if (source.status === "error") return source;
+      return ok({ kind: "script", script: source.value });
+    }
+  }
+}
+
 function selectLaunchSource(
   request: WorkflowLaunchRequest,
 ): Result<
@@ -198,19 +236,6 @@ function selectLaunchSource(
 
   if (provided[0] === "name") return ok({ kind: "name", name: request.name! });
   return ok({ kind: "scriptPath", scriptPath: request.scriptPath! });
-}
-
-function unsupportedSourceError(
-  source: "name" | "scriptPath",
-): WorkflowLaunchUnsupportedSourceError {
-  return {
-    _tag: "WorkflowLaunchUnsupportedSourceError",
-    source,
-    message:
-      source === "name"
-        ? "Saved workflow launch by name is not implemented yet."
-        : "Workflow launch by scriptPath is not implemented yet.",
-  };
 }
 
 async function prepareRunFiles(

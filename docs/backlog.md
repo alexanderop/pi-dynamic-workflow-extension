@@ -117,9 +117,9 @@ Spec coverage:
 Status: partially done. ADRs exist for using ADRs, the parser/runtime strategy,
 explicit workflow state machines, Pi extension context usage, project-local Pi
 workflow run storage, the terminal notification hook before Pi message wiring,
-domain-module organization, and stable journal key inputs. Remaining decisions
-still need ADRs for saved workflow locations, structured-output retry count, and
-`agentType` mapping.
+domain-module organization, stable journal key inputs, and saved workflow
+locations. Remaining decisions still need ADRs for structured-output retry count
+and `agentType` mapping.
 
 ## Epic 0.5: First Thin Vertical Workflow
 
@@ -706,6 +706,15 @@ Spec coverage:
 - §8 Launch Contract.
 - §20 acceptance criterion 2.
 
+Status: implemented for fake-agent launches. Saved workflow name lookup resolves
+Pi-namespaced project workflows under `<project>/.pi/workflows/*.js` before
+personal workflows under `~/.pi/workflows/*.js`, rejects path-traversal names,
+checks the conventional `<name>.js` path first, then scans other `.js` files by
+`meta.name` for observed Claude filename/meta-name mismatches, and copies the
+resolved script into the new run directory before executing it. Explicit
+`scriptPath` launches now read, copy, and execute the referenced script. ADR 0009
+documents the locations and precedence.
+
 ### Slice 5.2: Save Run Script
 
 User value: users can turn a successful run script into a reusable workflow.
@@ -973,7 +982,7 @@ Spec coverage:
 
 ## Open Decisions
 
-- What is the Pi-native equivalent of `.claude/workflows` for saved workflows?
+- How should saved-workflow listing/search be exposed in `/workflows` once the TUI exists?
 - Should workflow run storage stay fully project-local under `.pi/workflows`, or should a later Pi-session integration add session-scoped storage on top of ADR 0005?
 - Should terminal notifications use `pi.sendMessage()` custom messages, `pi.sendUserMessage()`, or both?
 - How should `agentType` map to Pi concepts if Pi does not have Claude-style subagent types?

@@ -42,13 +42,13 @@ Current meanings:
 | `script.js` | Exact workflow script copy for this run (written by the launcher). |
 | `transcripts/` | Created empty by the launcher (`src/workflows/launch/launcher.ts:210`) but nothing writes into it yet — real subagent transcripts are future work. |
 
-Planned paths from the storage layout in [`spec.md` §18](../../spec.md), none of
-which any code writes today:
+Additional paths from the storage layout in [`spec.md` §18](../../spec.md):
 
 ```text
-.pi/workflows/<runId>/journal.jsonl    # resume/cache journal (not implemented)
-.pi/workflows/<runId>/output.json      # full terminal result (not implemented)
-.pi/workflows/scripts/<name>.workflow.js  # saved workflows (not implemented)
+.pi/workflows/<runId>/journal.jsonl    # resume/cache journal
+.pi/workflows/<runId>/output.json      # full terminal result
+<project>/.pi/workflows/*.js           # project saved workflows
+~/.pi/workflows/*.js                   # personal saved workflows
 ```
 
 ## Manifest as read model

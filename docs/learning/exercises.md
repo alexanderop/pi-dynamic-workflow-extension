@@ -28,7 +28,7 @@ Check yourself:
 - When does `launchWorkflow` return relative to when the workflow body actually runs? (Background execution is deferred via `defer()`, default `setImmediate`, so launch returns first.)
 - When is the *final* manifest written, and what flips `status` from `running` to `completed` or `failed`? (`executeWorkflowInBackground` in `launcher.ts:250`.)
 
-Note: only the `script` source is implemented. Passing `name` or `scriptPath` returns a `WorkflowLaunchUnsupportedSourceError`.
+Note: `script`, `name`, and `scriptPath` sources are implemented for fake-agent launches. `name` resolves Pi-namespaced `.pi/workflows/*.js` saved workflows with Claude-like lookup behavior.
 
 ## Exercise 2: Add a parser rejection test
 

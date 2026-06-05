@@ -180,10 +180,11 @@ It should not contain:
 - transcripts
 - final results
 
-Project-local saved workflow path for this Pi extension is reserved as:
+Saved workflow paths use the Pi namespace with Claude-like plain `.js` files:
 
 ```text
-.pi/workflows/scripts/<workflowName>.workflow.js
+<project>/.pi/workflows/*.js
+~/.pi/workflows/*.js
 ```
 
 ## `/workflows`

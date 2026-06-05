@@ -14,13 +14,13 @@ Use this file to connect [`../../spec.md`](../../spec.md) to the current impleme
 | Run state model | [`../../src/workflows/run/model.ts`](../../src/workflows/run/model.ts) | Partial/current read model. |
 | State transitions | [`../../src/workflows/run/state-machine.ts`](../../src/workflows/run/state-machine.ts) | Implemented as pure functions. |
 | Persistence/read model | [`../../src/workflows/run/store.ts`](../../src/workflows/run/store.ts) | Manifest read/write implemented. |
-| Launcher | [`../../src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts) | `launchWorkflow()` runs inline scripts with fake agents. Not wired to any Pi command yet. |
+| Launcher | [`../../src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts) | `launchWorkflow()` runs inline scripts, saved workflow names, and explicit script paths with fake agents. Not wired to any Pi command yet. |
 | `/workflows` command | [`../../src/extension/index.ts`](../../src/extension/index.ts) | Non-interactive summary that lists existing manifests. Cannot launch runs. |
-| Journal | Not built | Future. |
-| Resume | Not built | Future. |
-| Saved workflow launch | Not built | Future. |
-| Output file | Not built | Future. |
-| Completion notification | Not built | Future. |
+| Journal | [`../../src/workflows/journal/store.ts`](../../src/workflows/journal/store.ts) | JSONL audit/cache events implemented for fake agents. |
+| Resume | [`../../src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts) | Resume cache replay implemented for inline fake launches via `resumeFromRunId`. |
+| Saved workflow launch | [`../../src/workflows/saved/resolver.ts`](../../src/workflows/saved/resolver.ts) | Name and path launch implemented for fake agents. |
+| Output file | [`../../src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts) | Terminal `output.json` written for completed/failed fake launches. |
+| Completion notification | [`../../src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts) | Testable notification hook implemented; Pi message wiring is future. |
 | Real Pi subagents | Not built | Future. |
 | Rich TUI monitor | Not built | Future. |
 
@@ -123,9 +123,8 @@ The confirmation string ([`launcher.ts:340-358`](../../src/workflows/launch/laun
 Known gaps:
 
 - `launchWorkflow()` is not yet wired to a Pi command or tool, so nothing in the extension currently launches a run. The `/workflows` command only lists existing manifests.
-- `name` and `scriptPath` sources return typed `WorkflowLaunchUnsupportedSourceError` ([`launcher.ts:189-198`](../../src/workflows/launch/launcher.ts)).
-- `resumeFromRunId` and `description` are accepted on the request but never read.
-- output file and notifications are not implemented.
+- Real Pi subagent execution is not implemented; launches use fake-agent runners.
+- Pi message wiring for notifications is not implemented; the launcher exposes a testable notification hook.
 
 ### §9 Subagent Contract
 
@@ -200,12 +199,14 @@ src/workflows/resume.ts
 
 ### §15 Save Semantics
 
-Not built yet.
+Partially built for launch/discovery. Save-run-script itself is still future
+work.
 
-Pi mapping reserves:
+Saved workflow lookup uses Pi-namespaced paths with Claude-like plain `.js` files:
 
 ```text
-.pi/workflows/scripts/<workflowName>.workflow.js
+<project>/.pi/workflows/*.js
+~/.pi/workflows/*.js
 ```
 
 ### §16 Control Operations
@@ -237,13 +238,14 @@ What `launchWorkflow()` actually creates today ([`launcher.ts:201-222`](../../sr
   transcripts/    # directory is created but stays empty for now
 ```
 
-Reserved paths:
+Additional artifact paths:
 
 ```text
 .pi/workflows/<runId>/journal.jsonl
 .pi/workflows/<runId>/output.json
-.pi/workflows/scripts/<workflowName>.workflow.js
 ```
+
+Saved workflows live outside per-run directories under `.pi/workflows/*.js`.
 
 ### §19 Security Requirements
 

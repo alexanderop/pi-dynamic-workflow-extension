@@ -86,25 +86,29 @@ Remaining gaps: controller-driven resume of an existing paused/stopped run is st
 
 ### Saved workflow discovery
 
-Need project-local saved workflow loading from:
+Implemented for fake-agent launches. Name lookup uses Pi-namespaced paths with
+Claude-like plain `.js` files:
 
 ```text
-.pi/workflows/scripts/<workflowName>.workflow.js
+<project>/.pi/workflows/*.js
+~/.pi/workflows/*.js
 ```
 
-Future personal/global saved workflow resolution still needs a decision.
+Project workflows win over personal workflows. The resolver checks `<name>.js`
+first, then scans other `.js` files by exported `meta.name` to support observed
+Claude artifacts where the filename and `meta.name` differ.
 
 ### Launch by script path (and by name)
 
-Today `launchWorkflow()` accepts only an inline `script` source. The `scriptPath` and `name` fields are already part of `WorkflowLaunchRequest` and are validated, but both currently return a `WorkflowLaunchUnsupportedSourceError` (`src/workflows/launch/launcher.ts:84`, `:185-198`).
-
-Need to actually support:
+Implemented for fake-agent launches:
 
 ```ts
 launchWorkflow({ scriptPath });
+launchWorkflow({ name });
 ```
 
-The launcher should read, parse, copy, and execute that file. Launch-by-`name` (saved-workflow lookup) is the related gap covered under "Saved workflow discovery".
+The launcher reads, parses, copies, and executes the resolved file. Real Pi
+subagents remain future work.
 
 ### Real Pi subagents
 

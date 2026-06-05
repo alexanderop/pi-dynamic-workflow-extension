@@ -275,12 +275,11 @@ This is the current vertical slice.
 10. Return launch confirmation immediately.
 11. Persist final completed/failed manifest later.
 
-Not yet implemented here, even though the request type accepts them:
+Additional launch sources are implemented for fake-agent runs:
 
-- launch by `name` or `scriptPath` returns `WorkflowLaunchUnsupportedSourceError`
-  (`src/workflows/launch/launcher.ts`); only inline `script` works.
-- `resumeFromRunId` and `description` are accepted on the request but never
-  read.
+- `name` resolves Pi-namespaced saved workflows from `.pi/workflows/*.js` with Claude-like lookup behavior.
+- `scriptPath` reads an explicit workflow file.
+- `resumeFromRunId` builds a journal replay cache for inline fake launches.
 
 The confirmation string points the user at `/workflows` to watch progress; it
 does not yet send a terminal notification or write an output file.
