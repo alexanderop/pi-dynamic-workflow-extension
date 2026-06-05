@@ -2,10 +2,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  resolveSavedWorkflowByName,
-  savedWorkflowPath,
-} from "../../../src/workflows/saved/resolver.ts";
+import { resolveSavedWorkflowByName, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { invalidWorkflowScript, workflowScript } from "../script/workflow-factory.ts";
 import { unwrap } from "../../support.ts";
 

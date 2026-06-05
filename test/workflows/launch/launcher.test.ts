@@ -9,12 +9,9 @@ import {
   workflowRunScriptPath,
   workflowRunTranscriptDir,
   type WorkflowTaskNotification,
-} from "../../../src/workflows/launch/launcher.ts";
-import { WorkflowRunStore } from "../../../src/workflows/run/store.ts";
-import {
-  projectSavedWorkflowDir,
-  savedWorkflowPath,
-} from "../../../src/workflows/saved/resolver.ts";
+} from "#src/workflows/launch/launcher.ts";
+import { WorkflowRunStore } from "#src/workflows/run/store.ts";
+import { projectSavedWorkflowDir, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "../script/workflow-factory.ts";
 import { delay, pathExists, unwrap } from "../../support.ts";

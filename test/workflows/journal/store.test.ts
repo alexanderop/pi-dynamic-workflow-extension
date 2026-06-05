@@ -2,11 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { WorkflowJournalKey } from "../../../src/workflows/journal/model.ts";
+import type { WorkflowJournalKey } from "#src/workflows/journal/model.ts";
 import {
   buildWorkflowJournalResultCache,
   WorkflowJournalStore,
-} from "../../../src/workflows/journal/store.ts";
+} from "#src/workflows/journal/store.ts";
 
 describe("WorkflowJournalStore", () => {
   let tempDir: string;

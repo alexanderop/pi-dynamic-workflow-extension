@@ -3,7 +3,7 @@ import {
   parseWorkflowScript,
   tryParseWorkflowScript,
   WorkflowParseError,
-} from "../../../src/workflows/script/parser.ts";
+} from "#src/workflows/script/parser.ts";
 import { invalidWorkflowScript, workflowScript } from "./workflow-factory.ts";
 
 describe("parseWorkflowScript", () => {

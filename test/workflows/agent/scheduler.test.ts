@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateDefaultMaxConcurrent,
   WorkflowAgentScheduler,
-} from "../../../src/workflows/agent/scheduler.ts";
-import type { WorkflowJournalEvent } from "../../../src/workflows/journal/model.ts";
+} from "#src/workflows/agent/scheduler.ts";
+import type { WorkflowJournalEvent } from "#src/workflows/journal/model.ts";
 import { delay } from "../../support.ts";
 
 describe("calculateDefaultMaxConcurrent", () => {

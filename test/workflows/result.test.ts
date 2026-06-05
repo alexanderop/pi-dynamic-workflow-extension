@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { err, isErr, isOk, match, ok, tryPromise, tryResult } from "../../src/workflows/result.ts";
+import { err, isErr, isOk, match, ok, tryPromise, tryResult } from "#src/workflows/result.ts";
 
 describe("Result", () => {
   it("should represent success and error as return values when callers create Results", () => {

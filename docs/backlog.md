@@ -712,8 +712,11 @@ personal workflows under `~/.pi/workflows/*.js`, rejects path-traversal names,
 checks the conventional `<name>.js` path first, then scans other `.js` files by
 `meta.name` for observed Claude filename/meta-name mismatches, and copies the
 resolved script into the new run directory before executing it. Explicit
-`scriptPath` launches now read, copy, and execute the referenced script. ADR 0009
-documents the locations and precedence.
+`scriptPath` launches now read, copy, and execute the referenced script. Saved
+workflow listing reads project and personal script metadata, prefers project
+workflows on conflicts, ignores unrelated invalid `.js` files during scans, and
+surfaces saved workflows in `/workflows` with `description` and `whenToUse` as
+user-facing guidance. ADR 0009 documents the locations and precedence.
 
 ### Slice 5.2: Save Run Script
 
@@ -738,6 +741,13 @@ Spec coverage:
 
 - §15 Save Semantics.
 - §20 acceptance criterion 15.
+
+Status: implemented as a core saved-workflow helper. `saveRunScript()` reads a
+completed run manifest, copies only that run's `script.js` to the selected
+project or personal saved-workflow path, validates that the requested saved name
+matches `meta.name`, and leaves manifest, journal, transcripts, and output files
+behind. UI/controller wiring for the `/workflows` save action remains future
+work.
 
 ### Slice 5.3: Child `workflow()`
 

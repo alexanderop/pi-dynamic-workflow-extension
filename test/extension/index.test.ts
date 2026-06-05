@@ -2,8 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import dynamicWorkflowExtension from "../../src/extension/index.ts";
-import type { WorkflowRunState } from "../../src/workflows/run/model.ts";
+import dynamicWorkflowExtension from "#src/extension/index.ts";
+import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import { savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
+import { workflowScript } from "../workflows/script/workflow-factory.ts";
 
 describe("dynamicWorkflowExtension", () => {
   let tempDir: string;
@@ -32,7 +34,7 @@ describe("dynamicWorkflowExtension", () => {
     );
   });
 
-  it("should render an empty state when no workflow runs exist", async () => {
+  it("should render an empty state when no workflow runs or saved workflows exist", async () => {
     const command = registerWorkflowsCommand();
     const notify = vi.fn<NotifyForTest>();
 
@@ -42,7 +44,10 @@ describe("dynamicWorkflowExtension", () => {
       ui: { notify },
     });
 
-    expect(notify).toHaveBeenCalledWith("No workflow runs found in .pi/workflows.", "info");
+    expect(notify).toHaveBeenCalledWith(
+      "No workflow runs or saved workflows found in .pi/workflows.",
+      "info",
+    );
   });
 
   it("should render workflow runs from the project-local workflow store", async () => {
@@ -88,6 +93,38 @@ describe("dynamicWorkflowExtension", () => {
     expect(message).toContain("wf_old");
     expect(message.indexOf("wf_new")).toBeLessThan(message.indexOf("wf_old"));
     expect(notify).toHaveBeenCalledWith(message, "info");
+  });
+
+  it("should render saved workflows as reusable user-facing prompts", async () => {
+    await writeSavedWorkflow(
+      tempDir,
+      "review",
+      workflowScript({
+        meta: {
+          name: "review",
+          description: "Review source files",
+          whenToUse: "Use before merging code changes",
+        },
+        body: "return await agent('review src');",
+      }),
+    );
+    const command = registerWorkflowsCommand();
+    const notify = vi.fn<NotifyForTest>();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      savedWorkflowDirs: { projectDir: join(tempDir, ".pi", "workflows") },
+      ui: { notify },
+    });
+
+    const message = notify.mock.calls[0]?.[0];
+    expect(message).toContain("Saved workflows");
+    expect(message).toContain("review");
+    expect(message).toContain("Scope: project");
+    expect(message).toContain("Description: Review source files");
+    expect(message).toContain("When to use: Use before merging code changes");
+    expect(message).not.toContain("Workflow runs");
   });
 
   it("should not read journals or transcript files when rendering workflow runs", async () => {
@@ -214,4 +251,10 @@ async function writeRunManifest(projectDir: string, state: WorkflowRunState): Pr
   const runDir = join(projectDir, ".pi", "workflows", state.runId);
   await mkdir(runDir, { recursive: true });
   await writeFile(join(runDir, "manifest.json"), JSON.stringify(state));
+}
+
+async function writeSavedWorkflow(projectDir: string, name: string, source: string): Promise<void> {
+  const workflowDir = join(projectDir, ".pi", "workflows");
+  await mkdir(workflowDir, { recursive: true });
+  await writeFile(savedWorkflowPath(workflowDir, name), source, "utf8");
 }

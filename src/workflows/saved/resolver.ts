@@ -78,7 +78,7 @@ export async function resolveSavedWorkflowByName(
   name: string,
   locations: WorkflowSavedWorkflowLocations,
 ): Promise<Result<WorkflowSavedWorkflow, WorkflowSavedWorkflowError>> {
-  const validName = validateWorkflowName(name);
+  const validName = validateSavedWorkflowName(name);
   if (validName.status === "error") return validName;
 
   const scopes = candidateScopes(locations);
@@ -218,7 +218,9 @@ async function readSavedWorkflowSource(
   }
 }
 
-function validateWorkflowName(name: string): Result<void, WorkflowSavedWorkflowInvalidNameError> {
+export function validateSavedWorkflowName(
+  name: string,
+): Result<void, WorkflowSavedWorkflowInvalidNameError> {
   if (name.length > 0 && basename(name) === name && !name.includes("/") && !name.includes("\\")) {
     return ok(undefined);
   }

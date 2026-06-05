@@ -4,7 +4,7 @@ import {
   pipeline,
   runWorkflowScript,
   tryRunWorkflowScript,
-} from "../../../src/workflows/script/runtime.ts";
+} from "#src/workflows/script/runtime.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "./workflow-factory.ts";
 

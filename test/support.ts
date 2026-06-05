@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import type { Result } from "../src/workflows/result.ts";
+import type { Result } from "#src/workflows/result.ts";
 
 export interface Deferred<T> {
   readonly promise: Promise<T>;

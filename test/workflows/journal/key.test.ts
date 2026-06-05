@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalJson, computeWorkflowAgentKey } from "../../../src/workflows/journal/key.ts";
+import { canonicalJson, computeWorkflowAgentKey } from "#src/workflows/journal/key.ts";
 
 const baseInput = {
   prompt: "review src",

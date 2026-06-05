@@ -9,6 +9,9 @@
     "workflows"
   ],
   "type": "module",
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "scripts": {
     "check": "tsc --noEmit",
     "fmt": "oxfmt package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test tools .pi/workflows/scripts",

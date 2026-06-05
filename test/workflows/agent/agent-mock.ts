@@ -1,8 +1,8 @@
-import type { AgentOptions } from "../../../src/workflows/agent/model.ts";
+import type { AgentOptions } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowAgentRunRequest,
   WorkflowAgentRunner,
-} from "../../../src/workflows/agent/scheduler.ts";
+} from "#src/workflows/agent/scheduler.ts";
 import { afterAll, afterEach, beforeAll } from "vitest";
 
 export interface AgentMockUnhandledPrint {
