@@ -3,6 +3,7 @@ import {
   calculateDefaultMaxConcurrent,
   WorkflowAgentScheduler,
 } from "../../../src/workflows/agent/scheduler.ts";
+import type { WorkflowJournalEvent } from "../../../src/workflows/journal/model.ts";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -105,6 +106,65 @@ describe("WorkflowAgentScheduler", () => {
     expect(scheduler.progress()).toMatchObject([
       { state: "done", resultPreview: "ok" },
       { state: "failed", resultPreview: "fake failure" },
+    ]);
+  });
+
+  it("should write started before fake execution and result only after success", async () => {
+    const events: WorkflowJournalEvent[] = [];
+    let eventsAtRunnerStart: WorkflowJournalEvent[] = [];
+    const scheduler = new WorkflowAgentScheduler({
+      cwd: "/repo",
+      createAgentId: sequenceIds("agent"),
+      journal: {
+        append: async (event) => {
+          events.push(event);
+        },
+      },
+      runner: async () => {
+        eventsAtRunnerStart = [...events];
+        return { ok: true };
+      },
+    });
+
+    await expect(
+      scheduler.schedule("scan src", {
+        label: "scan-agent",
+        phase: "Scan",
+        agentType: "general-purpose",
+        model: "test-model",
+        schema: { type: "object" },
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(eventsAtRunnerStart).toHaveLength(1);
+    expect(eventsAtRunnerStart[0]).toMatchObject({ type: "started", agentId: "agent_0" });
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "started", agentId: "agent_0" });
+    expect(events[1]).toMatchObject({ type: "result", agentId: "agent_0", result: { ok: true } });
+    expect(events[1]!.key).toBe(events[0]!.key);
+    expect(events[0]!.key).toMatch(/^v2:[0-9a-f]{64}$/);
+  });
+
+  it("should not write a result journal event when the fake agent fails", async () => {
+    const events: WorkflowJournalEvent[] = [];
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      journal: {
+        append: async (event) => {
+          events.push(event);
+        },
+      },
+      runner: async () => {
+        throw new Error("fake failure");
+      },
+    });
+
+    await expect(scheduler.schedule("scan src")).rejects.toThrow("fake failure");
+
+    expect(events.map((event) => event.type)).toEqual(["started", "failed"]);
+    expect(events).toMatchObject([
+      { type: "started", agentId: "agent_0" },
+      { type: "failed", agentId: "agent_0", error: { message: "fake failure" } },
     ]);
   });
 

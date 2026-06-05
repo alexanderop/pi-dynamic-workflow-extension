@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { WorkflowJournalStore } from "../journal/store.ts";
 import { tryParseWorkflowScript } from "../script/parser.ts";
 import { tryRunWorkflowScript } from "../script/runtime.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -65,6 +66,7 @@ export async function launchWorkflow(
   const scriptPath = workflowRunScriptPath(options.rootDir, runId);
   const transcriptDir = workflowRunTranscriptDir(options.rootDir, runId);
   const outputPath = workflowRunOutputPath(options.rootDir, runId);
+  const journalPath = workflowRunJournalPath(options.rootDir, runId);
   const summarySource =
     parsed.value.meta.description ?? request.description ?? parsed.value.meta.name;
   const initialState: WorkflowRunState = {
@@ -103,6 +105,8 @@ export async function launchWorkflow(
       maxConcurrentAgents: options.maxConcurrentAgents,
       maxTotalAgents: options.maxTotalAgents,
       budgetTotal: options.budgetTotal,
+      cwd: options.cwd ?? workflowProjectCwdFromRootDir(options.rootDir),
+      journal: new WorkflowJournalStore({ journalPath }),
     },
   });
 
@@ -126,6 +130,14 @@ export function workflowRunTranscriptDir(rootDir: string, runId: string): string
 
 export function workflowRunOutputPath(rootDir: string, runId: string): string {
   return join(rootDir, runId, "output.json");
+}
+
+export function workflowRunJournalPath(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "journal.jsonl");
+}
+
+function workflowProjectCwdFromRootDir(rootDir: string): string {
+  return dirname(dirname(rootDir));
 }
 
 function selectLaunchSource(

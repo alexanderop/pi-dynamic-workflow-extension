@@ -116,9 +116,10 @@ Spec coverage:
 
 Status: partially done. ADRs exist for using ADRs, the parser/runtime strategy,
 explicit workflow state machines, Pi extension context usage, project-local Pi
-workflow run storage, and the terminal notification hook before Pi message
-wiring. Remaining decisions still need ADRs for saved workflow locations, stable
-key hashing inputs, structured-output retry count, and `agentType` mapping.
+workflow run storage, the terminal notification hook before Pi message wiring,
+domain-module organization, and stable journal key inputs. Remaining decisions
+still need ADRs for saved workflow locations, structured-output retry count, and
+`agentType` mapping.
 
 ## Epic 0.5: First Thin Vertical Workflow
 
@@ -606,6 +607,15 @@ Spec coverage:
 
 - §13 Journal Model.
 - §20 acceptance criterion 12.
+
+Status: implemented for fake-agent launches with ADR 0008. The journal module
+writes `.pi/workflows/<runId>/journal.jsonl`, computes `v2:<sha256>` keys from
+canonical effective-call inputs, appends `started` before fake execution,
+appends `result` only after successful execution, and preserves random agent ids
+separately from stable keys. A replay-cache helper already handles observed
+Claude behavior where started-only attempts do not cache and duplicate keys use
+the latest non-invalidated result. Stop-controller journal wiring remains for
+Slice 6.2.
 
 ### Slice 4.2: Resume Cache Replay
 

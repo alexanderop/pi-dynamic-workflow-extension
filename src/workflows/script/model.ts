@@ -1,4 +1,5 @@
 import type { AgentOptions } from "../agent/model.ts";
+import type { WorkflowAgentJournal } from "../journal/model.ts";
 import type { WorkflowPhaseProgress, WorkflowProgressEntry } from "../run/model.ts";
 
 export interface WorkflowPhase {
@@ -34,10 +35,12 @@ export interface WorkflowRuntimeState {
 
 export interface WorkflowRuntimeOptions {
   args?: unknown;
+  cwd?: string;
   budgetTotal?: number | null;
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;
   agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;
+  journal?: WorkflowAgentJournal;
 }
 
 export interface WorkflowRuntimeError {

@@ -543,11 +543,26 @@ The random `agentId` MUST NOT be used as the resume key.
 
 Observed on disk: keys are `v2:` followed by exactly 64 lowercase hex chars
 (SHA-256 width), while `agentId` is a distinct 17-char hex token — the two never
-coincide. Across both reference journals only `started` and `result` events
-appear; `failed`, `stopped`, and `invalidated` are part of the contract but were
-not observed (the failure path surfaced instead through the task notification,
-and no restart/stop occurred). Run 2 contained `started` keys with no matching
-`result`, the on-disk form of the §14 incomplete-call condition.
+coincide. Across the initial reference journals only `started` and `result`
+events appeared; `failed`, `stopped`, and `invalidated` are part of the contract
+but were not observed (the failure path surfaced instead through the task
+notification, and no restart/stop occurred). Run 2 contained `started` keys with
+no matching `result`, the on-disk form of the §14 incomplete-call condition.
+
+A broader read-only audit of `~/.claude/projects` on 2026-06-05 found 23 workflow
+journals under `subagents/workflows/<runId>/journal.jsonl`. Across those files:
+
+- event shapes were still only `started` and `result`;
+- totals were 589 `started` events and 565 `result` events;
+- no observed journal used `failed`, `stopped`, or `invalidated`;
+- killed/failed/interrupted runs left started-only keys in the journal;
+- one completed run contained duplicate stable keys with multiple `started`
+  events and, for some keys, multiple `result` events with different `agentId`s.
+
+Therefore journal consumers MUST NOT assume one event pair per key. Replay should
+scan top-to-bottom, ignore started-only attempts for cache hits, and let the
+latest non-invalidated `result` for a key win unless a later `invalidated` event
+is introduced by our controller.
 
 ## 14. Resume Semantics
 
@@ -557,7 +572,8 @@ Algorithm:
 
 1. Load the same script.
 2. Scan `journal.jsonl` from top to bottom.
-3. Build a key-to-result cache from non-invalidated `result` events.
+3. Build a key-to-result cache from non-invalidated `result` events. If multiple
+   result events exist for the same key, the latest non-invalidated result wins.
 4. Execute the script from the top.
 5. On each `agent()` call, compute the stable key.
 6. If the key has a cached result, return it without spawning a subagent.
@@ -565,8 +581,11 @@ Algorithm:
 
 Rules:
 
-- A `started` event without a matching `result` is incomplete.
+- A `started` event without a matching later `result` for the same key and
+  attempt is incomplete.
 - Incomplete calls MUST NOT be returned from cache.
+- Duplicate `started` rows for the same key are possible in real journals; they
+  are audit history, not distinct cache slots.
 - JavaScript variables are reconstructed by rerunning the script.
 - Changing prompt, schema, model, label, phase, or agent type SHOULD produce a
   different key.
@@ -1111,7 +1130,10 @@ choices:
 
 - Exact stable-key hash algorithm and input serialization. The artifacts fix the
   output form (`v2:` + 64 lowercase hex, i.e. SHA-256 width) but not the exact
-  preimage or field ordering.
+  preimage or field ordering. A completed real journal with duplicate keys shows
+  that duplicate effective calls can share a cache key, so our implementation
+  must choose and document whether to mimic that exactly or include a structural
+  call-position component to avoid accidental collisions.
 - Exact prompt wording for the structured-output nudge. The retry COUNT is now
   known: the runtime nudges twice in-conversation, then fails the call (per the
   run-2 failure messages: "after 2 in-conversation nudges").

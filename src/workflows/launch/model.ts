@@ -14,6 +14,7 @@ export interface WorkflowLaunchRequest {
 
 export interface WorkflowLaunchOptions {
   readonly rootDir: string;
+  readonly cwd?: string;
   readonly now?: () => number;
   readonly createTaskId?: () => string;
   readonly createRunId?: () => string;

@@ -37,6 +37,8 @@ async function executeWorkflowScript(
   const scheduler = new WorkflowAgentScheduler({
     maxConcurrent: options.maxConcurrentAgents,
     maxTotalAgents: options.maxTotalAgents,
+    cwd: options.cwd,
+    journal: options.journal,
     runner: async ({ prompt, options: agentOptions }) =>
       await (options.agentRunner ?? defaultAgentRunner)(prompt, agentOptions),
   });

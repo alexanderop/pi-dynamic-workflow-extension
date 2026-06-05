@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   launchWorkflow,
+  workflowRunJournalPath,
   workflowRunOutputPath,
   workflowRunScriptPath,
   workflowRunTranscriptDir,
@@ -170,6 +171,20 @@ return { result };
       result: { result: "fake agent result" },
       agentCount: 1,
     });
+
+    const journal = (await readFile(workflowRunJournalPath(rootDir, "wf_test"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(journal).toMatchObject([
+      { type: "started", agentId: expect.stringMatching(/^a[0-9a-f]{16}$/) },
+      {
+        type: "result",
+        agentId: expect.stringMatching(/^a[0-9a-f]{16}$/),
+        result: "fake agent result",
+      },
+    ]);
+    expect(journal[1].key).toBe(journal[0].key);
   });
 
   it("should write terminal output and notify after the completed run manifest is persisted", async () => {
