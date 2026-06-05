@@ -719,6 +719,15 @@ The Pi `/workflows` list view MUST read only `manifest.json` files. Journals,
 outputs, and transcripts are detailed/audit artifacts and MUST NOT be required
 to render the overview.
 
+`/workflows` MUST branch on Pi extension mode. In `tui` and `rpc` modes it may
+use dialog-capable UI such as notifications or, for the future rich viewer,
+`ctx.ui.custom()` guarded by `ctx.mode === "tui"`. In `print` and `json` modes it
+MUST avoid Pi UI methods because Pi documents them as no-ops there. Observed Pi
+source currently executes extension command handlers as `Promise<void>` and
+ignores handler return values, so headless command output needs an explicit
+non-interactive emission path. The current extension emits plain text in `print`
+mode and one JSON line with `type: "workflow_command_output"` in `json` mode.
+
 ## 19. Security Requirements
 
 - Workflow JavaScript MUST NOT have direct filesystem, shell, network, browser,

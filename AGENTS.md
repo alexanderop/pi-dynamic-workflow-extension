@@ -49,6 +49,7 @@ Use these like wiki links when orienting:
 - [[spec.md]] — current working specification for Claude-Code-like dynamic workflows.
 - [[README.md]] — package overview, install commands, planned structure, and `/workflows` UI plan.
 - [[docs/backlog.md]] — incremental backlog for building the dynamic workflow epic through tested slices.
+- [[docs/learning/README.md]] — guided onboarding path for learning Pi, dynamic workflows, and the current implementation.
 - [[docs/error-handling.md]] — project-local Result pattern and workflow error-handling conventions.
 - [[docs/adr/README.md]] — how to record architecture decisions for this project.
 - [[docs/pi-extension-reference.md]] — Pi extension/package behavior, source files to inspect, dependency rules, loader behavior, and custom UI references.

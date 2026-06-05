@@ -38,6 +38,7 @@ describe("dynamicWorkflowExtension", () => {
 
     await command.handler("", {
       cwd: tempDir,
+      mode: "tui",
       ui: { notify },
     });
 
@@ -72,6 +73,7 @@ describe("dynamicWorkflowExtension", () => {
 
     await command.handler("", {
       cwd: tempDir,
+      mode: "tui",
       ui: { notify },
     });
 
@@ -99,10 +101,77 @@ describe("dynamicWorkflowExtension", () => {
 
     await command.handler("", {
       cwd: tempDir,
+      mode: "tui",
       ui: { notify },
     });
 
     expect(notify.mock.calls[0]?.[0]).toContain("wf_manifest_only");
+  });
+
+  it("should write plain text in print mode instead of using interactive UI", async () => {
+    await writeRunManifest(tempDir, runState({ runId: "wf_print", workflowName: "print-review" }));
+    const command = registerWorkflowsCommand();
+    const notify = vi.fn<NotifyForTest>();
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("", {
+        cwd: tempDir,
+        mode: "print",
+        ui: { notify },
+      });
+      expect(notify).not.toHaveBeenCalled();
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining("wf_print"));
+      expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining("Workflow: print-review"));
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should write structured output in json mode instead of using interactive UI", async () => {
+    await writeRunManifest(tempDir, runState({ runId: "wf_json", workflowName: "json-review" }));
+    const command = registerWorkflowsCommand();
+    const notify = vi.fn<NotifyForTest>();
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("", {
+        cwd: tempDir,
+        mode: "json",
+        ui: { notify },
+      });
+      expect(notify).not.toHaveBeenCalled();
+      const output = String(stdoutWrite.mock.calls[0]?.[0]);
+      expect(JSON.parse(output)).toMatchObject({
+        type: "workflow_command_output",
+        command: "workflows",
+        severity: "info",
+        message: expect.stringContaining("wf_json"),
+      });
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should write command errors to stderr in headless modes", async () => {
+    await writeFile(join(tempDir, ".pi"), "not-a-directory");
+    const command = registerWorkflowsCommand();
+    const notify = vi.fn<NotifyForTest>();
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("", {
+        cwd: tempDir,
+        mode: "print",
+        ui: { notify },
+      });
+      expect(notify).not.toHaveBeenCalled();
+      expect(stderrWrite).toHaveBeenCalledWith(
+        expect.stringContaining("Could not read workflow runs:"),
+      );
+    } finally {
+      stderrWrite.mockRestore();
+    }
   });
 });
 

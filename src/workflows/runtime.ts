@@ -16,6 +16,15 @@ export async function runWorkflowScript(
   source: string,
   options: WorkflowRuntimeOptions = {},
 ): Promise<WorkflowRuntimeState> {
+  const result = await executeWorkflowScript(source, options);
+  if (result.status === "error") throw result.error.cause;
+  return result.value;
+}
+
+async function executeWorkflowScript(
+  source: string,
+  options: WorkflowRuntimeOptions = {},
+): Promise<Result<WorkflowRuntimeState, WorkflowRuntimeError>> {
   const parsed = parseWorkflowScript(source);
   const phases: WorkflowRuntimeState["phases"] = [];
   const logs: string[] = [];
@@ -61,24 +70,34 @@ export async function runWorkflowScript(
     Math: deterministicMath(),
   });
 
-  const wrapped = `(async () => {\n${parsed.body}\n})()`;
-  const script = new vm.Script(wrapped, { filename: "workflow.js" });
-  const result = await script.runInContext(context, { timeout: 1000 });
-
-  return {
+  const currentState = (result?: unknown): WorkflowRuntimeState => ({
     meta: parsed.meta,
     phases,
     logs,
     agentCalls,
     workflowProgress: [...phases, ...scheduler.progress()],
     result,
-  };
+  });
+
+  try {
+    const wrapped = `(async () => {\n${parsed.body}\n})()`;
+    const script = new vm.Script(wrapped, { filename: "workflow.js" });
+    return ok(currentState(await script.runInContext(context, { timeout: 1000 })));
+  } catch (cause) {
+    return err({
+      _tag: "WorkflowRuntimeError",
+      message: errorMessage(cause),
+      cause,
+      partialState: currentState(),
+    });
+  }
 }
 
 export interface WorkflowRuntimeError {
   readonly _tag: "WorkflowRuntimeError";
   readonly message: string;
   readonly cause: unknown;
+  readonly partialState?: WorkflowRuntimeState;
 }
 
 export async function tryRunWorkflowScript(
@@ -86,7 +105,7 @@ export async function tryRunWorkflowScript(
   options: WorkflowRuntimeOptions = {},
 ): Promise<Result<WorkflowRuntimeState, WorkflowRuntimeError>> {
   try {
-    return ok(await runWorkflowScript(source, options));
+    return await executeWorkflowScript(source, options);
   } catch (cause) {
     return err({
       _tag: "WorkflowRuntimeError",

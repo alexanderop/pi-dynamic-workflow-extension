@@ -283,7 +283,17 @@ function appendFailure(
   failures: WorkflowRunState["failures"],
   failure: WorkflowFailure,
 ): WorkflowFailure[] {
+  if (failures?.some((existing) => sameFailure(existing, failure))) return failures;
   return [...(failures ?? []), failure];
+}
+
+function sameFailure(left: WorkflowFailure, right: WorkflowFailure): boolean {
+  return (
+    left.scope === right.scope &&
+    left.message === right.message &&
+    left.agentId === right.agentId &&
+    left.pipelineIndex === right.pipelineIndex
+  );
 }
 
 function invalidRunTransition(

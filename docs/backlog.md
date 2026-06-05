@@ -115,10 +115,10 @@ Spec coverage:
 - Supports §12, §13, §17, and §18 by making implementation-specific mappings explicit.
 
 Status: partially done. ADRs exist for using ADRs, the parser/runtime strategy,
-and explicit workflow state machines. Remaining decisions still need ADRs for
-Pi-native storage layout, saved workflow locations, notification mechanism,
-stable key hashing inputs, structured-output retry count, and `agentType`
-mapping.
+explicit workflow state machines, Pi extension context usage, and project-local
+Pi workflow run storage. Remaining decisions still need ADRs for saved workflow
+locations, notification mechanism, stable key hashing inputs, structured-output
+retry count, and `agentType` mapping.
 
 ## Epic 0.5: First Thin Vertical Workflow
 
@@ -498,6 +498,15 @@ Spec coverage:
 - §5 Launcher.
 - §8 Launch Contract.
 - §20 acceptance criteria 1 and 3.
+
+Status: implemented for inline scripts with fake agents. `launchWorkflow()`
+validates the launch source, rejects unsupported saved/path launches with typed
+errors, parses metadata and deterministic-script errors before creating storage,
+allocates task/run ids, persists `.pi/workflows/<runId>/script.js`,
+`transcripts/`, and the initial `manifest.json`, then starts VM execution on a
+deferred background tick. The returned confirmation includes the task id, run
+id, script path, and transcript directory. Terminal output files and
+notifications remain Slice 3.4.
 
 ### Slice 3.3: Sandboxed Script Evaluation
 
@@ -940,7 +949,7 @@ Spec coverage:
 ## Open Decisions
 
 - What is the Pi-native equivalent of `.claude/workflows` for saved workflows?
-- Where should per-session workflow run state live inside Pi session storage?
+- Should workflow run storage stay fully project-local under `.pi/workflows`, or should a later Pi-session integration add session-scoped storage on top of ADR 0005?
 - Should terminal notifications use `pi.sendMessage()` custom messages, `pi.sendUserMessage()`, or both?
 - How should `agentType` map to Pi concepts if Pi does not have Claude-style subagent types?
 - What is the minimum structured-output protocol that works cleanly with Pi agents?

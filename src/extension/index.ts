@@ -1,7 +1,11 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { WorkflowRunStore } from "../workflows/run-store.ts";
 import type { WorkflowRunState } from "../workflows/types.ts";
+
+type WorkflowCommandOutputType = "info" | "error";
+type WorkflowCommandMode = "tui" | "rpc" | "json" | "print";
+type WorkflowCommandContext = ExtensionCommandContext & { mode?: WorkflowCommandMode };
 
 export default function dynamicWorkflowExtension(pi: ExtensionAPI) {
   pi.registerCommand("workflows", {
@@ -11,13 +15,41 @@ export default function dynamicWorkflowExtension(pi: ExtensionAPI) {
       const result = await store.listRuns();
 
       if (result.status === "error") {
-        ctx.ui.notify(`Could not read workflow runs: ${result.error.message}`, "error");
+        emitWorkflowCommandOutput(
+          ctx,
+          `Could not read workflow runs: ${result.error.message}`,
+          "error",
+        );
         return;
       }
 
-      ctx.ui.notify(formatWorkflowRuns(result.value), "info");
+      emitWorkflowCommandOutput(ctx, formatWorkflowRuns(result.value), "info");
     },
   });
+}
+
+function emitWorkflowCommandOutput(
+  ctx: WorkflowCommandContext,
+  message: string,
+  type: WorkflowCommandOutputType,
+): void {
+  const mode = ctx.mode ?? (ctx.hasUI ? "tui" : "print");
+
+  if (mode !== "json" && mode !== "print") {
+    ctx.ui.notify(message, type);
+    return;
+  }
+
+  if (mode === "json") {
+    const stream = type === "error" ? process.stderr : process.stdout;
+    stream.write(
+      `${JSON.stringify({ type: "workflow_command_output", command: "workflows", severity: type, message })}\n`,
+    );
+    return;
+  }
+
+  const stream = type === "error" ? process.stderr : process.stdout;
+  stream.write(`${message}\n`);
 }
 
 function formatWorkflowRuns(runs: WorkflowRunState[]): string {

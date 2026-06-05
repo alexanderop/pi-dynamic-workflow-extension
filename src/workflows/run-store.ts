@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok, type Result } from "./result.ts";
 import type {
@@ -18,6 +18,7 @@ export interface WorkflowRunStoreOptions {
 export type WorkflowRunStoreError =
   | WorkflowRunNotFoundError
   | WorkflowRunReadError
+  | WorkflowRunWriteError
   | WorkflowRunInvalidError;
 
 export interface WorkflowRunNotFoundError {
@@ -29,6 +30,13 @@ export interface WorkflowRunNotFoundError {
 
 export interface WorkflowRunReadError {
   readonly _tag: "WorkflowRunReadError";
+  readonly message: string;
+  readonly path: string;
+  readonly cause: unknown;
+}
+
+export interface WorkflowRunWriteError {
+  readonly _tag: "WorkflowRunWriteError";
   readonly message: string;
   readonly path: string;
   readonly cause: unknown;
@@ -81,6 +89,22 @@ export class WorkflowRunStore {
       }
     }
     return result;
+  }
+
+  async writeRun(state: WorkflowRunState): Promise<Result<void, WorkflowRunWriteError>> {
+    const path = manifestPath(this.#rootDir, state.runId);
+    try {
+      await mkdir(join(this.#rootDir, state.runId), { recursive: true });
+      await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+      return ok(undefined);
+    } catch (cause) {
+      return err({
+        _tag: "WorkflowRunWriteError",
+        message: `Could not write workflow run manifest at '${path}'.`,
+        path,
+        cause,
+      });
+    }
   }
 
   async #readManifest(runId: string): Promise<Result<WorkflowRunState, WorkflowRunStoreError>> {
