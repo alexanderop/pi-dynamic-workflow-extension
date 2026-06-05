@@ -104,7 +104,7 @@ Pi extensions run with full system permissions. Our workflow scripts must not.
 That means:
 
 - `src/extension/*` is trusted package code running inside Pi.
-- `src/workflows/runtime.ts` should evaluate user workflow JavaScript in our restricted runtime.
+- `src/workflows/script/runtime.ts` should evaluate user workflow JavaScript in our restricted runtime.
 - Workflow JavaScript should only see the globals documented in `spec.md`: `args`, `budget`, `phase`, `log`, `agent`, `parallel`, `pipeline`, and `workflow`.
 - Subagent side effects should go through Pi agent sessions, not arbitrary workflow JavaScript.
 

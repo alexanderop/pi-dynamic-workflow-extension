@@ -6,10 +6,14 @@ import {
   replayRunEvents,
   transitionAgent,
   transitionRun,
-} from "../../src/workflows/state-machine.ts";
-import type { Result } from "../../src/workflows/result.ts";
-import type { WorkflowAgentEvent, WorkflowRunEvent } from "../../src/workflows/state-machine.ts";
-import type { WorkflowAgentProgress, WorkflowRunState } from "../../src/workflows/types.ts";
+} from "../../../src/workflows/run/state-machine.ts";
+import type { Result } from "../../../src/workflows/result.ts";
+import type {
+  WorkflowAgentEvent,
+  WorkflowRunEvent,
+} from "../../../src/workflows/run/state-machine.ts";
+import type { WorkflowAgentProgress } from "../../../src/workflows/agent/model.ts";
+import type { WorkflowRunState } from "../../../src/workflows/run/model.ts";
 
 describe("transitionRun", () => {
   it("should move a run through start, pause, resume, and completion states", () => {

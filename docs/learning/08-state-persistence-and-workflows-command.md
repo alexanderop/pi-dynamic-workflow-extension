@@ -40,7 +40,7 @@ Current meanings:
 |---|---|
 | `manifest.json` | Durable run read model used by `/workflows` (written by `WorkflowRunStore`). |
 | `script.js` | Exact workflow script copy for this run (written by the launcher). |
-| `transcripts/` | Created empty by the launcher (`src/workflows/launcher.ts:210`) but nothing writes into it yet — real subagent transcripts are future work. |
+| `transcripts/` | Created empty by the launcher (`src/workflows/launch/launcher.ts:210`) but nothing writes into it yet — real subagent transcripts are future work. |
 
 Planned paths from the storage layout in [`spec.md` §18](../../spec.md), none of
 which any code writes today:
@@ -68,7 +68,7 @@ The overview should not parse those files.
 
 ## Current manifest fields
 
-The current `WorkflowRunState` is defined in `src/workflows/types.ts:55` and
+The current `WorkflowRunState` is defined in `src/workflows/run/model.ts:55` and
 includes:
 
 ```ts
@@ -101,7 +101,7 @@ yet.
 
 ## Writing state today
 
-The launcher (`src/workflows/launcher.ts`) writes state twice in the happy path:
+The launcher (`src/workflows/launch/launcher.ts`) writes state twice in the happy path:
 
 1. Initial manifest with `status: "running"` before background execution starts
    (via `prepareRunFiles`, which also writes `script.js` and creates the empty
@@ -119,7 +119,7 @@ manifest read mid-run still shows `status: "running"` with empty
 Implementation:
 
 ```text
-src/workflows/run-store.ts
+src/workflows/run/store.ts
 ```
 
 Main methods:
@@ -131,7 +131,7 @@ writeRun(state): Promise<Result<void, WorkflowRunWriteError>>
 ```
 
 Each run lives at `<rootDir>/<runId>/manifest.json`, and `writeRun` saves it with
-2-space indentation and a trailing newline (`src/workflows/run-store.ts:94`).
+2-space indentation and a trailing newline (`src/workflows/run/store.ts:94`).
 
 Behavior to know:
 

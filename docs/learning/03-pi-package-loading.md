@@ -96,7 +96,7 @@ Current runtime dependency:
 }
 ```
 
-`acorn` is used by the workflow parser to validate and extract `meta` from workflow scripts (`src/workflows/parser.ts`).
+`acorn` is used by the workflow parser to validate and extract `meta` from workflow scripts (`src/workflows/script/parser.ts`).
 
 ## What to inspect when package loading fails
 

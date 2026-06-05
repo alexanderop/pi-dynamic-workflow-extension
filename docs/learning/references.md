@@ -22,35 +22,41 @@ This file points to source-of-truth material. Read this learning guide first, th
 - [`../adr/0003-use-explicit-workflow-state-machines.md`](../adr/0003-use-explicit-workflow-state-machines.md)
 - [`../adr/0004-use-pi-extension-context-for-mode-and-prompt-aware-workflows.md`](../adr/0004-use-pi-extension-context-for-mode-and-prompt-aware-workflows.md)
 - [`../adr/0005-use-project-local-pi-workflow-run-storage.md`](../adr/0005-use-project-local-pi-workflow-run-storage.md)
+- [`../adr/0006-use-terminal-notification-hook-before-pi-message-wiring.md`](../adr/0006-use-terminal-notification-hook-before-pi-message-wiring.md)
+- [`../adr/0007-organize-workflows-as-domain-modules.md`](../adr/0007-organize-workflows-as-domain-modules.md)
 
 ## Implementation files
 
 Read in this order:
 
-1. [`../../src/workflows/types.ts`](../../src/workflows/types.ts)
-2. [`../../src/workflows/result.ts`](../../src/workflows/result.ts)
-3. [`../../src/workflows/parser.ts`](../../src/workflows/parser.ts)
-4. [`../../src/workflows/state-machine.ts`](../../src/workflows/state-machine.ts)
-5. [`../../src/workflows/scheduler.ts`](../../src/workflows/scheduler.ts)
-6. [`../../src/workflows/runtime.ts`](../../src/workflows/runtime.ts)
-7. [`../../src/workflows/run-store.ts`](../../src/workflows/run-store.ts)
-8. [`../../src/workflows/launcher.ts`](../../src/workflows/launcher.ts)
-9. [`../../src/extension/index.ts`](../../src/extension/index.ts)
+1. [`../../src/workflows/result.ts`](../../src/workflows/result.ts)
+2. [`../../src/workflows/run/model.ts`](../../src/workflows/run/model.ts)
+3. [`../../src/workflows/agent/model.ts`](../../src/workflows/agent/model.ts)
+4. [`../../src/workflows/script/model.ts`](../../src/workflows/script/model.ts)
+5. [`../../src/workflows/launch/model.ts`](../../src/workflows/launch/model.ts)
+6. [`../../src/workflows/script/parser.ts`](../../src/workflows/script/parser.ts)
+7. [`../../src/workflows/run/state-machine.ts`](../../src/workflows/run/state-machine.ts)
+8. [`../../src/workflows/agent/scheduler.ts`](../../src/workflows/agent/scheduler.ts)
+9. [`../../src/workflows/script/runtime.ts`](../../src/workflows/script/runtime.ts)
+10. [`../../src/workflows/run/store.ts`](../../src/workflows/run/store.ts)
+11. [`../../src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts)
+12. [`../../src/extension/commands/workflows-command.ts`](../../src/extension/commands/workflows-command.ts)
+13. [`../../src/extension/index.ts`](../../src/extension/index.ts)
 
 ## Tests as examples
 
 The tests are the behavior lock: when the docs and the code disagree, these files settle it. Read in this order:
 
 1. [`../../test/workflows/result.test.ts`](../../test/workflows/result.test.ts)
-2. [`../../test/workflows/parser.test.ts`](../../test/workflows/parser.test.ts)
-3. [`../../test/workflows/runtime.test.ts`](../../test/workflows/runtime.test.ts)
-4. [`../../test/workflows/scheduler.test.ts`](../../test/workflows/scheduler.test.ts)
-5. [`../../test/workflows/state-machine.test.ts`](../../test/workflows/state-machine.test.ts)
-6. [`../../test/workflows/run-store.test.ts`](../../test/workflows/run-store.test.ts)
-7. [`../../test/workflows/launcher.test.ts`](../../test/workflows/launcher.test.ts)
+2. [`../../test/workflows/script/parser.test.ts`](../../test/workflows/script/parser.test.ts)
+3. [`../../test/workflows/script/runtime.test.ts`](../../test/workflows/script/runtime.test.ts)
+4. [`../../test/workflows/agent/scheduler.test.ts`](../../test/workflows/agent/scheduler.test.ts)
+5. [`../../test/workflows/run/state-machine.test.ts`](../../test/workflows/run/state-machine.test.ts)
+6. [`../../test/workflows/run/store.test.ts`](../../test/workflows/run/store.test.ts)
+7. [`../../test/workflows/launch/launcher.test.ts`](../../test/workflows/launch/launcher.test.ts)
 8. [`../../test/extension/index.test.ts`](../../test/extension/index.test.ts)
 
-Shared test helper: [`../../test/workflows/workflow-factory.ts`](../../test/workflows/workflow-factory.ts) builds inline workflow scripts (`workflowScript()`, `invalidWorkflowScript()`) used by the runtime, launcher, and parser tests.
+Shared test helper: [`../../test/workflows/script/workflow-factory.ts`](../../test/workflows/script/workflow-factory.ts) builds inline workflow scripts (`workflowScript()`, `invalidWorkflowScript()`) used by the runtime, launcher, and parser tests.
 
 ## Pi docs to read when changing extension behavior
 

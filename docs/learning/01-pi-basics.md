@@ -88,11 +88,11 @@ trusted extension code (full system permissions)
   src/workflows/*   (parser, runtime, scheduler, state machine, run store, launcher)
 
 untrusted workflow script code
-  executed inside a node:vm sandbox by src/workflows/runtime.ts
+  executed inside a node:vm sandbox by src/workflows/script/runtime.ts
   sees only the host globals listed in glossary.md
 ```
 
-The sandbox is also deterministic on purpose: the parser and runtime both reject `Date.now()`, `Math.random()`, and argument-less `new Date()` (`src/workflows/runtime.ts`, ADR 0002), so a future resume can re-run a script and get the same agent calls.
+The sandbox is also deterministic on purpose: the parser and runtime both reject `Date.now()`, `Math.random()`, and argument-less `new Date()` (`src/workflows/script/runtime.ts`, ADR 0002), so a future resume can re-run a script and get the same agent calls.
 
 ## UI modes
 
@@ -117,6 +117,6 @@ This extension uses project-local runtime state. Each run gets its own directory
 .pi/workflows/<runId>/transcripts/      # reserved for future per-agent transcripts (empty today)
 ```
 
-`manifest.json` is the cheap read model: `WorkflowRunStore.listRuns()` scans these files, sorts them newest first, and silently skips any that fail validation (`src/workflows/run-store.ts`). It deliberately never reads journals or transcripts to build the overview. Note there is no journal file yet — resume/replay (`journal.jsonl`) is planned but not implemented.
+`manifest.json` is the cheap read model: `WorkflowRunStore.listRuns()` scans these files, sorts them newest first, and silently skips any that fail validation (`src/workflows/run/store.ts`). It deliberately never reads journals or transcripts to build the overview. Note there is no journal file yet — resume/replay (`journal.jsonl`) is planned but not implemented.
 
 Keeping runs under the project root scopes workflow state to the project being worked on. The storage decision is recorded in [`../adr/0005-use-project-local-pi-workflow-run-storage.md`](../adr/0005-use-project-local-pi-workflow-run-storage.md).

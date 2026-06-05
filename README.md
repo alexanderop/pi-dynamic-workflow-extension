@@ -36,7 +36,7 @@ pi -e .
 
 The package registers a `/workflows` command that lists project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`.
 
-The core workflow modules now support fake-agent development slices: metadata parsing, sandboxed script execution, scheduler-capped fake `agent()` calls, run-state discovery, and inline launch persistence. Real Pi subagents, saved workflow launch, resume, output files, and terminal notifications are still future work.
+The core workflow modules now support fake-agent development slices: metadata parsing, sandboxed script execution, scheduler-capped fake `agent()` calls, run-state discovery, inline launch persistence, terminal `output.json` files, and testable task-notification payloads. Real Pi subagents, saved workflow launch, resume, and Pi `sendMessage()` notification wiring are still future work.
 
 ## Development
 
@@ -65,27 +65,33 @@ Pi loads this package through the `pi` manifest in `package.json`:
 
 The extension entrypoint stays small. Most behavior should live in ordinary TypeScript modules so the workflow runtime can be unit-tested without launching Pi.
 
-Planned structure:
+Current module structure follows [ADR 0007](./docs/adr/0007-organize-workflows-as-domain-modules.md):
 
 ```text
 src/
   extension/
     index.ts
-    commands.ts
-    notifications.ts
-    workflows-ui.ts
+    commands/
+      workflows-command.ts
   workflows/
-    launcher.ts
-    runtime.ts
-    scheduler.ts
-    persistence.ts
-    journal.ts
-    controller.ts
-    meta.ts
-    types.ts
-  subagents/
-    runner.ts
+    agent/
+      model.ts
+      scheduler.ts
+    launch/
+      model.ts
+      launcher.ts
+    run/
+      model.ts
+      store.ts
+      state-machine.ts
+    script/
+      model.ts
+      parser.ts
+      runtime.ts
+    result.ts
 ```
+
+Future `/workflows` TUI code should stay as a UI adapter instead of moving workflow execution logic into terminal components.
 
 ## `/workflows` UI Plan
 

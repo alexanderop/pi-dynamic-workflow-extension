@@ -4,8 +4,8 @@ This file explains how workflow JavaScript is parsed and executed today.
 
 Two source files do the work:
 
-- [`src/workflows/parser.ts`](../../src/workflows/parser.ts) extracts `meta`, strips it from the body, and rejects nondeterministic calls.
-- [`src/workflows/runtime.ts`](../../src/workflows/runtime.ts) runs the remaining body inside a `node:vm` context that exposes the workflow globals.
+- [`src/workflows/script/parser.ts`](../../src/workflows/script/parser.ts) extracts `meta`, strips it from the body, and rejects nondeterministic calls.
+- [`src/workflows/script/runtime.ts`](../../src/workflows/script/runtime.ts) runs the remaining body inside a `node:vm` context that exposes the workflow globals.
 
 ## Script shape
 
@@ -71,7 +71,7 @@ new Date() // argument-less only; new Date(args.startedAt) is allowed
 This is enforced in **two** places, so neither a direct call nor an alias slips through:
 
 - **Parse time:** `assertDeterministic` walks the script body's AST and rejects literal `Date.now()`, `Math.random()`, and argument-less `new Date()` calls (`parser.ts:153-178`).
-- **Run time:** the VM context swaps in deterministic `Date` and `Math` objects whose `now`/`random` throw, so aliases like `const m = Math; m.random()` still fail (`runtime.ts:184-219`, proven by `test/workflows/runtime.test.ts:54-78`).
+- **Run time:** the VM context swaps in deterministic `Date` and `Math` objects whose `now`/`random` throw, so aliases like `const m = Math; m.random()` still fail (`runtime.ts:184-219`, proven by `test/workflows/script/runtime.test.ts:54-78`).
 
 Why forbid them? Resume (a future slice — not implemented yet) will re-run the script from the top and compute a stable key for each `agent()` call. Randomness or implicit current time would change the call sequence or key inputs, breaking the cache.
 
@@ -175,7 +175,7 @@ Each item advances independently. If `src` finishes review before `test`, `src` 
 
 ## Captured runtime state
 
-After execution, the runtime returns `WorkflowRuntimeState` (`runtime.ts:73-80`, type in [`src/workflows/types.ts`](../../src/workflows/types.ts)):
+After execution, the runtime returns `WorkflowRuntimeState` (`runtime.ts:73-80`, type in [`src/workflows/run/model.ts`](../../src/workflows/run/model.ts)):
 
 ```ts
 {
@@ -190,7 +190,7 @@ After execution, the runtime returns `WorkflowRuntimeState` (`runtime.ts:73-80`,
 
 `workflowProgress` is `[...phases, ...scheduler.progress()]`, and `scheduler.progress()` returns a defensive copy, so the returned state is a snapshot, not a live view.
 
-The launcher ([`src/workflows/launcher.ts`](../../src/workflows/launcher.ts)) later merges this into a durable `WorkflowRunState` manifest written to `.pi/workflows/<runId>/manifest.json`. (Note: launching by saved `name` or `scriptPath` is not implemented yet — only inline `script` works.)
+The launcher ([`src/workflows/launch/launcher.ts`](../../src/workflows/launch/launcher.ts)) later merges this into a durable `WorkflowRunState` manifest written to `.pi/workflows/<runId>/manifest.json`. (Note: launching by saved `name` or `scriptPath` is not implemented yet — only inline `script` works.)
 
 ## Sandbox limits
 
@@ -203,6 +203,6 @@ process
 require
 ```
 
-(`test/workflows/runtime.test.ts:41-52` checks `typeof process` and `typeof require` are both `"undefined"`.)
+(`test/workflows/script/runtime.test.ts:41-52` checks `typeof process` and `typeof require` are both `"undefined"`.)
 
 However, [ADR 0002](../adr/0002-use-acorn-and-node-vm-for-first-workflow-runtime.md) explicitly says `node:vm` is not a complete security boundary. Treat this as an execution kernel for the first implementation, not a finished security story.

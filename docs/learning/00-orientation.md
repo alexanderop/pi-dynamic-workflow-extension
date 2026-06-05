@@ -43,13 +43,13 @@ When you split future work, update `docs/backlog.md`.
 The code currently supports:
 
 - A Pi package shell with a `/workflows` command (`src/extension/index.ts:10`, registered via `pi.registerCommand("workflows", ...)`).
-- Project-local run manifest discovery from `.pi/workflows/<runId>/manifest.json` (read-only; `src/workflows/run-store.ts`).
-- A workflow script parser for literal `export const meta = { ... }` (`src/workflows/parser.ts`).
-- A restricted Node VM runtime that executes workflow scripts (`src/workflows/runtime.ts`).
-- A real `agent()` scheduler enforcing concurrency and total-agent caps (`src/workflows/scheduler.ts`); only the agent _runner_ it calls is fake/injected today.
+- Project-local run manifest discovery from `.pi/workflows/<runId>/manifest.json` (read-only; `src/workflows/run/store.ts`).
+- A workflow script parser for literal `export const meta = { ... }` (`src/workflows/script/parser.ts`).
+- A restricted Node VM runtime that executes workflow scripts (`src/workflows/script/runtime.ts`).
+- A real `agent()` scheduler enforcing concurrency and total-agent caps (`src/workflows/agent/scheduler.ts`); only the agent _runner_ it calls is fake/injected today.
 - `parallel()` and `pipeline()` runtime helpers.
-- Explicit run and agent state machines (`src/workflows/state-machine.ts`).
-- Inline workflow launch (from an inline `script` source only) with fake agents and manifest persistence (`src/workflows/launcher.ts`).
+- Explicit run and agent state machines (`src/workflows/run/state-machine.ts`).
+- Inline workflow launch (from an inline `script` source only) with fake agents and manifest persistence (`src/workflows/launch/launcher.ts`).
 
 The code does **not** yet support:
 
@@ -76,14 +76,14 @@ docs/learning/
 Then read implementation files in this order:
 
 ```text
-src/workflows/types.ts
+src/workflows/run/model.ts
 src/workflows/result.ts
-src/workflows/parser.ts
-src/workflows/state-machine.ts
-src/workflows/scheduler.ts
-src/workflows/runtime.ts
-src/workflows/run-store.ts
-src/workflows/launcher.ts
+src/workflows/script/parser.ts
+src/workflows/run/state-machine.ts
+src/workflows/agent/scheduler.ts
+src/workflows/script/runtime.ts
+src/workflows/run/store.ts
+src/workflows/launch/launcher.ts
 src/extension/index.ts
 ```
 

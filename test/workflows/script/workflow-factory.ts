@@ -1,4 +1,4 @@
-import type { WorkflowMeta } from "../../src/workflows/types.ts";
+import type { WorkflowMeta } from "../../../src/workflows/script/model.ts";
 
 interface WorkflowScriptParts {
   beforeMeta?: string;

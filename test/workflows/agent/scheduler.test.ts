@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateDefaultMaxConcurrent,
   WorkflowAgentScheduler,
-} from "../../src/workflows/scheduler.ts";
+} from "../../../src/workflows/agent/scheduler.ts";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

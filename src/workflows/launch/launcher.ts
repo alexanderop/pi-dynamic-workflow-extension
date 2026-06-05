@@ -1,79 +1,46 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tryParseWorkflowScript, type WorkflowParseError } from "./parser.ts";
-import { err, ok, type Result } from "./result.ts";
-import { transitionRun } from "./state-machine.ts";
-import { tryRunWorkflowScript, type WorkflowRuntimeOptions } from "./runtime.ts";
-import { WorkflowRunStore } from "./run-store.ts";
-import type { WorkflowProgressEntry, WorkflowRunState, WorkflowRuntimeState } from "./types.ts";
+import { tryParseWorkflowScript } from "../script/parser.ts";
+import { tryRunWorkflowScript } from "../script/runtime.ts";
+import { err, ok, type Result } from "../result.ts";
+import { WorkflowRunStore } from "../run/store.ts";
+import { transitionRun } from "../run/state-machine.ts";
+import type {
+  WorkflowLaunch,
+  WorkflowLaunchBackgroundError,
+  WorkflowLaunchError,
+  WorkflowLaunchInvalidRequestError,
+  WorkflowLaunchOptions,
+  WorkflowLaunchPersistenceError,
+  WorkflowLaunchRequest,
+  WorkflowLaunchUnsupportedSourceError,
+  WorkflowTaskNotification,
+  WorkflowTaskNotificationDetails,
+  WorkflowTaskUsage,
+  WorkflowTerminalNotificationError,
+  WorkflowTerminalNotifier,
+  WorkflowTerminalOutput,
+} from "./model.ts";
+import type { WorkflowFailure, WorkflowProgressEntry, WorkflowRunState } from "../run/model.ts";
+import type { WorkflowRuntimeOptions, WorkflowRuntimeState } from "../script/model.ts";
 
-export interface WorkflowLaunchRequest {
-  readonly script?: string;
-  readonly name?: string;
-  readonly scriptPath?: string;
-  readonly args?: unknown;
-  readonly resumeFromRunId?: string;
-  readonly description?: string;
-}
-
-export interface WorkflowLaunchOptions {
-  readonly rootDir: string;
-  readonly now?: () => number;
-  readonly createTaskId?: () => string;
-  readonly createRunId?: () => string;
-  readonly defer?: (start: () => void) => void;
-  readonly agentRunner?: WorkflowRuntimeOptions["agentRunner"];
-  readonly maxConcurrentAgents?: number;
-  readonly maxTotalAgents?: number;
-  readonly budgetTotal?: number | null;
-}
-
-export interface WorkflowLaunch {
-  readonly taskId: string;
-  readonly runId: string;
-  readonly scriptPath: string;
-  readonly transcriptDir: string;
-  readonly confirmation: string;
-  readonly completion: Promise<Result<WorkflowRunState, WorkflowLaunchBackgroundError>>;
-}
-
-export type WorkflowLaunchError =
-  | WorkflowLaunchInvalidRequestError
-  | WorkflowLaunchUnsupportedSourceError
-  | WorkflowLaunchParseError
-  | WorkflowLaunchPersistenceError;
-
-export interface WorkflowLaunchInvalidRequestError {
-  readonly _tag: "WorkflowLaunchInvalidRequestError";
-  readonly message: string;
-}
-
-export interface WorkflowLaunchUnsupportedSourceError {
-  readonly _tag: "WorkflowLaunchUnsupportedSourceError";
-  readonly message: string;
-  readonly source: "name" | "scriptPath";
-}
-
-export interface WorkflowLaunchParseError {
-  readonly _tag: "WorkflowLaunchParseError";
-  readonly message: string;
-  readonly cause: WorkflowParseError;
-}
-
-export interface WorkflowLaunchPersistenceError {
-  readonly _tag: "WorkflowLaunchPersistenceError";
-  readonly message: string;
-  readonly path: string;
-  readonly cause: unknown;
-}
-
-export interface WorkflowLaunchBackgroundError {
-  readonly _tag: "WorkflowLaunchBackgroundError";
-  readonly message: string;
-  readonly runId: string;
-  readonly cause: unknown;
-}
+export type {
+  WorkflowLaunch,
+  WorkflowLaunchBackgroundError,
+  WorkflowLaunchError,
+  WorkflowLaunchInvalidRequestError,
+  WorkflowLaunchOptions,
+  WorkflowLaunchParseError,
+  WorkflowLaunchPersistenceError,
+  WorkflowLaunchRequest,
+  WorkflowLaunchUnsupportedSourceError,
+  WorkflowTaskNotification,
+  WorkflowTaskNotificationDetails,
+  WorkflowTaskUsage,
+  WorkflowTerminalNotifier,
+  WorkflowTerminalOutput,
+} from "./model.ts";
 
 export async function launchWorkflow(
   request: WorkflowLaunchRequest,
@@ -97,6 +64,9 @@ export async function launchWorkflow(
   const runId = (options.createRunId ?? randomRunId)();
   const scriptPath = workflowRunScriptPath(options.rootDir, runId);
   const transcriptDir = workflowRunTranscriptDir(options.rootDir, runId);
+  const outputPath = workflowRunOutputPath(options.rootDir, runId);
+  const summarySource =
+    parsed.value.meta.description ?? request.description ?? parsed.value.meta.name;
   const initialState: WorkflowRunState = {
     runId,
     taskId,
@@ -123,6 +93,10 @@ export async function launchWorkflow(
     store,
     now,
     defer: options.defer ?? defaultDefer,
+    outputPath,
+    summarySource,
+    notifyTerminal: options.notifyTerminal,
+    inlineResultMaxChars: options.inlineResultMaxChars,
     runtimeOptions: {
       args: request.args,
       agentRunner: options.agentRunner,
@@ -148,6 +122,10 @@ export function workflowRunScriptPath(rootDir: string, runId: string): string {
 
 export function workflowRunTranscriptDir(rootDir: string, runId: string): string {
   return join(rootDir, runId, "transcripts");
+}
+
+export function workflowRunOutputPath(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "output.json");
 }
 
 function selectLaunchSource(
@@ -227,6 +205,10 @@ interface BackgroundExecutionOptions {
   readonly store: WorkflowRunStore;
   readonly now: () => number;
   readonly defer: (start: () => void) => void;
+  readonly outputPath: string;
+  readonly summarySource: string;
+  readonly notifyTerminal?: WorkflowTerminalNotifier;
+  readonly inlineResultMaxChars?: number;
   readonly runtimeOptions: WorkflowRuntimeOptions;
 }
 
@@ -236,30 +218,69 @@ function startBackgroundExecution({
   store,
   now,
   defer,
+  outputPath,
+  summarySource,
+  notifyTerminal,
+  inlineResultMaxChars,
   runtimeOptions,
 }: BackgroundExecutionOptions): Promise<Result<WorkflowRunState, WorkflowLaunchBackgroundError>> {
   return new Promise((resolve) => {
     defer(() => {
-      void executeWorkflowInBackground(source, initialState, store, now, runtimeOptions)
+      void executeWorkflowInBackground({
+        source,
+        initialState,
+        store,
+        now,
+        outputPath,
+        summarySource,
+        notifyTerminal,
+        inlineResultMaxChars,
+        runtimeOptions,
+      })
         .then(resolve)
         .catch((cause) => resolve(err(backgroundError(initialState.runId, cause))));
     });
   });
 }
 
-async function executeWorkflowInBackground(
-  source: string,
-  initialState: WorkflowRunState,
-  store: WorkflowRunStore,
-  now: () => number,
-  runtimeOptions: WorkflowRuntimeOptions,
-): Promise<Result<WorkflowRunState, WorkflowLaunchBackgroundError>> {
+interface ExecuteWorkflowInBackgroundOptions {
+  readonly source: string;
+  readonly initialState: WorkflowRunState;
+  readonly store: WorkflowRunStore;
+  readonly now: () => number;
+  readonly outputPath: string;
+  readonly summarySource: string;
+  readonly notifyTerminal?: WorkflowTerminalNotifier;
+  readonly inlineResultMaxChars?: number;
+  readonly runtimeOptions: WorkflowRuntimeOptions;
+}
+
+async function executeWorkflowInBackground({
+  source,
+  initialState,
+  store,
+  now,
+  outputPath,
+  summarySource,
+  notifyTerminal,
+  inlineResultMaxChars,
+  runtimeOptions,
+}: ExecuteWorkflowInBackgroundOptions): Promise<
+  Result<WorkflowRunState, WorkflowLaunchBackgroundError>
+> {
   const runtimeResult = await tryRunWorkflowScript(source, runtimeOptions);
   if (runtimeResult.status === "ok") {
-    const completed = completeRunState(initialState, runtimeResult.value, now());
-    const persisted = await store.writeRun(completed);
-    if (persisted.status === "error")
-      return err(backgroundError(initialState.runId, persisted.error));
+    const completed = completeRunState(initialState, runtimeResult.value, now(), outputPath);
+    const terminal = await writeTerminalArtifacts({
+      state: completed,
+      outputPath,
+      summarySource,
+      notifyTerminal,
+      inlineResultMaxChars,
+      store,
+    });
+    if (terminal.status === "error")
+      return err(backgroundError(initialState.runId, terminal.error));
     return ok(completed);
   }
 
@@ -267,18 +288,187 @@ async function executeWorkflowInBackground(
     initialState,
     runtimeResult.error.message,
     now(),
+    outputPath,
     runtimeResult.error.partialState,
   );
-  const persisted = await store.writeRun(failed);
-  if (persisted.status === "error")
-    return err(backgroundError(initialState.runId, persisted.error));
+  const terminal = await writeTerminalArtifacts({
+    state: failed,
+    outputPath,
+    summarySource,
+    notifyTerminal,
+    inlineResultMaxChars,
+    store,
+  });
+  if (terminal.status === "error") return err(backgroundError(initialState.runId, terminal.error));
   return err(backgroundError(initialState.runId, runtimeResult.error));
+}
+
+interface TerminalArtifactsOptions {
+  readonly state: WorkflowRunState;
+  readonly outputPath: string;
+  readonly summarySource: string;
+  readonly notifyTerminal?: WorkflowTerminalNotifier;
+  readonly inlineResultMaxChars?: number;
+  readonly store: WorkflowRunStore;
+}
+
+async function writeTerminalArtifacts({
+  state,
+  outputPath,
+  summarySource,
+  notifyTerminal,
+  inlineResultMaxChars,
+  store,
+}: TerminalArtifactsOptions): Promise<
+  Result<void, WorkflowLaunchPersistenceError | WorkflowTerminalNotificationError>
+> {
+  try {
+    await writeFile(
+      outputPath,
+      `${JSON.stringify(toTerminalOutput(state, outputPath), null, 2)}\n`,
+      "utf8",
+    );
+  } catch (cause) {
+    return err(persistenceError(outputPath, cause));
+  }
+
+  const persisted = await store.writeRun(state);
+  if (persisted.status === "error") {
+    return err(persistenceError(persisted.error.path, persisted.error.cause));
+  }
+
+  if (notifyTerminal !== undefined) {
+    const notification = toTaskNotification(state, outputPath, summarySource, inlineResultMaxChars);
+    try {
+      await notifyTerminal(notification);
+    } catch (cause) {
+      return err({
+        _tag: "WorkflowTerminalNotificationError",
+        message: `Could not enqueue terminal notification for workflow run '${state.runId}'.`,
+        cause,
+      });
+    }
+  }
+
+  return ok(undefined);
+}
+
+function toTerminalOutput(state: WorkflowRunState, outputPath: string): WorkflowTerminalOutput {
+  return {
+    runId: state.runId,
+    taskId: state.taskId,
+    workflowName: state.workflowName,
+    status: state.status,
+    timestamp: state.timestamp,
+    durationMs: state.durationMs,
+    outputPath,
+    result: state.result,
+    failures: state.failures,
+    usage: terminalUsage(state),
+  };
+}
+
+function toTaskNotification(
+  state: WorkflowRunState,
+  outputPath: string,
+  summarySource: string,
+  inlineResultMaxChars = 4000,
+): WorkflowTaskNotification {
+  const result = inlineResult(state.result, outputPath, inlineResultMaxChars);
+  const details: WorkflowTaskNotificationDetails = {
+    taskId: state.taskId,
+    runId: state.runId,
+    outputFile: outputPath,
+    status: state.status,
+    summary: `Dynamic workflow "${summarySource}" ${state.status}`,
+    result,
+    failures: state.failures?.map(formatFailure),
+    usage: terminalUsage(state),
+  };
+
+  return {
+    customType: "workflow-task-notification",
+    display: true,
+    content: taskNotificationXml(details),
+    details,
+  };
+}
+
+function terminalUsage(state: WorkflowRunState): WorkflowTaskUsage {
+  return {
+    agentCount: state.agentCount,
+    subagentTokens: state.totalTokens,
+    toolUses: state.totalToolCalls,
+    durationMs: state.durationMs ?? 0,
+  };
+}
+
+function inlineResult(result: unknown, outputPath: string, maxChars: number): string {
+  const text = result === undefined ? "" : stringifyResult(result);
+  if (text.length <= maxChars) return text;
+
+  const suffix = `\n[truncated ${text.length - maxChars} chars, full result in ${outputPath}]`;
+  if (suffix.length >= maxChars) return suffix.slice(0, maxChars);
+  return `${text.slice(0, maxChars - suffix.length)}${suffix}`;
+}
+
+function stringifyResult(result: unknown): string {
+  if (typeof result === "string") return result;
+  return JSON.stringify(result, null, 2) ?? "";
+}
+
+function taskNotificationXml(details: WorkflowTaskNotificationDetails): string {
+  return [
+    "<task-notification>",
+    `  <task-id>${escapeXml(details.taskId)}</task-id>`,
+    `  <output-file>${escapeXml(details.outputFile)}</output-file>`,
+    `  <status>${escapeXml(details.status)}</status>`,
+    `  <summary>${escapeXml(details.summary)}</summary>`,
+    `  <result>${escapeXml(details.result)}</result>`,
+    failuresXml(details.failures),
+    "  <usage>",
+    `    <agent_count>${details.usage.agentCount}</agent_count>`,
+    `    <subagent_tokens>${details.usage.subagentTokens}</subagent_tokens>`,
+    `    <tool_uses>${details.usage.toolUses}</tool_uses>`,
+    `    <duration_ms>${details.usage.durationMs}</duration_ms>`,
+    "  </usage>",
+    "</task-notification>",
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n");
+}
+
+function failuresXml(failures: string[] | undefined): string | undefined {
+  if (failures === undefined || failures.length === 0) return undefined;
+  return [
+    "  <failures>",
+    ...failures.map((failure) => `    <failure>${escapeXml(failure)}</failure>`),
+    "  </failures>",
+  ].join("\n");
+}
+
+function formatFailure(failure: WorkflowFailure): string {
+  if (failure.scope === "agent" && failure.agentId !== undefined)
+    return `agent ${failure.agentId} failed: ${failure.message}`;
+  if (failure.scope === "pipeline" && failure.pipelineIndex !== undefined)
+    return `pipeline[${failure.pipelineIndex}] failed: ${failure.message}`;
+  return `${failure.scope} failed: ${failure.message}`;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 function completeRunState(
   initialState: WorkflowRunState,
   runtimeState: WorkflowRuntimeState,
   now: number,
+  outputPath: string,
 ): WorkflowRunState {
   const withRuntimeState = mergeRuntimeState(initialState, runtimeState);
   const completing = transitionRun(withRuntimeState, { type: "run_complete_requested", now });
@@ -289,13 +479,14 @@ function completeRunState(
     result: runtimeState.result,
   });
   if (completed.status === "error") throw new Error(completed.error.message);
-  return completed.value;
+  return { ...completed.value, outputPath };
 }
 
 function failRunState(
   initialState: WorkflowRunState,
   message: string,
   now: number,
+  outputPath: string,
   runtimeState?: WorkflowRuntimeState,
 ): WorkflowRunState {
   const failure = { scope: "run" as const, message };
@@ -305,7 +496,7 @@ function failRunState(
   if (failing.status === "error") throw new Error(failing.error.message);
   const failed = transitionRun(failing.value, { type: "run_failed", now, failure });
   if (failed.status === "error") throw new Error(failed.error.message);
-  return failed.value;
+  return { ...failed.value, outputPath };
 }
 
 function mergeRuntimeState(

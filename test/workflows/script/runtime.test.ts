@@ -4,7 +4,7 @@ import {
   pipeline,
   runWorkflowScript,
   tryRunWorkflowScript,
-} from "../../src/workflows/runtime.ts";
+} from "../../../src/workflows/script/runtime.ts";
 import { workflowScript } from "./workflow-factory.ts";
 
 describe("runWorkflowScript", () => {

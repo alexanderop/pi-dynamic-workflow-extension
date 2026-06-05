@@ -40,7 +40,7 @@ Each run has:
 - future output file
 - future subagent transcripts
 
-Current Pi storage shape (created by `launchWorkflow()` in `src/workflows/launcher.ts`):
+Current Pi storage shape (created by `launchWorkflow()` in `src/workflows/launch/launcher.ts`):
 
 ```text
 .pi/workflows/<runId>/
@@ -79,12 +79,12 @@ It should enforce:
 Current implementation:
 
 ```text
-src/workflows/scheduler.ts
+src/workflows/agent/scheduler.ts
 ```
 
 The concurrency cap defaults to `min(16, max(1, cpuCores - 2))` (`scheduler.ts:185`), and there is a hard `maxTotalAgents` ceiling that makes `schedule()` reject once exceeded.
 
-Agent progress states come from the agent state machine in `src/workflows/state-machine.ts:93`:
+Agent progress states come from the agent state machine in `src/workflows/run/state-machine.ts:93`:
 
 ```text
 queued  -> running   (agent_started)

@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   launchWorkflow,
+  workflowRunOutputPath,
   workflowRunScriptPath,
   workflowRunTranscriptDir,
-} from "../../src/workflows/launcher.ts";
-import { WorkflowRunStore } from "../../src/workflows/run-store.ts";
-import type { Result } from "../../src/workflows/result.ts";
-import { workflowScript } from "./workflow-factory.ts";
+  type WorkflowTaskNotification,
+} from "../../../src/workflows/launch/launcher.ts";
+import { WorkflowRunStore } from "../../../src/workflows/run/store.ts";
+import type { Result } from "../../../src/workflows/result.ts";
+import { workflowScript } from "../script/workflow-factory.ts";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -170,6 +172,118 @@ return { result };
     });
   });
 
+  it("should write terminal output and notify after the completed run manifest is persisted", async () => {
+    const notifications: WorkflowTaskNotification[] = [];
+    const script = workflowScript({
+      meta: {
+        name: "terminal-success",
+        description: "Review project with fake agents",
+        phases: [{ title: "Scan" }],
+      },
+      body: `
+phase("Scan");
+const result = await agent("scan src", { label: "scan-agent", phase: "Scan" });
+return { result, notes: "full result belongs in output.json" };
+`,
+    });
+    const outputPath = workflowRunOutputPath(rootDir, "wf_test");
+
+    const result = await launchWorkflow(
+      { script },
+      launchOptions({
+        agentRunner: async () => "agent result",
+        notifyTerminal: async (notification) => {
+          notifications.push(notification);
+
+          const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+          const output = JSON.parse(await readFile(outputPath, "utf8"));
+
+          expect(manifest).toMatchObject({
+            status: "completed",
+            outputPath,
+          });
+          expect(output).toMatchObject({
+            runId: "wf_test",
+            taskId: "task_test",
+            workflowName: "terminal-success",
+            status: "completed",
+            result: { result: "agent result", notes: "full result belongs in output.json" },
+            usage: {
+              agentCount: 1,
+              subagentTokens: 0,
+              toolUses: 0,
+              durationMs: 75,
+            },
+          });
+        },
+      }),
+    );
+
+    const launch = unwrap(result);
+    now = 175;
+    const completed = unwrap(await launch.completion);
+
+    expect(completed).toMatchObject({
+      status: "completed",
+      outputPath,
+      result: { result: "agent result", notes: "full result belongs in output.json" },
+    });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      customType: "workflow-task-notification",
+      display: true,
+      details: {
+        taskId: "task_test",
+        runId: "wf_test",
+        outputFile: outputPath,
+        status: "completed",
+        summary: 'Dynamic workflow "Review project with fake agents" completed',
+        usage: {
+          agentCount: 1,
+          subagentTokens: 0,
+          toolUses: 0,
+          durationMs: 75,
+        },
+      },
+    });
+    expect(notifications[0]!.content).toContain("<task-notification>");
+    expect(notifications[0]!.content).toContain(`<task-id>task_test</task-id>`);
+    expect(notifications[0]!.content).toContain(`<output-file>${outputPath}</output-file>`);
+    expect(notifications[0]!.content).toContain("<status>completed</status>");
+    expect(notifications[0]!.content).toContain("<agent_count>1</agent_count>");
+  });
+
+  it("should truncate inline notification result while preserving the full output file", async () => {
+    const notifications: WorkflowTaskNotification[] = [];
+    const script = workflowScript({
+      meta: { name: "terminal-truncation" },
+      body: `return { text: "x".repeat(600) };`,
+    });
+    const outputPath = workflowRunOutputPath(rootDir, "wf_test");
+
+    const result = await launchWorkflow(
+      { script },
+      launchOptions({
+        inlineResultMaxChars: 300,
+        notifyTerminal: (notification) => {
+          notifications.push(notification);
+        },
+      }),
+    );
+
+    const launch = unwrap(result);
+    now = 125;
+    unwrap(await launch.completion);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]!.details.result.length).toBeLessThanOrEqual(300);
+    expect(notifications[0]!.details.result).toContain("truncated");
+    expect(notifications[0]!.details.result).toContain(outputPath);
+
+    const output = JSON.parse(await readFile(outputPath, "utf8"));
+    expect(output.result.text).toHaveLength(600);
+  });
+
   it("should return launch confirmation before the background fake agent completes", async () => {
     const agentResult = deferred<string>();
     let completionSettled = false;
@@ -195,6 +309,75 @@ return { result };
     now = 125;
     agentResult.resolve("done");
     expect(unwrap(await launch.completion)).toMatchObject({ status: "completed", result: "done" });
+  });
+
+  it("should write failed terminal output and notify with failures when workflow throws", async () => {
+    const notifications: WorkflowTaskNotification[] = [];
+    const script = workflowScript({
+      meta: {
+        name: "terminal-failure",
+        description: "Find risky workflow failures",
+        phases: [{ title: "Scan" }],
+      },
+      body: `
+phase("Scan");
+await agent("scan src", { label: "scan-agent", phase: "Scan" });
+throw new Error("workflow exploded");
+`,
+    });
+    const outputPath = workflowRunOutputPath(rootDir, "wf_test");
+
+    const result = await launchWorkflow(
+      { script },
+      launchOptions({
+        agentRunner: async () => "agent result",
+        notifyTerminal: (notification) => {
+          notifications.push(notification);
+        },
+      }),
+    );
+
+    const launch = unwrap(result);
+    now = 175;
+    const completion = await launch.completion;
+
+    expect(completion).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowLaunchBackgroundError", message: "workflow exploded" },
+    });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      details: {
+        status: "failed",
+        outputFile: outputPath,
+        summary: 'Dynamic workflow "Find risky workflow failures" failed',
+        failures: ["run failed: workflow exploded"],
+        usage: {
+          agentCount: 1,
+          subagentTokens: 0,
+          toolUses: 0,
+          durationMs: 75,
+        },
+      },
+    });
+    expect(notifications[0]!.content).toContain("<status>failed</status>");
+    expect(notifications[0]!.content).toContain("<failures>");
+    expect(notifications[0]!.content).toContain("<failure>run failed: workflow exploded</failure>");
+
+    const output = JSON.parse(await readFile(outputPath, "utf8"));
+    expect(output).toMatchObject({
+      runId: "wf_test",
+      taskId: "task_test",
+      workflowName: "terminal-failure",
+      status: "failed",
+      failures: [{ scope: "run", message: "workflow exploded" }],
+      usage: {
+        agentCount: 1,
+        subagentTokens: 0,
+        toolUses: 0,
+        durationMs: 75,
+      },
+    });
   });
 
   it("should persist runtime progress once when a workflow fails after agent work", async () => {

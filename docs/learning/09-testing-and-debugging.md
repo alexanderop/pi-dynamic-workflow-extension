@@ -43,12 +43,12 @@ The formatter intentionally does not target exploratory docs such as `spec.md`, 
 | Area | Test file |
 |---|---|
 | Result helper | `test/workflows/result.test.ts` |
-| Parser | `test/workflows/parser.test.ts` |
-| Runtime, `parallel`, `pipeline` | `test/workflows/runtime.test.ts` |
-| Scheduler | `test/workflows/scheduler.test.ts` |
-| State machines | `test/workflows/state-machine.test.ts` |
-| Run store | `test/workflows/run-store.test.ts` |
-| Launcher | `test/workflows/launcher.test.ts` |
+| Parser | `test/workflows/script/parser.test.ts` |
+| Runtime, `parallel`, `pipeline` | `test/workflows/script/runtime.test.ts` |
+| Scheduler | `test/workflows/agent/scheduler.test.ts` |
+| State machines | `test/workflows/run/state-machine.test.ts` |
+| Run store | `test/workflows/run/store.test.ts` |
+| Launcher | `test/workflows/launch/launcher.test.ts` |
 | Extension command | `test/extension/index.test.ts` |
 | Local lint rule | `test/lint/test-name-should.test.ts` |
 
@@ -75,10 +75,10 @@ The mechanical part of this convention is enforced by a local Oxlint rule in `to
 Relevant file:
 
 ```text
-src/workflows/parser.ts
+src/workflows/script/parser.ts
 ```
 
-`parseWorkflowScript()` throws `WorkflowParseError`; `tryParseWorkflowScript()` returns the same failure as `Result<ParsedWorkflowScript, WorkflowParseError>` (`src/workflows/parser.ts:39`). Common errors (messages paraphrased; exact text lives in `parser.ts`):
+`parseWorkflowScript()` throws `WorkflowParseError`; `tryParseWorkflowScript()` returns the same failure as `Result<ParsedWorkflowScript, WorkflowParseError>` (`src/workflows/script/parser.ts:39`). Common errors (messages paraphrased; exact text lives in `parser.ts`):
 
 | Error | Likely cause | Source |
 |---|---|---|
@@ -88,12 +88,12 @@ src/workflows/parser.ts
 | Must not call `Math.random()` | Workflow body uses randomness. | `parser.ts:161-164` |
 | Must not call argument-less `new Date()` | Workflow body uses implicit current time. | `parser.ts:167-175` |
 
-The determinism checks run twice: at parse time over the AST (`parser.ts:153-178`), and again at runtime where `Date`/`Math` are replaced with guarded versions (`src/workflows/runtime.ts:184-219`). The runtime check also catches aliases like `const m = Math; m.random()` that the AST walk cannot see.
+The determinism checks run twice: at parse time over the AST (`parser.ts:153-178`), and again at runtime where `Date`/`Math` are replaced with guarded versions (`src/workflows/script/runtime.ts:184-219`). The runtime check also catches aliases like `const m = Math; m.random()` that the AST walk cannot see.
 
 Start with:
 
 ```bash
-pnpm test test/workflows/parser.test.ts
+pnpm test test/workflows/script/parser.test.ts
 ```
 
 ## Debugging runtime issues
@@ -101,10 +101,10 @@ pnpm test test/workflows/parser.test.ts
 Relevant file:
 
 ```text
-src/workflows/runtime.ts
+src/workflows/script/runtime.ts
 ```
 
-The runtime parses the script, then runs the body as **raw JavaScript** inside a `node:vm` context wrapped in an `async` IIFE, with a 1000ms timeout (`src/workflows/runtime.ts:82-85`). There is no TypeScript transpilation, so any TypeScript-only syntax in the body is a syntax error in the VM. The context only exposes `args`, `budget`, `phase`, `log`, `agent`, `parallel`, `pipeline`, and guarded `Date`/`Math` (`runtime.ts:55-71`); `process`, `require`, and friends are absent.
+The runtime parses the script, then runs the body as **raw JavaScript** inside a `node:vm` context wrapped in an `async` IIFE, with a 1000ms timeout (`src/workflows/script/runtime.ts:82-85`). There is no TypeScript transpilation, so any TypeScript-only syntax in the body is a syntax error in the VM. The context only exposes `args`, `budget`, `phase`, `log`, `agent`, `parallel`, `pipeline`, and guarded `Date`/`Math` (`runtime.ts:55-71`); `process`, `require`, and friends are absent.
 
 `runWorkflowScript()` throws on failure; `tryRunWorkflowScript()` returns `Result<WorkflowRuntimeState, WorkflowRuntimeError>` (`runtime.ts:103-116`).
 
@@ -121,7 +121,7 @@ Useful questions:
 Run:
 
 ```bash
-pnpm test test/workflows/runtime.test.ts
+pnpm test test/workflows/script/runtime.test.ts
 ```
 
 ## Debugging scheduler issues
@@ -129,7 +129,7 @@ pnpm test test/workflows/runtime.test.ts
 Relevant file:
 
 ```text
-src/workflows/scheduler.ts
+src/workflows/agent/scheduler.ts
 ```
 
 Check:
@@ -145,7 +145,7 @@ Check:
 Run:
 
 ```bash
-pnpm test test/workflows/scheduler.test.ts
+pnpm test test/workflows/agent/scheduler.test.ts
 ```
 
 ## Debugging launcher issues
@@ -153,7 +153,7 @@ pnpm test test/workflows/scheduler.test.ts
 Relevant file:
 
 ```text
-src/workflows/launcher.ts
+src/workflows/launch/launcher.ts
 ```
 
 Check the launch sequence (`launchWorkflow`, `launcher.ts:78`):
@@ -171,7 +171,7 @@ The fake agent work runs in the deferred background pass; the returned `completi
 Run:
 
 ```bash
-pnpm test test/workflows/launcher.test.ts
+pnpm test test/workflows/launch/launcher.test.ts
 ```
 
 ## Debugging `/workflows`
@@ -180,7 +180,7 @@ Relevant files:
 
 ```text
 src/extension/index.ts
-src/workflows/run-store.ts
+src/workflows/run/store.ts
 ```
 
 Check:
@@ -195,7 +195,7 @@ Check:
 Run:
 
 ```bash
-pnpm test test/extension/index.test.ts test/workflows/run-store.test.ts
+pnpm test test/extension/index.test.ts test/workflows/run/store.test.ts
 ```
 
 ## Fake-agent first rule

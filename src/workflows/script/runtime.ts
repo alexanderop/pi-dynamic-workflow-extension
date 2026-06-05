@@ -1,16 +1,20 @@
 import vm from "node:vm";
 import { parseWorkflowScript } from "./parser.ts";
-import { err, ok, type Result } from "./result.ts";
-import { WorkflowAgentScheduler } from "./scheduler.ts";
-import type { AgentOptions, WorkflowBudget, WorkflowRuntimeState } from "./types.ts";
+import { err, ok, type Result } from "../result.ts";
+import { WorkflowAgentScheduler } from "../agent/scheduler.ts";
+import type { AgentOptions } from "../agent/model.ts";
+import type {
+  WorkflowBudget,
+  WorkflowRuntimeError,
+  WorkflowRuntimeOptions,
+  WorkflowRuntimeState,
+} from "./model.ts";
 
-export interface WorkflowRuntimeOptions {
-  args?: unknown;
-  budgetTotal?: number | null;
-  maxConcurrentAgents?: number;
-  maxTotalAgents?: number;
-  agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;
-}
+export type {
+  WorkflowRuntimeError,
+  WorkflowRuntimeOptions,
+  WorkflowRuntimeState,
+} from "./model.ts";
 
 export async function runWorkflowScript(
   source: string,
@@ -91,13 +95,6 @@ async function executeWorkflowScript(
       partialState: currentState(),
     });
   }
-}
-
-export interface WorkflowRuntimeError {
-  readonly _tag: "WorkflowRuntimeError";
-  readonly message: string;
-  readonly cause: unknown;
-  readonly partialState?: WorkflowRuntimeState;
 }
 
 export async function tryRunWorkflowScript(

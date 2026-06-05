@@ -22,19 +22,21 @@ Each launched run gets one directory:
 .pi/workflows/<runId>/
   manifest.json
   script.js
+  output.json
   transcripts/
 ```
 
 The launcher writes `script.js`, creates `transcripts/`, and writes the initial
-`manifest.json` before starting background execution. `manifest.json` is the
-canonical `/workflows` read model; list/overview commands must not require
+`manifest.json` before starting background execution. When a run reaches a
+terminal state, it writes `output.json` as the full result/failure artifact and
+then persists `outputPath` on the terminal `manifest.json`. `manifest.json` is
+the canonical `/workflows` read model; list/overview commands must not require
 journals, outputs, or transcript files.
 
 Reserve these paths for later slices:
 
 ```text
 .pi/workflows/<runId>/journal.jsonl
-.pi/workflows/<runId>/output.json
 .pi/workflows/scripts/<workflowName>.workflow.js
 ```
 

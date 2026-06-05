@@ -115,10 +115,10 @@ Spec coverage:
 - Supports §12, §13, §17, and §18 by making implementation-specific mappings explicit.
 
 Status: partially done. ADRs exist for using ADRs, the parser/runtime strategy,
-explicit workflow state machines, Pi extension context usage, and project-local
-Pi workflow run storage. Remaining decisions still need ADRs for saved workflow
-locations, notification mechanism, stable key hashing inputs, structured-output
-retry count, and `agentType` mapping.
+explicit workflow state machines, Pi extension context usage, project-local Pi
+workflow run storage, and the terminal notification hook before Pi message
+wiring. Remaining decisions still need ADRs for saved workflow locations, stable
+key hashing inputs, structured-output retry count, and `agentType` mapping.
 
 ## Epic 0.5: First Thin Vertical Workflow
 
@@ -568,6 +568,14 @@ Spec coverage:
 
 - §17 Notification Contract.
 - §20 acceptance criterion 16.
+
+Status: implemented for fake-agent inline launches. Terminal runs now write
+`.pi/workflows/<runId>/output.json`, persist `outputPath` on the terminal
+manifest before notifying, build a task-notification payload with XML content and
+structured details, include usage and failure summaries, and truncate the inline
+result while preserving the full output file. The notification dispatcher is
+exposed as a testable launch hook; wiring it to Pi `sendMessage()` remains future
+extension integration work.
 
 ## Epic 4: Journal And Resume
 

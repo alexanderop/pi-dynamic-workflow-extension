@@ -8,8 +8,8 @@ A reminder before you start: today every `agent()` call is served by a **fake ag
 
 Read:
 
-- `src/workflows/launcher.ts`
-- `test/workflows/launcher.test.ts`
+- `src/workflows/launch/launcher.ts`
+- `test/workflows/launch/launcher.test.ts`
 
 Task:
 
@@ -34,8 +34,8 @@ Note: only the `script` source is implemented. Passing `name` or `scriptPath` re
 
 Read:
 
-- `src/workflows/parser.ts`
-- `test/workflows/parser.test.ts`
+- `src/workflows/script/parser.ts`
+- `test/workflows/script/parser.test.ts`
 
 Task:
 
@@ -51,7 +51,7 @@ Examples:
 Expected result:
 
 ```bash
-pnpm test test/workflows/parser.test.ts
+pnpm test test/workflows/script/parser.test.ts
 ```
 
 passes.
@@ -60,8 +60,8 @@ passes.
 
 Read:
 
-- `src/workflows/runtime.ts`
-- `test/workflows/runtime.test.ts`
+- `src/workflows/script/runtime.ts`
+- `test/workflows/script/runtime.test.ts`
 
 Task:
 
@@ -83,7 +83,7 @@ Read:
 
 - `spec.md` §7 (Runtime API) and §11 (Pipeline Semantics) for the `parallel()`/`pipeline()` contract
 - `spec.md` §10 (Scheduling) for the concurrency cap that explains *why* thunks are required
-- `src/workflows/runtime.ts` (`parallel()` is at `runtime.ts:133`)
+- `src/workflows/script/runtime.ts` (`parallel()` is at `runtime.ts:133`)
 
 Task:
 
@@ -126,7 +126,7 @@ Examples:
 
 Read:
 
-- `src/workflows/types.ts`
+- `src/workflows/run/model.ts`
 - `src/extension/index.ts`
 - `test/extension/index.test.ts`
 
@@ -144,9 +144,9 @@ Rules:
 
 Read:
 
-- `src/workflows/scheduler.ts`
-- `test/workflows/scheduler.test.ts`
-- `test/workflows/launcher.test.ts`
+- `src/workflows/agent/scheduler.ts`
+- `test/workflows/agent/scheduler.test.ts`
+- `test/workflows/launch/launcher.test.ts`
 
 Task:
 
@@ -154,7 +154,7 @@ Add a test where a fake agent runner rejects and observe how the scheduler and l
 
 Check:
 
-- The scheduler's `#run` catches the rejection, fires `agent_failed`, and rejects the `schedule()` promise, so the progress row becomes `failed` (`scheduler.ts:154-162`; existing example at `test/workflows/scheduler.test.ts:82`).
+- The scheduler's `#run` catches the rejection, fires `agent_failed`, and rejects the `schedule()` promise, so the progress row becomes `failed` (`scheduler.ts:154-162`; existing example at `test/workflows/agent/scheduler.test.ts:82`).
 - The launcher's final manifest becomes `failed` only when the rejection actually escapes the script body. `agent()` awaits `scheduler.schedule()` directly (`runtime.ts:50`), so a bare `await agent("x")` propagates the rejection, the runtime returns a `WorkflowRuntimeError`, and `executeWorkflowInBackground` transitions the run to `failed` (`launcher.ts:266-275`).
 - Watch the gotcha: if the failing `agent()` call is wrapped in `parallel()` or `pipeline()`, the error is swallowed to `null` and the run still completes. The run only fails when the workflow lets the rejection bubble up.
 

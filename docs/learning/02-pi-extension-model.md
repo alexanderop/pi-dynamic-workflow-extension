@@ -91,13 +91,13 @@ The project does not yet expose workflow launch through a Pi command. `/workflow
 is the only registered command today. The launcher exists only as a module:
 
 ```text
-src/workflows/launcher.ts
+src/workflows/launch/launcher.ts
 ```
 
-`launchWorkflow(request, options)` (`src/workflows/launcher.ts:78`) accepts a
+`launchWorkflow(request, options)` (`src/workflows/launch/launcher.ts:78`) accepts a
 `WorkflowLaunchRequest` with `script`, `name`, or `scriptPath` — but only the
 inline `script` source is implemented. The `name` and `scriptPath` sources
-return `WorkflowLaunchUnsupportedSourceError` today (`src/workflows/launcher.ts:195-198`),
+return `WorkflowLaunchUnsupportedSourceError` today (`src/workflows/launch/launcher.ts:195-198`),
 so launch-by-name and launch-by-file do not work yet.
 
 Future extension work will likely add commands or tools that wrap the launcher.
@@ -105,7 +105,7 @@ The exact command names are not decided; hypothetical examples could be a
 "run inline script" command plus a "run saved workflow" command once the `name`
 source is implemented. When that happens, the command layer should translate Pi
 context into `WorkflowLaunchOptions`, then delegate to
-`src/workflows/launcher.ts`.
+`src/workflows/launch/launcher.ts`.
 
 ## Future rich UI
 
@@ -166,7 +166,7 @@ await agent("do work");
 Workflow scripts run inside a Node `vm` sandbox and only see the runtime globals
 the runtime injects — `args`, `budget`, `phase()`, `log()`, `agent()`,
 `parallel()`, `pipeline()`, and deterministic `Date`/`Math` (see the VM context
-in `src/workflows/runtime.ts:55-71`), not full Node/Pi access. The full
+in `src/workflows/script/runtime.ts:55-71`), not full Node/Pi access. The full
 contract is documented in `spec.md`. See also the
 [glossary](./glossary.md) for "Pi extension", "fake agent", and "workflow read
 model".

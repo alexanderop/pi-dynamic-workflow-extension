@@ -8,19 +8,14 @@ Throughout, "fake" means the agent runner is a test/development stand-in (see
 real Pi subagent yet; that is future work tracked in
 [`10-roadmap-next-slices.md`](./10-roadmap-next-slices.md).
 
-## 1. `src/workflows/types.ts`
+## 1. Domain model files
 
-Start here to learn the data model.
+Start here to learn the data model. The workflow package follows ADR 0007 and keeps models next to the module that owns the concept:
 
-Important types:
-
-- `WorkflowMeta`
-- `WorkflowRunState`
-- `WorkflowRuntimeState`
-- `WorkflowProgressEntry`
-- `WorkflowPhaseProgress`
-- `WorkflowAgentProgress`
-- `WorkflowFailure`
+- `src/workflows/run/model.ts` — `WorkflowRunState`, `WorkflowRunStatus`, `WorkflowProgressEntry`, `WorkflowPhaseProgress`, `WorkflowFailure`.
+- `src/workflows/agent/model.ts` — `AgentOptions`, `WorkflowAgentProgress`.
+- `src/workflows/script/model.ts` — `WorkflowMeta`, `WorkflowPhase`, `WorkflowBudget`, `WorkflowRuntimeState`.
+- `src/workflows/launch/model.ts` — launch requests/results/errors and terminal notification payloads.
 
 The key idea: `WorkflowRunState` is the durable read model for `/workflows`. It should be cheap to load without reading journals or transcripts.
 
@@ -48,7 +43,7 @@ Read also:
 ../error-handling.md
 ```
 
-## 3. `src/workflows/parser.ts`
+## 3. `src/workflows/script/parser.ts`
 
 This parses workflow scripts.
 
@@ -87,10 +82,10 @@ return Date.now()
 Tests:
 
 ```text
-test/workflows/parser.test.ts
+test/workflows/script/parser.test.ts
 ```
 
-## 4. `src/workflows/state-machine.ts`
+## 4. `src/workflows/run/state-machine.ts`
 
 This defines allowed run and agent lifecycle transitions.
 
@@ -125,7 +120,7 @@ Important functions:
 Tests:
 
 ```text
-test/workflows/state-machine.test.ts
+test/workflows/run/state-machine.test.ts
 ```
 
 ADR: [`0003-use-explicit-workflow-state-machines.md`](../adr/0003-use-explicit-workflow-state-machines.md).
@@ -134,9 +129,9 @@ Note: the state machine only validates and applies transitions
 (`transitionRun`/`transitionAgent` return a `Result`). Nothing in this module
 *drives* the lifecycle. The scheduler fires agent events, and the launcher fires
 the `run_*` events; the pause/resume/stop edges exist but are not yet wired to
-any caller or UI control (`src/workflows/state-machine.ts:44-110`).
+any caller or UI control (`src/workflows/run/state-machine.ts:44-110`).
 
-## 5. `src/workflows/scheduler.ts`
+## 5. `src/workflows/agent/scheduler.ts`
 
 This queues and runs `agent()` calls. The scheduler is runner-agnostic: it is
 given a `runner` callback and does not know whether that runner is fake or real.
@@ -174,15 +169,15 @@ type WorkflowAgentRunner = (request) => Promise<unknown>
 Today every caller injects a **fake** runner (the runtime defaults to an
 identity runner that echoes the prompt; tests inject their own). Later, this
 should become an adapter around real Pi agent sessions
-(`src/workflows/scheduler.ts:65-122`, `185-187`).
+(`src/workflows/agent/scheduler.ts:65-122`, `185-187`).
 
 Tests:
 
 ```text
-test/workflows/scheduler.test.ts
+test/workflows/agent/scheduler.test.ts
 ```
 
-## 6. `src/workflows/runtime.ts`
+## 6. `src/workflows/script/runtime.ts`
 
 This executes workflow JavaScript.
 
@@ -211,7 +206,7 @@ Math
 
 Determinism is enforced in **two** layers. The parser rejects literal
 `Date.now()`, `Math.random()`, and argument-less `new Date()` at parse time
-(`src/workflows/parser.ts`). The runtime then swaps `Date` and `Math` for wrapped
+(`src/workflows/script/parser.ts`). The runtime then swaps `Date` and `Math` for wrapped
 versions so the same calls still throw at execution time even when reached
 through an alias:
 
@@ -221,15 +216,15 @@ Clock.now() // throws at runtime
 ```
 
 The script body runs inside `node:vm` with a 1000 ms timeout, wrapped in an
-async IIFE so top-level `await` works (`src/workflows/runtime.ts:82-93`).
+async IIFE so top-level `await` works (`src/workflows/script/runtime.ts:82-93`).
 
 Tests:
 
 ```text
-test/workflows/runtime.test.ts
+test/workflows/script/runtime.test.ts
 ```
 
-## 7. `src/workflows/run-store.ts`
+## 7. `src/workflows/run/store.ts`
 
 This reads and writes run manifests.
 
@@ -259,10 +254,10 @@ writeRun(state)
 Tests:
 
 ```text
-test/workflows/run-store.test.ts
+test/workflows/run/store.test.ts
 ```
 
-## 8. `src/workflows/launcher.ts`
+## 8. `src/workflows/launch/launcher.ts`
 
 This is the current vertical slice.
 
@@ -283,7 +278,7 @@ This is the current vertical slice.
 Not yet implemented here, even though the request type accepts them:
 
 - launch by `name` or `scriptPath` returns `WorkflowLaunchUnsupportedSourceError`
-  (`src/workflows/launcher.ts`); only inline `script` works.
+  (`src/workflows/launch/launcher.ts`); only inline `script` works.
 - `resumeFromRunId` and `description` are accepted on the request but never
   read.
 
@@ -293,7 +288,7 @@ does not yet send a terminal notification or write an output file.
 Tests:
 
 ```text
-test/workflows/launcher.test.ts
+test/workflows/launch/launcher.test.ts
 ```
 
 ## 9. `src/extension/index.ts`

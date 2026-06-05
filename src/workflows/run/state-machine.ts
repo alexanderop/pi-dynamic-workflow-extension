@@ -1,5 +1,6 @@
-import { err, ok, type Result } from "./result.ts";
-import type { WorkflowAgentProgress, WorkflowFailure, WorkflowRunState } from "./types.ts";
+import { err, ok, type Result } from "../result.ts";
+import type { WorkflowAgentProgress } from "../agent/model.ts";
+import type { WorkflowFailure, WorkflowRunState } from "./model.ts";
 
 export type WorkflowRunEvent =
   | { type: "run_start_requested"; now: number }

@@ -1,15 +1,15 @@
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { err, ok, type Result } from "./result.ts";
+import { err, ok, type Result } from "../result.ts";
+import type { WorkflowAgentProgress } from "../agent/model.ts";
 import type {
-  WorkflowAgentProgress,
   WorkflowFailure,
   WorkflowPhaseProgress,
   WorkflowProgressEntry,
   WorkflowRunState,
   WorkflowRunStatus,
-} from "./types.ts";
+} from "./model.ts";
 
 export interface WorkflowRunStoreOptions {
   rootDir: string;

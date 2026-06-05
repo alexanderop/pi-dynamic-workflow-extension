@@ -2,7 +2,7 @@
 
 ## Agent runner
 
-The callback behind `agent()`. The runtime accepts an optional `agentRunner` option (`src/workflows/runtime.ts:12`); when none is supplied it falls back to `defaultAgentRunner`, which simply echoes the prompt string back unchanged. In tests a fake runner is injected. Wiring a real Pi subagent session is future work (spec Epic 7).
+The callback behind `agent()`. The runtime accepts an optional `agentRunner` option (`src/workflows/script/runtime.ts:12`); when none is supplied it falls back to `defaultAgentRunner`, which simply echoes the prompt string back unchanged. In tests a fake runner is injected. Wiring a real Pi subagent session is future work (spec Epic 7).
 
 ## ADR
 
@@ -34,7 +34,7 @@ The run read model stored at:
 .pi/workflows/<runId>/manifest.json
 ```
 
-A `WorkflowRunState` serialized as JSON (`src/workflows/run-store.ts`). The `/workflows` command reads only manifests via `WorkflowRunStore.listRuns()`, without parsing transcripts or journals.
+A `WorkflowRunState` serialized as JSON (`src/workflows/run/store.ts`). The `/workflows` command reads only manifests via `WorkflowRunStore.listRuns()`, without parsing transcripts or journals.
 
 Note: This is distinct from the package manifest (the `pi` field in `package.json`), which declares extension entrypoints.
 
@@ -58,11 +58,11 @@ A runtime global that moves each item through multiple async stages independentl
 await pipeline(items, stage1, stage2, stage3)
 ```
 
-Stages receive `(previous, item, index)`. There is no global barrier between stages: item A can enter stage 2 before item B finishes stage 1. A failed item resolves to `null` rather than rejecting (`src/workflows/runtime.ts`).
+Stages receive `(previous, item, index)`. There is no global barrier between stages: item A can enter stage 2 before item B finishes stage 1. A failed item resolves to `null` rather than rejecting (`src/workflows/script/runtime.ts`).
 
 ## Run
 
-One execution of one workflow script. `launchWorkflow()` (`src/workflows/launcher.ts`) gives each run a `runId` and `taskId`, writes the exact `script.js`, creates an (empty) `transcripts/` directory, and persists a `manifest.json`. Journal, output file, and the contents of `transcripts/` are future work.
+One execution of one workflow script. `launchWorkflow()` (`src/workflows/launch/launcher.ts`) gives each run a `runId` and `taskId`, writes the exact `script.js`, creates an (empty) `transcripts/` directory, and persists a `manifest.json`. Journal, output file, and the contents of `transcripts/` are future work.
 
 ## Saved workflow
 
@@ -70,7 +70,7 @@ Reusable workflow JavaScript, separate from run results. It contains orchestrati
 
 ## Scheduler
 
-`WorkflowAgentScheduler` (`src/workflows/scheduler.ts`). Queues `agent()` calls and enforces a single concurrency cap (default `min(16, max(1, cpuCores - 2))`) plus a `maxTotalAgents` hard ceiling. It drives each agent through the agent state machine (`queued → running → done | failed | stopped`) and exposes `progress()`.
+`WorkflowAgentScheduler` (`src/workflows/agent/scheduler.ts`). Queues `agent()` calls and enforces a single concurrency cap (default `min(16, max(1, cpuCores - 2))`) plus a `maxTotalAgents` hard ceiling. It drives each agent through the agent state machine (`queued → running → done | failed | stopped`) and exposes `progress()`.
 
 ## Spec
 
@@ -90,18 +90,18 @@ Per-agent audit log. The launcher already creates the directory for every run, b
 
 ## Workflow controller
 
-Future component responsible for pause, resume, stop, restart, and save operations. The run/agent state machines (`src/workflows/state-machine.ts`) already define the relevant transitions (e.g. `pausing`/`paused`/`resuming`), but nothing requests them yet — no API or UI action is wired to drive a run through them.
+Future component responsible for pause, resume, stop, restart, and save operations. The run/agent state machines (`src/workflows/run/state-machine.ts`) already define the relevant transitions (e.g. `pausing`/`paused`/`resuming`), but nothing requests them yet — no API or UI action is wired to drive a run through them.
 
 ## Workflow read model
 
-The data shape loaded by `/workflows`: `WorkflowRunState` (`src/workflows/types.ts`), read from each run's `manifest.json`. The current `/workflows` command formats this as plain text; a rich TUI viewer is future work.
+The data shape loaded by `/workflows`: `WorkflowRunState` (`src/workflows/run/model.ts`), read from each run's `manifest.json`. The current `/workflows` command formats this as plain text; a rich TUI viewer is future work.
 
 ## Workflow runtime
 
 The restricted JavaScript execution kernel in:
 
 ```text
-src/workflows/runtime.ts
+src/workflows/script/runtime.ts
 ```
 
 It runs the script body inside a `node:vm` context (with a 1000 ms timeout) and exposes the globals `args`, `budget`, `phase`, `log`, `agent`, `parallel`, and `pipeline`. It also overrides `Date` and `Math` with deterministic shims that throw on `Date.now()`, argument-less `new Date()`, and `Math.random()`. `runWorkflowScript()` throws on failure; `tryRunWorkflowScript()` returns a `Result`.

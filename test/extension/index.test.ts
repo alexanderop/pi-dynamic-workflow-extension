@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dynamicWorkflowExtension from "../../src/extension/index.ts";
-import type { WorkflowRunState } from "../../src/workflows/types.ts";
+import type { WorkflowRunState } from "../../src/workflows/run/model.ts";
 
 describe("dynamicWorkflowExtension", () => {
   let tempDir: string;

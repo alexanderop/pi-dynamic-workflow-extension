@@ -8,13 +8,13 @@ Already implemented in some form (file references point at the real code):
 
 - Installable Pi package shell (`package.json` declares the extension; entrypoint `src/extension/index.ts`).
 - `/workflows` command registered via `pi.registerCommand("workflows", ...)` that lists manifests (`src/extension/index.ts:11`).
-- Project-local `.pi/workflows/<runId>/manifest.json` read model (`src/workflows/run-store.ts`).
-- Workflow script parser: validates `export const meta = { ... }` as a pure literal, extracts the runnable body, and rejects `Date.now()`/`Math.random()`/argument-less `new Date()` for determinism (`src/workflows/parser.ts`).
-- Node `vm` runtime kernel exposing limited globals — `args`, `budget`, `phase()`, `log()`, `agent()`, `parallel()`, `pipeline()` — with a 1000ms timeout (`src/workflows/runtime.ts`).
-- Fake `agent()` calls drained through a concurrency-capped scheduler (`src/workflows/scheduler.ts`).
-- `parallel()` and `pipeline()` semantics (`src/workflows/runtime.ts`).
-- Explicit run/agent state machines with typed transitions (`src/workflows/state-machine.ts`).
-- Inline launch with fake agents and final manifest persistence (`src/workflows/launcher.ts`), today only from an inline `script` source.
+- Project-local `.pi/workflows/<runId>/manifest.json` read model (`src/workflows/run/store.ts`).
+- Workflow script parser: validates `export const meta = { ... }` as a pure literal, extracts the runnable body, and rejects `Date.now()`/`Math.random()`/argument-less `new Date()` for determinism (`src/workflows/script/parser.ts`).
+- Node `vm` runtime kernel exposing limited globals — `args`, `budget`, `phase()`, `log()`, `agent()`, `parallel()`, `pipeline()` — with a 1000ms timeout (`src/workflows/script/runtime.ts`).
+- Fake `agent()` calls drained through a concurrency-capped scheduler (`src/workflows/agent/scheduler.ts`).
+- `parallel()` and `pipeline()` semantics (`src/workflows/script/runtime.ts`).
+- Explicit run/agent state machines with typed transitions (`src/workflows/run/state-machine.ts`).
+- Inline launch with fake agents and final manifest persistence (`src/workflows/launch/launcher.ts`), today only from an inline `script` source.
 
 ## Near-term gaps
 
@@ -92,7 +92,7 @@ Future personal/global saved workflow resolution still needs a decision.
 
 ### Launch by script path (and by name)
 
-Today `launchWorkflow()` accepts only an inline `script` source. The `scriptPath` and `name` fields are already part of `WorkflowLaunchRequest` and are validated, but both currently return a `WorkflowLaunchUnsupportedSourceError` (`src/workflows/launcher.ts:84`, `:185-198`).
+Today `launchWorkflow()` accepts only an inline `script` source. The `scriptPath` and `name` fields are already part of `WorkflowLaunchRequest` and are validated, but both currently return a `WorkflowLaunchUnsupportedSourceError` (`src/workflows/launch/launcher.ts:84`, `:185-198`).
 
 Need to actually support:
 
@@ -154,8 +154,8 @@ Need controller operations:
 
 What exists today vs. not:
 
-- The state machine *defines* valid transitions for pausing/resuming/stopping a run and for restarting an agent (`src/workflows/state-machine.ts`), so the typed edges are ready.
-- The scheduler can already stop a single agent via `stopAgent(agentId)` (`src/workflows/scheduler.ts:100`), but has **no** pause/resume method and **never** fires `agent_restarted` itself.
+- The state machine *defines* valid transitions for pausing/resuming/stopping a run and for restarting an agent (`src/workflows/run/state-machine.ts`), so the typed edges are ready.
+- The scheduler can already stop a single agent via `stopAgent(agentId)` (`src/workflows/agent/scheduler.ts:100`), but has **no** pause/resume method and **never** fires `agent_restarted` itself.
 - Nothing wires any of these to a controller or to the `/workflows` UI yet. The pause/resume run states and the restart-agent path are currently dead code reachable only by calling the transition functions directly.
 
 ## Good next issue candidates
