@@ -14,7 +14,7 @@ Already implemented in some form (file references point at the real code):
 - Fake `agent()` calls drained through a concurrency-capped scheduler (`src/workflows/agent/scheduler.ts`).
 - `parallel()` and `pipeline()` semantics (`src/workflows/script/runtime.ts`).
 - Explicit run/agent state machines with typed transitions (`src/workflows/run/state-machine.ts`).
-- Inline launch with fake agents and final manifest persistence (`src/workflows/launch/launcher.ts`), today only from an inline `script` source.
+- Inline launch with fake agents, final manifest persistence, and resume cache replay from an existing run journal (`src/workflows/launch/launcher.ts`), today only from an inline `script` source.
 
 ## Near-term gaps
 
@@ -72,13 +72,17 @@ Open question: exact serialization and hash preimage. This needs an ADR before i
 
 ### Resume cache replay
 
-Need to re-run scripts from the top and return cached agent results for completed keys.
+Implemented for inline fake workflow launches through `resumeFromRunId`.
 
-Important behavior:
+Current behavior:
 
-- `started` without `result` is incomplete and must rerun.
-- Changing prompt/options should produce a new key.
-- Resume is not a VM snapshot.
+- The resumed launch reads the source run's `journal.jsonl`.
+- Completed, non-invalidated result events return cached agent results without calling the fake runner.
+- `started`/`failed` attempts without `result` rerun.
+- Changing prompt/options produces a new key and reruns.
+- Resume is not a VM snapshot; the script reruns from the top.
+
+Remaining gaps: controller-driven resume of an existing paused/stopped run is still future work.
 
 ### Saved workflow discovery
 
@@ -162,12 +166,11 @@ What exists today vs. not:
 
 If a new developer wants a small task, start here:
 
-1. Add output file persistence after inline fake workflow completion.
-2. Add a `journal.jsonl` writer for fake agents.
-3. Add a pure stable-key function with tests and ADR.
-4. Add `scriptPath` launch support.
-5. Add a richer `/workflows` text summary from existing manifest fields.
-6. Add a pure view-model builder for the future TUI, without rendering yet.
+1. Add `scriptPath` launch support.
+2. Add saved workflow discovery.
+3. Add a richer `/workflows` text summary from existing manifest fields.
+4. Add a pure view-model builder for the future TUI, without rendering yet.
+5. Add controller-driven resume for paused/stopped runs on top of journal replay.
 
 ## What not to jump into first
 

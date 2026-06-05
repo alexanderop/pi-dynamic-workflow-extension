@@ -36,7 +36,7 @@ pi -e .
 
 The package registers a `/workflows` command that lists project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`.
 
-The core workflow modules now support fake-agent development slices: metadata parsing, sandboxed script execution, scheduler-capped fake `agent()` calls, run-state discovery, inline launch persistence, per-run `journal.jsonl` audit/cache events, terminal `output.json` files, and testable task-notification payloads. Real Pi subagents, saved workflow launch, resume wiring, and Pi `sendMessage()` notification wiring are still future work.
+The core workflow modules now support fake-agent development slices: metadata parsing, sandboxed script execution, scheduler-capped fake `agent()` calls, run-state discovery, inline launch persistence, per-run `journal.jsonl` audit/cache events, resume cache replay for inline launches, terminal `output.json` files, and testable task-notification payloads. Real Pi subagents, saved workflow launch, and Pi `sendMessage()` notification wiring are still future work.
 
 ## Development
 

@@ -643,6 +643,13 @@ Spec coverage:
 - §14 Resume Semantics.
 - §20 acceptance criterion 13.
 
+Status: implemented for inline fake workflow launches through
+`resumeFromRunId`. The launcher reads the source run's `journal.jsonl`, builds a
+latest-non-invalidated result cache, and passes it into the runtime scheduler.
+Cached agent calls update the resumed run's progress but do not call the fake
+runner or append new journal events. Incomplete failed attempts, invalidated
+results, and changed stable-key inputs rerun through the fake runner.
+
 ### Slice 4.3: Restart Agent Invalidates Cache
 
 User value: users can rerun one bad agent result without deleting audit history.

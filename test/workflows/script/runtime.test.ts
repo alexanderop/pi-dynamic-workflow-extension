@@ -5,10 +5,16 @@ import {
   runWorkflowScript,
   tryRunWorkflowScript,
 } from "../../../src/workflows/script/runtime.ts";
+import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "./workflow-factory.ts";
 
 describe("runWorkflowScript", () => {
   it("should capture workflow phases, logs, agent calls, and result when script runs with args", async () => {
+    const agents = setupAgentMock(
+      agent.call({ prompt: "Scan src", label: "repo inventory" }, ({ prompt }) =>
+        AgentResponse.text(`fake:${prompt}`),
+      ),
+    );
     const state = await runWorkflowScript(
       workflowScript({
         meta: {
@@ -25,7 +31,7 @@ return { result };
       }),
       {
         args: { target: "src" },
-        agentRunner: async (prompt) => `fake:${prompt}`,
+        schedulerRunner: agents.schedulerRunner,
       },
     );
 
@@ -36,6 +42,7 @@ return { result };
       { prompt: "Scan src", options: { label: "repo inventory" } },
     ]);
     expect(state.result).toEqual({ result: "fake:Scan src" });
+    agents.expectNoUnhandledAgents();
   });
 
   it("should hide process and require when workflow script checks sandbox globals", async () => {
@@ -94,6 +101,15 @@ return m.random();
   it("should route workflow agent calls through the scheduler cap and expose progress rows", async () => {
     let running = 0;
     let peak = 0;
+    const agents = setupAgentMock(
+      agent.any(async ({ prompt }) => {
+        running += 1;
+        peak = Math.max(peak, running);
+        await delay(5);
+        running -= 1;
+        return AgentResponse.text(`done:${prompt}`);
+      }),
+    );
     const state = await runWorkflowScript(
       workflowScript({
         meta: { name: "scheduled-agents" },
@@ -107,18 +123,13 @@ return await parallel([
       }),
       {
         maxConcurrentAgents: 1,
-        agentRunner: async (prompt) => {
-          running += 1;
-          peak = Math.max(peak, running);
-          await delay(5);
-          running -= 1;
-          return `done:${prompt}`;
-        },
+        schedulerRunner: agents.schedulerRunner,
       },
     );
 
     expect(state.result).toEqual(["done:first", "done:second", "done:third"]);
     expect(peak).toBe(1);
+    agents.expectAgentsInOrder([{ label: "one" }, { label: "two" }, { label: "three" }]);
     expect(state.workflowProgress).toMatchObject([
       { type: "workflow_agent", label: "one", state: "done", resultPreview: "done:first" },
       { type: "workflow_agent", label: "two", state: "done", resultPreview: "done:second" },

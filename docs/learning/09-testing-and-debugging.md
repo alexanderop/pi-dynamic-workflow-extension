@@ -46,6 +46,7 @@ The formatter intentionally does not target exploratory docs such as `spec.md`, 
 | Parser | `test/workflows/script/parser.test.ts` |
 | Runtime, `parallel`, `pipeline` | `test/workflows/script/runtime.test.ts` |
 | Scheduler | `test/workflows/agent/scheduler.test.ts` |
+| Fake agent helper | `test/workflows/agent/agent-mock.test.ts` |
 | State machines | `test/workflows/run/state-machine.test.ts` |
 | Run store | `test/workflows/run/store.test.ts` |
 | Launcher | `test/workflows/launch/launcher.test.ts` |
@@ -166,7 +167,24 @@ Check the launch sequence (`launchWorkflow`, `launcher.ts:78`):
 6. merge runtime state into the initial state
 7. transition the state machine and write the final manifest
 
-The fake agent work runs in the deferred background pass; the returned `completion` promise settles when it finishes. `resumeFromRunId` and `description` are accepted in the request but currently ignored.
+The fake agent work runs in the deferred background pass; the returned `completion` promise settles when it finishes. `resumeFromRunId` replays cached journal results for inline fake workflows; `description` is used only for summary text.
+
+For most launcher tests, use the MSW-style helper from `test/workflows/agent/agent-mock.ts` instead of ad-hoc runner functions:
+
+```ts
+const agents = setupAgentMock(
+  agent.call({ prompt: "scan src", label: "scan-agent" }, () => {
+    return AgentResponse.json({ summary: "ok" });
+  }),
+);
+
+await launchWorkflow(
+  { script },
+  launchOptions({ agentRunner: agents.runner }),
+);
+```
+
+Use manual runner functions only when testing launch timing or promise choreography.
 
 Run:
 
@@ -200,18 +218,34 @@ pnpm test test/extension/index.test.ts test/workflows/run/store.test.ts
 
 ## Fake-agent first rule
 
-Do not add live model tests for behavior that can be tested with fake runners.
+Do not add live model tests for behavior that can be tested with fake agents.
 
-Use fake runners for:
+Default to the MSW-style fixture:
+
+```ts
+const agents = setupAgentMock(
+  agent.call({ label: "scan-agent" }, () => AgentResponse.text("ok")),
+);
+```
+
+Use the fixture for:
 
 - successful strings
 - successful objects
-- delayed results
 - failures
-- aborted running agents
-- never-resolving agents
+- strict unhandled-call checks
+- asserting no calls during resume/cache hits
+- runtime handler overrides
+- one-time and sequential responses
 
-Live Pi subagent tests should come later, after fake-runner and filesystem behavior is stable.
+Use manual fake runners only for:
+
+- delayed results controlled by a deferred promise
+- aborted running agents where the test choreographs the abort signal directly
+- never-resolving agents
+- scheduler concurrency tests that need explicit counters
+
+Live Pi subagent tests should come later, after fake-agent and filesystem behavior is stable.
 
 ## When to update docs
 

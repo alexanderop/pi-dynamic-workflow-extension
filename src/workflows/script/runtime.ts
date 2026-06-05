@@ -39,8 +39,11 @@ async function executeWorkflowScript(
     maxTotalAgents: options.maxTotalAgents,
     cwd: options.cwd,
     journal: options.journal,
-    runner: async ({ prompt, options: agentOptions }) =>
-      await (options.agentRunner ?? defaultAgentRunner)(prompt, agentOptions),
+    replayCache: options.replayCache,
+    runner:
+      options.schedulerRunner ??
+      (async ({ prompt, options: agentOptions }) =>
+        await (options.agentRunner ?? defaultAgentRunner)(prompt, agentOptions)),
   });
 
   const budget: WorkflowBudget = {

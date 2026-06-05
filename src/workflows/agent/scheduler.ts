@@ -15,6 +15,11 @@ export interface WorkflowAgentRunRequest {
 
 export type WorkflowAgentRunner = (request: WorkflowAgentRunRequest) => Promise<unknown>;
 
+export interface WorkflowAgentReplayCache {
+  has(key: WorkflowJournalKey): boolean;
+  get(key: WorkflowJournalKey): unknown;
+}
+
 export interface WorkflowAgentSchedulerOptions {
   readonly maxConcurrent?: number;
   readonly maxTotalAgents?: number;
@@ -25,6 +30,7 @@ export interface WorkflowAgentSchedulerOptions {
   readonly defaultModel?: string;
   readonly cwd?: string;
   readonly journal?: WorkflowAgentJournal;
+  readonly replayCache?: WorkflowAgentReplayCache;
 }
 
 interface QueuedAgent {
@@ -48,6 +54,7 @@ export class WorkflowAgentScheduler {
   readonly #defaultModel: string;
   readonly #cwd: string;
   readonly #journal?: WorkflowAgentJournal;
+  readonly #replayCache?: WorkflowAgentReplayCache;
   readonly #queue: QueuedAgent[] = [];
   readonly #runningAgents = new Map<number, QueuedAgent>();
   readonly #stoppedAgents = new Set<number>();
@@ -64,6 +71,7 @@ export class WorkflowAgentScheduler {
     this.#defaultModel = options.defaultModel ?? "default";
     this.#cwd = options.cwd ?? process.cwd();
     this.#journal = options.journal;
+    this.#replayCache = options.replayCache;
 
     if (!Number.isInteger(this.#maxConcurrent) || this.#maxConcurrent < 1) {
       throw new TypeError("WorkflowAgentScheduler maxConcurrent must be a positive integer.");
@@ -87,7 +95,7 @@ export class WorkflowAgentScheduler {
     const model = options.model ?? this.#defaultModel;
     const effectiveOptions: AgentOptions = { ...options, label, agentType, model };
     const journalKey =
-      this.#journal === undefined
+      this.#journal === undefined && this.#replayCache === undefined
         ? undefined
         : computeWorkflowAgentKey({
             prompt,
@@ -112,6 +120,17 @@ export class WorkflowAgentScheduler {
       phaseTitle: options.phase,
       promptPreview: prompt.slice(0, 160),
     });
+
+    if (journalKey !== undefined && this.#replayCache?.has(journalKey) === true) {
+      const cachedResult = this.#replayCache.get(journalKey);
+      this.#applyAgentEvent(progressIndex, { type: "agent_started", now: this.#now() });
+      this.#applyAgentEvent(progressIndex, {
+        type: "agent_succeeded",
+        now: this.#now(),
+        resultPreview: preview(cachedResult),
+      });
+      return Promise.resolve(cachedResult);
+    }
 
     return new Promise((resolve, reject) => {
       this.#queue.push({

@@ -12,7 +12,7 @@ This note records the testing patterns from the real Pi codebase that we should 
 
 ## Testing Layers For This Project
 
-Use four layers. Do not jump to live model tests early.
+Use four layers. Do not jump to live model tests early. When a test needs to control `agent()` output, prefer the MSW-style fake agent helper (`test/workflows/agent/agent-mock.ts`) over one-off runner mocks.
 
 1. Pure unit tests for workflow semantics:
    - `parallel()` result ordering and thunk validation.
@@ -29,7 +29,9 @@ Use four layers. Do not jump to live model tests early.
 
 3. Filesystem integration tests:
    - use temporary directories.
-   - fake subagent runner.
+   - use `setupAgentMock(...)` as the default fake subagent runner when controlling agent responses, failures, or call assertions.
+   - use `agent.pending(...)` for timing-sensitive cases (deferred launch, ordering, "not settled yet") instead of hand-rolled `agentRunner` closures — it keeps the test on the mock boundary while letting you control exactly when the agent resolves.
+   - reach for a raw `agentRunner` closure only when the agent is genuinely incidental to the assertion and the mock would add noise.
    - assert script copies, run JSON, journal JSONL, output files, and notification payloads.
 
 4. Pi/session integration tests:
@@ -157,6 +159,56 @@ describe.skipIf(!API_KEY)("live integration", () => {
 ```
 
 Use this only after the fake subagent runner tests pass. Most workflow behavior should be testable without real LLM calls.
+
+## MSW-Style Fake Agent Fixture
+
+This is the standard way to mock workflow subagents in tests. Use
+`test/workflows/agent/agent-mock.ts` when a test needs controlled agent
+outputs through the public fake-agent boundary.
+
+Longer-term DX goals for making this feel like MSW in frontend projects are
+captured in `docs/agent-mock-msw-dx-spec.md`.
+
+```ts
+const agents = setupAgentMock(
+  agent.call({ prompt: "scan src", label: "scan-agent" }, () => {
+    return AgentResponse.json({ summary: "ok" });
+  }),
+);
+
+const launch = unwrap(
+  await launchWorkflow(
+    { script },
+    launchOptions({ schedulerRunner: agents.schedulerRunner }),
+  ),
+);
+
+unwrap(await launch.completion);
+agents.expectNoUnhandledAgents();
+```
+
+Testing strategy:
+
+- Prefer this fixture over ad-hoc `let runnerCalls = 0` mocks in launcher/runtime integration tests.
+- Keep tests at the public boundary: pass `agents.schedulerRunner` to runtime/launch options when the test needs scheduler metadata (`agentId`, journal key, abort signal), or `agents.runner` when prompt/options are enough. Do not mock scheduler internals.
+- Handlers are strict by default; unhandled agent calls fail the test.
+- Use `agents.expectNoAgents()` when resume/cache behavior should avoid new agent work.
+- Use `agents.expectNoUnhandledAgents()` when every expected agent call should be covered by a handler.
+- Use `agents.expectAgentCalled(...)`, `agents.expectAgentCalledTimes(...)`, `agents.expectAgentsInOrder(...)`, and `agents.expectAllHandlersUsed()` for MSW-style assertions at the agent boundary.
+- Use `agents.use(...)` for runtime overrides; newer handlers take priority.
+- Use `agents.resetHandlers()` and `agents.restoreHandlers()` for lifecycle tests.
+- Use `{ once: true }` or generator resolvers for sequential responses.
+- Use `agent.pending(...)` for timing tests: register it like any handler, then
+  drive it with `await scan.waitUntilStarted()`, inspect `scan.started` /
+  `scan.prompt`, and release it with `scan.resolve(...)` or `scan.reject(...)`.
+  Prefer this over hand-rolled deferred promises and `agentStarted` booleans.
+
+Shared async test utilities (`deferred`, `waitFor`, `delay`, `unwrap`,
+`pathExists`) live in `test/support.ts`; import them instead of re-declaring
+per file.
+
+Use a raw `agentRunner` closure only when the agent is incidental to the
+assertion and `setupAgentMock` / `agent.pending` would add noise.
 
 ## What To Assert For Dynamic Workflows
 

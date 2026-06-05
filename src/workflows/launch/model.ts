@@ -20,6 +20,7 @@ export interface WorkflowLaunchOptions {
   readonly createRunId?: () => string;
   readonly defer?: (start: () => void) => void;
   readonly agentRunner?: WorkflowRuntimeOptions["agentRunner"];
+  readonly schedulerRunner?: WorkflowRuntimeOptions["schedulerRunner"];
   readonly maxConcurrentAgents?: number;
   readonly maxTotalAgents?: number;
   readonly budgetTotal?: number | null;

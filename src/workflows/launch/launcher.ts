@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { WorkflowJournalStore } from "../journal/store.ts";
+import { buildWorkflowJournalResultCache, WorkflowJournalStore } from "../journal/store.ts";
 import { tryParseWorkflowScript } from "../script/parser.ts";
 import { tryRunWorkflowScript } from "../script/runtime.ts";
 import { err, ok, type Result } from "../result.ts";
@@ -60,6 +60,9 @@ export async function launchWorkflow(
     });
   }
 
+  const resume = await loadResumeCache(request, options.rootDir);
+  if (resume.status === "error") return resume;
+
   const now = options.now ?? Date.now;
   const taskId = (options.createTaskId ?? randomTaskId)();
   const runId = (options.createRunId ?? randomRunId)();
@@ -102,11 +105,13 @@ export async function launchWorkflow(
     runtimeOptions: {
       args: request.args,
       agentRunner: options.agentRunner,
+      schedulerRunner: options.schedulerRunner,
       maxConcurrentAgents: options.maxConcurrentAgents,
       maxTotalAgents: options.maxTotalAgents,
       budgetTotal: options.budgetTotal,
       cwd: options.cwd ?? workflowProjectCwdFromRootDir(options.rootDir),
       journal: new WorkflowJournalStore({ journalPath }),
+      replayCache: resume.value,
     },
   });
 
@@ -138,6 +143,26 @@ export function workflowRunJournalPath(rootDir: string, runId: string): string {
 
 function workflowProjectCwdFromRootDir(rootDir: string): string {
   return dirname(dirname(rootDir));
+}
+
+async function loadResumeCache(
+  request: WorkflowLaunchRequest,
+  rootDir: string,
+): Promise<
+  Result<
+    ReturnType<typeof buildWorkflowJournalResultCache> | undefined,
+    WorkflowLaunchPersistenceError
+  >
+> {
+  if (request.resumeFromRunId === undefined) return ok(undefined);
+
+  const journalPath = workflowRunJournalPath(rootDir, request.resumeFromRunId);
+  try {
+    const events = await new WorkflowJournalStore({ journalPath }).readEvents();
+    return ok(buildWorkflowJournalResultCache(events));
+  } catch (cause) {
+    return err(persistenceError(journalPath, cause));
+  }
 }
 
 function selectLaunchSource(

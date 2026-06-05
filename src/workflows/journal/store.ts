@@ -19,7 +19,11 @@ export class WorkflowJournalStore {
 
   async append(event: WorkflowJournalEvent): Promise<void> {
     await mkdir(dirname(this.#journalPath), { recursive: true });
-    await appendFile(this.#journalPath, `${JSON.stringify(serializeJournalEvent(event))}\n`, "utf8");
+    await appendFile(
+      this.#journalPath,
+      `${JSON.stringify(serializeJournalEvent(event))}\n`,
+      "utf8",
+    );
   }
 
   async readEvents(): Promise<WorkflowJournalEvent[]> {

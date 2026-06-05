@@ -4,10 +4,7 @@ import {
   WorkflowAgentScheduler,
 } from "../../../src/workflows/agent/scheduler.ts";
 import type { WorkflowJournalEvent } from "../../../src/workflows/journal/model.ts";
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { delay } from "../../support.ts";
 
 describe("calculateDefaultMaxConcurrent", () => {
   it("should reserve two CPU cores and cap default concurrency at sixteen", () => {

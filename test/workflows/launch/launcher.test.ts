@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,14 +11,9 @@ import {
   type WorkflowTaskNotification,
 } from "../../../src/workflows/launch/launcher.ts";
 import { WorkflowRunStore } from "../../../src/workflows/run/store.ts";
-import type { Result } from "../../../src/workflows/result.ts";
+import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "../script/workflow-factory.ts";
-
-interface Deferred<T> {
-  readonly promise: Promise<T>;
-  readonly resolve: (value: T) => void;
-  readonly reject: (reason: unknown) => void;
-}
+import { delay, pathExists, unwrap } from "../../support.ts";
 
 describe("launchWorkflow", () => {
   let tempDir: string;
@@ -87,8 +82,8 @@ describe("launchWorkflow", () => {
   });
 
   it("should persist the script copy and initial run manifest before fake agents start", async () => {
-    const agentResult = deferred<string>();
-    let agentStarted = false;
+    const scan = agent.pending({ prompt: "scan src", label: "scan-agent", phase: "Scan" });
+    const agents = setupAgentMock(scan);
     const script = workflowScript({
       meta: {
         name: "launch-smoke",
@@ -105,13 +100,7 @@ return { result };
 
     const result = await launchWorkflow(
       { script, args: { target: "src" } },
-      launchOptions({
-        agentRunner: async (prompt) => {
-          agentStarted = true;
-          expect(prompt).toBe("scan src");
-          return agentResult.promise;
-        },
-      }),
+      launchOptions({ schedulerRunner: agents.schedulerRunner }),
     );
 
     const launch = unwrap(result);
@@ -126,7 +115,7 @@ return { result };
     expect(launch.confirmation).toContain(`Script file: ${launch.scriptPath}`);
     expect(launch.confirmation).toContain(`Transcript dir: ${launch.transcriptDir}`);
     expect(launch.confirmation).toContain("Use /workflows to watch live progress");
-    expect(agentStarted).toBe(false);
+    expect(scan.started).toBe(false);
 
     await expect(readFile(launch.scriptPath, "utf8")).resolves.toBe(script);
     expect(await pathExists(launch.transcriptDir)).toBe(true);
@@ -148,9 +137,10 @@ return { result };
       startTime: 100,
     });
 
-    await waitFor(() => agentStarted);
+    await scan.waitUntilStarted();
+    expect(scan.prompt).toBe("scan src");
     now = 175;
-    agentResult.resolve("fake agent result");
+    scan.resolve("fake agent result");
 
     const completed = unwrap(await launch.completion);
     expect(completed).toMatchObject({
@@ -185,6 +175,12 @@ return { result };
       },
     ]);
     expect(journal[1].key).toBe(journal[0].key);
+    expect(agents.calls()).toMatchObject([
+      {
+        agentId: journal[0].agentId,
+        journalKey: journal[0].key,
+      },
+    ]);
   });
 
   it("should write terminal output and notify after the completed run manifest is persisted", async () => {
@@ -202,11 +198,12 @@ return { result, notes: "full result belongs in output.json" };
 `,
     });
     const outputPath = workflowRunOutputPath(rootDir, "wf_test");
+    const agents = setupAgentMock(agent.any(() => AgentResponse.text("agent result")));
 
     const result = await launchWorkflow(
       { script },
       launchOptions({
-        agentRunner: async () => "agent result",
+        schedulerRunner: agents.schedulerRunner,
         notifyTerminal: async (notification) => {
           notifications.push(notification);
 
@@ -300,7 +297,8 @@ return { result, notes: "full result belongs in output.json" };
   });
 
   it("should return launch confirmation before the background fake agent completes", async () => {
-    const agentResult = deferred<string>();
+    const slow = agent.pending();
+    const agents = setupAgentMock(slow);
     let completionSettled = false;
     const result = await launchWorkflow(
       {
@@ -309,7 +307,7 @@ return { result, notes: "full result belongs in output.json" };
           body: `return await agent("slow");`,
         }),
       },
-      launchOptions({ agentRunner: async () => agentResult.promise }),
+      launchOptions({ schedulerRunner: agents.schedulerRunner }),
     );
 
     const launch = unwrap(result);
@@ -322,7 +320,7 @@ return { result, notes: "full result belongs in output.json" };
     expect(completionSettled).toBe(false);
 
     now = 125;
-    agentResult.resolve("done");
+    slow.resolve("done");
     expect(unwrap(await launch.completion)).toMatchObject({ status: "completed", result: "done" });
   });
 
@@ -341,11 +339,12 @@ throw new Error("workflow exploded");
 `,
     });
     const outputPath = workflowRunOutputPath(rootDir, "wf_test");
+    const agents = setupAgentMock(agent.any(() => AgentResponse.text("agent result")));
 
     const result = await launchWorkflow(
       { script },
       launchOptions({
-        agentRunner: async () => "agent result",
+        schedulerRunner: agents.schedulerRunner,
         notifyTerminal: (notification) => {
           notifications.push(notification);
         },
@@ -395,6 +394,275 @@ throw new Error("workflow exploded");
     });
   });
 
+  it("should fail through launcher storage when a structured fake agent violates schema", async () => {
+    const script = workflowScript({
+      meta: {
+        name: "structured-failure",
+        phases: [{ title: "Scan" }],
+      },
+      body: `
+phase("Scan");
+return await agent("scan src", {
+  label: "scan-agent",
+  phase: "Scan",
+  schema: {
+    type: "object",
+    required: ["summary", "count"],
+    properties: {
+      summary: { type: "string" },
+      count: { type: "integer" },
+    },
+  },
+});
+`,
+    });
+    const agents = setupAgentMock(
+      agent.call({ label: "scan-agent" }, () => AgentResponse.json({ count: "one" })),
+    );
+
+    const launch = unwrap(
+      await launchWorkflow({ script }, launchOptions({ schedulerRunner: agents.schedulerRunner })),
+    );
+    now = 175;
+
+    await expect(launch.completion).resolves.toMatchObject({
+      status: "error",
+      error: {
+        message: expect.stringContaining("does not satisfy agent schema"),
+      },
+    });
+
+    const finalManifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+    expect(finalManifest).toMatchObject({
+      status: "failed",
+      failures: [
+        {
+          scope: "run",
+          message: expect.stringContaining("does not satisfy agent schema"),
+        },
+      ],
+      workflowProgress: [
+        { type: "workflow_phase", title: "Scan" },
+        { type: "workflow_agent", label: "scan-agent", state: "failed" },
+      ],
+    });
+
+    const journal = (await readFile(workflowRunJournalPath(rootDir, "wf_test"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(journal.map((event) => event.type)).toEqual(["started", "failed"]);
+  });
+
+  it("should reuse cached journal results when resuming an inline workflow", async () => {
+    const script = workflowScript({
+      meta: {
+        name: "resume-cache",
+        phases: [{ title: "Scan" }],
+      },
+      body: `
+phase("Scan");
+const scan = await agent("scan src", { label: "scan-agent", phase: "Scan" });
+return { scan };
+`,
+    });
+    const originalAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent", phase: "Scan" }, () => {
+        return AgentResponse.json({ summary: "cached scan result" });
+      }),
+    );
+    const resumedAgents = setupAgentMock();
+
+    const original = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          createRunId: () => "wf_original",
+          schedulerRunner: originalAgents.schedulerRunner,
+        }),
+      ),
+    );
+    unwrap(await original.completion);
+
+    const resumed = unwrap(
+      await launchWorkflow(
+        { script, resumeFromRunId: "wf_original" },
+        launchOptions({
+          createRunId: () => "wf_resumed",
+          schedulerRunner: resumedAgents.schedulerRunner,
+        }),
+      ),
+    );
+
+    const completed = unwrap(await resumed.completion);
+
+    resumedAgents.expectNoAgents();
+    expect(completed).toMatchObject({
+      status: "completed",
+      result: {
+        scan: { summary: "cached scan result" },
+      },
+      agentCount: 1,
+    });
+    expect(completed.workflowProgress).toMatchObject([
+      { type: "workflow_phase", title: "Scan" },
+      { type: "workflow_agent", label: "scan-agent", state: "done" },
+    ]);
+  });
+
+  it("should rerun agent calls when stable key inputs change during resume", async () => {
+    const originalScript = workflowScript({
+      meta: { name: "resume-changed-key" },
+      body: `return await agent("scan src", { label: "scan-agent" });`,
+    });
+    const changedScript = workflowScript({
+      meta: { name: "resume-changed-key" },
+      body: `return await agent("scan test", { label: "scan-agent" });`,
+    });
+    const originalAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent" }, () =>
+        AgentResponse.text("old result"),
+      ),
+    );
+    const resumedAgents = setupAgentMock(
+      agent.call({ prompt: "scan test", label: "scan-agent" }, ({ prompt }) => {
+        return AgentResponse.text(`fresh:${prompt}`);
+      }),
+    );
+
+    const original = unwrap(
+      await launchWorkflow(
+        { script: originalScript },
+        launchOptions({
+          createRunId: () => "wf_changed_key",
+          schedulerRunner: originalAgents.schedulerRunner,
+        }),
+      ),
+    );
+    unwrap(await original.completion);
+
+    const resumed = unwrap(
+      await launchWorkflow(
+        { script: changedScript, resumeFromRunId: "wf_changed_key" },
+        launchOptions({
+          createRunId: () => "wf_changed_key_resumed",
+          schedulerRunner: resumedAgents.schedulerRunner,
+        }),
+      ),
+    );
+
+    expect(unwrap(await resumed.completion)).toMatchObject({
+      status: "completed",
+      result: "fresh:scan test",
+    });
+    expect(resumedAgents.calls()).toMatchObject([{ prompt: "scan test", handled: true }]);
+  });
+
+  it("should rerun invalidated journal results when resuming an inline workflow", async () => {
+    const script = workflowScript({
+      meta: { name: "resume-invalidated" },
+      body: `return await agent("scan src", { label: "scan-agent" });`,
+    });
+    const originalAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent" }, () =>
+        AgentResponse.text("old result"),
+      ),
+    );
+    const resumedAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent" }, () =>
+        AgentResponse.text("fresh result"),
+      ),
+    );
+
+    const original = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          createRunId: () => "wf_invalidated",
+          schedulerRunner: originalAgents.schedulerRunner,
+        }),
+      ),
+    );
+    unwrap(await original.completion);
+
+    const journalPath = workflowRunJournalPath(rootDir, "wf_invalidated");
+    const journal = (await readFile(journalPath, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    await appendFile(
+      journalPath,
+      `${JSON.stringify({
+        type: "invalidated",
+        key: journal[1].key,
+        previousAgentId: journal[1].agentId,
+        reason: "restart-agent",
+        at: 123,
+      })}\n`,
+      "utf8",
+    );
+
+    const resumed = unwrap(
+      await launchWorkflow(
+        { script, resumeFromRunId: "wf_invalidated" },
+        launchOptions({
+          createRunId: () => "wf_after_invalidated",
+          schedulerRunner: resumedAgents.schedulerRunner,
+        }),
+      ),
+    );
+
+    expect(unwrap(await resumed.completion)).toMatchObject({
+      status: "completed",
+      result: "fresh result",
+    });
+    expect(resumedAgents.calls()).toMatchObject([{ prompt: "scan src", handled: true }]);
+  });
+
+  it("should rerun incomplete journal attempts when resuming an inline workflow", async () => {
+    const script = workflowScript({
+      meta: { name: "resume-incomplete" },
+      body: `return await agent("scan src", { label: "scan-agent" });`,
+    });
+    const failingAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent" }, () => {
+        return AgentResponse.error("agent failed before result");
+      }),
+    );
+    const resumedAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent" }, () =>
+        AgentResponse.text("fresh result"),
+      ),
+    );
+
+    const incomplete = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          createRunId: () => "wf_incomplete",
+          schedulerRunner: failingAgents.schedulerRunner,
+        }),
+      ),
+    );
+    await expect(incomplete.completion).resolves.toMatchObject({ status: "error" });
+
+    const resumed = unwrap(
+      await launchWorkflow(
+        { script, resumeFromRunId: "wf_incomplete" },
+        launchOptions({
+          createRunId: () => "wf_rerun",
+          schedulerRunner: resumedAgents.schedulerRunner,
+        }),
+      ),
+    );
+
+    expect(unwrap(await resumed.completion)).toMatchObject({
+      status: "completed",
+      result: "fresh result",
+    });
+    expect(resumedAgents.calls()).toMatchObject([{ prompt: "scan src", handled: true }]);
+  });
+
   it("should persist runtime progress once when a workflow fails after agent work", async () => {
     const script = workflowScript({
       meta: {
@@ -409,9 +677,10 @@ throw new Error("workflow exploded");
 `,
     });
 
+    const agents = setupAgentMock(agent.any(() => AgentResponse.text("agent result")));
     const result = await launchWorkflow(
       { script },
-      launchOptions({ agentRunner: async () => "agent result" }),
+      launchOptions({ schedulerRunner: agents.schedulerRunner }),
     );
 
     const launch = unwrap(result);
@@ -449,39 +718,3 @@ throw new Error("workflow exploded");
     };
   }
 });
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
-    resolve = innerResolve;
-    reject = innerReject;
-  });
-  return { promise, resolve, reject };
-}
-
-async function waitFor(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (predicate()) return;
-    await delay(1);
-  }
-  throw new Error("Timed out waiting for predicate.");
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function unwrap<T, E>(result: Result<T, E>): T {
-  if (result.status === "ok") return result.value;
-  throw new Error("Expected Result to be ok.");
-}
