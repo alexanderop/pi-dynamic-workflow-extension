@@ -249,6 +249,12 @@ Spec coverage:
 - §12 Run State Model.
 - §20 acceptance criterion 11.
 
+Status: implemented as a first custom Pi TUI viewer. The command now opens
+`ctx.ui.custom()` in interactive TUI mode, keeps text/json fallbacks for
+headless modes, renders Runs, Progress, Agents, and Details from manifest-backed
+`WorkflowRunState`, polls manifests while open, and keeps projection/navigation
+logic independent of Pi TUI imports per ADR 0010.
+
 ### Slice 1.4: `/workflows` UI States
 
 User value: the UI can grow predictably instead of becoming one large custom component.

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dynamicWorkflowExtension from "#src/extension/index.ts";
+import type { WorkflowsComponentTheme } from "#src/extension/tui/workflows-component.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import { savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { workflowScript } from "../workflows/script/workflow-factory.ts";
@@ -127,6 +128,33 @@ describe("dynamicWorkflowExtension", () => {
     expect(message).not.toContain("Workflow runs");
   });
 
+  it("should open a custom TUI viewer in interactive TUI mode", async () => {
+    await writeRunManifest(tempDir, runState({ runId: "wf_tui", workflowName: "tui-review" }));
+    const command = registerWorkflowsCommand();
+    const rendered: string[][] = [];
+    const custom = vi.fn<(factory: CustomUiFactoryForTest) => Promise<void>>(async (factory) => {
+      const component = await factory(
+        { requestRender: vi.fn<() => void>() },
+        testTheme,
+        {},
+        vi.fn<(result: unknown) => void>(),
+      );
+      rendered.push(component.render(80));
+      component.dispose?.();
+    });
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      ui: { custom, notify: vi.fn<NotifyForTest>() },
+    });
+
+    expect(custom).toHaveBeenCalledOnce();
+    expect(rendered.join("\n")).toContain("wf_tui");
+    expect(rendered.join("\n")).toContain("tui-review");
+  });
+
   it("should not read journals or transcript files when rendering workflow runs", async () => {
     await writeRunManifest(tempDir, runState({ runId: "wf_manifest_only" }));
     const runDir = join(tempDir, ".pi", "workflows", "wf_manifest_only");
@@ -213,6 +241,23 @@ describe("dynamicWorkflowExtension", () => {
 });
 
 type NotifyForTest = (message: string, type?: "info" | "warning" | "error") => void;
+
+type CustomUiComponentForTest = {
+  render(width: number): string[];
+  dispose?(): void;
+};
+
+type CustomUiFactoryForTest = (
+  tui: { requestRender(): void },
+  theme: WorkflowsComponentTheme,
+  keybindings: unknown,
+  done: (result: unknown) => void,
+) => CustomUiComponentForTest | Promise<CustomUiComponentForTest>;
+
+const testTheme: WorkflowsComponentTheme = {
+  fg: (_color, text) => text,
+  bold: (text) => text,
+};
 
 interface RegisteredCommandForTest {
   handler: (args: string, ctx: any) => Promise<void>;

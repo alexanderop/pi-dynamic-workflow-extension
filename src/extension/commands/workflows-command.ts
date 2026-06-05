@@ -1,8 +1,10 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
-import { WorkflowRunStore } from "../../workflows/run/store.ts";
+import { showWorkflowsTui } from "../tui/workflows-view.ts";
 import type { WorkflowRunState } from "../../workflows/run/model.ts";
+import { WorkflowRunStore } from "../../workflows/run/store.ts";
 import { listSavedWorkflows } from "../../workflows/saved/list.ts";
+import { formatDuration } from "../../workflows/view/projector.ts";
 import { personalSavedWorkflowDir } from "../../workflows/saved/resolver.ts";
 import type {
   WorkflowSavedWorkflow,
@@ -50,6 +52,15 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
         return;
       }
 
+      if (shouldUseWorkflowsTui(commandCtx)) {
+        await showWorkflowsTui(commandCtx, {
+          runs: runs.value,
+          savedWorkflowCount: savedWorkflows.value.length,
+          loadRuns: () => store.listRuns(),
+        });
+        return;
+      }
+
       emitWorkflowCommandOutput(
         commandCtx,
         formatWorkflowsOverview(runs.value, savedWorkflows.value),
@@ -57,6 +68,12 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
       );
     },
   });
+}
+
+function shouldUseWorkflowsTui(ctx: WorkflowCommandContext): boolean {
+  return (
+    (ctx.mode ?? (ctx.hasUI ? "tui" : "print")) === "tui" && typeof ctx.ui.custom === "function"
+  );
 }
 
 function emitWorkflowCommandOutput(
@@ -147,19 +164,4 @@ function formatSavedWorkflow(workflow: WorkflowSavedWorkflow): string {
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n");
-}
-
-function formatDuration(durationMs: number): string {
-  if (durationMs < 1000) return `${durationMs}ms`;
-
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes === 0) return `${seconds}s`;
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${minutes}m ${seconds}s`;
-
-  return `${hours}h ${remainingMinutes}m ${seconds}s`;
 }
