@@ -163,6 +163,43 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).not.toContain("Still collecting");
     expect(screen).not.toContain("unknown");
   });
+
+  it("should ask for confirmation before stopping a workflow from the overview", () => {
+    const onStopRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme,
+      now: () => NOW,
+      onStopRun,
+    });
+
+    component.handleInput("x");
+    const confirmation = component.render(120).join("\n");
+
+    expect(onStopRun).not.toHaveBeenCalled();
+    expect(confirmation).toContain("Stop workflow?");
+    expect(confirmation).toContain("y confirm");
+    expect(confirmation).toContain("esc cancel");
+
+    component.handleInput("y");
+    expect(onStopRun).toHaveBeenCalledWith("wf_hard");
+  });
+
+  it("should cancel workflow stop confirmation without calling the stop callback", () => {
+    const onStopRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme,
+      now: () => NOW,
+      onStopRun,
+    });
+
+    component.handleInput("x");
+    component.handleInput("\x1b");
+
+    expect(onStopRun).not.toHaveBeenCalled();
+    expect(component.render(120).join("\n")).not.toContain("Stop workflow?");
+  });
 });
 
 describe("WorkflowsTuiComponent State B agent detail", () => {
@@ -237,6 +274,28 @@ describe("WorkflowsTuiComponent State B agent detail", () => {
     expect(screen).toContain("Prompt · 2 lines · ↵ expand");
     expect(screen).toContain("compact prompt preview");
     expect(screen).not.toContain("SENTINEL_FULL_PROMPT_LINE_2");
+  });
+
+  it("should ask for confirmation before stopping the selected agent from detail view", () => {
+    const onStopAgent = vi.fn<(runId: string, agentId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme,
+      now: () => NOW,
+      onStopAgent,
+    });
+
+    component.handleInput("\x1b[D");
+    component.handleInput("x");
+    const confirmation = component.render(120).join("\n");
+
+    expect(onStopAgent).not.toHaveBeenCalled();
+    expect(confirmation).toContain("Stop agent?");
+    expect(confirmation).toContain("slice:P0.1-journal-keying");
+    expect(confirmation).toContain("y confirm");
+
+    component.handleInput("y");
+    expect(onStopAgent).toHaveBeenCalledWith("wf_hard", "agent_1");
   });
 
   it("should show a muted empty activity state without a zero placeholder when no tools ran", () => {

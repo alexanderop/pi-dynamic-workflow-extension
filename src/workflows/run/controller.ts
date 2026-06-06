@@ -1,6 +1,6 @@
 import { err, ok, type Result } from "../result.ts";
-import { transitionRun, type WorkflowTransitionError } from "./state-machine.ts";
-import type { WorkflowRunState } from "./model.ts";
+import { transitionAgent, transitionRun, type WorkflowTransitionError } from "./state-machine.ts";
+import type { WorkflowProgressEntry, WorkflowRunState } from "./model.ts";
 import { WorkflowRunStore, type WorkflowRunStoreError } from "./store.ts";
 
 export interface WorkflowRunControllerOptions {
@@ -12,6 +12,8 @@ export interface WorkflowRunControllerOptions {
 export interface WorkflowRunExecutionControl {
   pause(): void;
   resume(): void;
+  stopRun(): void;
+  stopAgent(agentId: string): void;
 }
 
 export type WorkflowRunControllerError =
@@ -23,7 +25,7 @@ export interface WorkflowRunControlOperationError {
   readonly _tag: "WorkflowRunControlOperationError";
   readonly message: string;
   readonly runId: string;
-  readonly operation: "pause" | "resume";
+  readonly operation: "pause" | "resume" | "stop" | "stop-agent";
   readonly cause: unknown;
 }
 
@@ -85,11 +87,72 @@ export class WorkflowRunController {
     if (written.status === "error") return written;
     return ok(resumed.value);
   }
+
+  async stopRun(runId: string): Promise<Result<WorkflowRunState, WorkflowRunControllerError>> {
+    const current = await this.#store.readRun(runId);
+    if (current.status === "error") return current;
+
+    const stopRequested = transitionRun(current.value, {
+      type: "run_stop_requested",
+      now: this.#now(),
+    });
+    if (stopRequested.status === "error") return stopRequested;
+
+    try {
+      this.#control.stopRun();
+    } catch (cause) {
+      return err(controlOperationError(runId, "stop", cause));
+    }
+
+    const stopped = transitionRun(stopRequested.value, { type: "run_stopped", now: this.#now() });
+    if (stopped.status === "error") return stopped;
+
+    const written = await this.#store.writeRun(stopped.value);
+    if (written.status === "error") return written;
+    return ok(stopped.value);
+  }
+
+  async stopAgent(
+    runId: string,
+    agentId: string,
+  ): Promise<Result<WorkflowRunState, WorkflowRunControllerError>> {
+    const current = await this.#store.readRun(runId);
+    if (current.status === "error") return current;
+
+    const progressIndex = current.value.workflowProgress.findIndex(
+      (entry) => entry.type === "workflow_agent" && entry.agentId === agentId,
+    );
+    const progress = current.value.workflowProgress[progressIndex];
+    if (progress === undefined || progress.type !== "workflow_agent") {
+      return err({
+        _tag: "WorkflowTransitionError",
+        message: `Workflow agent '${agentId}' was not found in run '${runId}'.`,
+        currentState: "missing",
+        eventType: "agent_stopped",
+      });
+    }
+
+    const stoppedAgent = transitionAgent(progress, { type: "agent_stopped", now: this.#now() });
+    if (stoppedAgent.status === "error") return stoppedAgent;
+
+    try {
+      this.#control.stopAgent(agentId);
+    } catch (cause) {
+      return err(controlOperationError(runId, "stop-agent", cause));
+    }
+
+    const workflowProgress: WorkflowProgressEntry[] = [...current.value.workflowProgress];
+    workflowProgress[progressIndex] = stoppedAgent.value;
+    const stoppedRun = { ...current.value, workflowProgress };
+    const written = await this.#store.writeRun(stoppedRun);
+    if (written.status === "error") return written;
+    return ok(stoppedRun);
+  }
 }
 
 function controlOperationError(
   runId: string,
-  operation: "pause" | "resume",
+  operation: "pause" | "resume" | "stop" | "stop-agent",
   cause: unknown,
 ): WorkflowRunControlOperationError {
   return {

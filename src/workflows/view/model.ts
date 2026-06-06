@@ -4,6 +4,7 @@ import type { WorkflowRunStatus } from "../run/model.ts";
 export interface MonitorAgentRow {
   glyph: string;
   label: string;
+  agentId: string;
   state: WorkflowAgentProgress["state"];
   modelLabel?: string;
   tokens?: number;

@@ -38,7 +38,10 @@ describe("registerWorkflowsCommand", () => {
     const unregister = registerWorkflowRunControl("wf_test", {
       pause,
       resume,
+      stopRun: vi.fn<() => void>(),
+      stopAgent: vi.fn<(agentId: string) => void>(),
       isPaused: () => false,
+      isStopped: () => false,
     });
     const command = registerCommand();
 
@@ -60,6 +63,92 @@ describe("registerWorkflowsCommand", () => {
       expect(pause).toHaveBeenCalledOnce();
       expect(resume).toHaveBeenCalledOnce();
       expect(showWorkflowsTui).toHaveBeenCalledOnce();
+    } finally {
+      unregister();
+    }
+  });
+
+  it("should wire stop run callbacks to live run controls in the interactive TUI", async () => {
+    await writeRunManifest(tempDir, runState({ status: "running", startTime: 100 }));
+    const rootDir = join(tempDir, ".pi", "workflows");
+    const store = new WorkflowRunStore({ rootDir });
+    const stopRun = vi.fn<() => void>();
+    const unregister = registerWorkflowRunControl("wf_test", {
+      pause: vi.fn<() => void>(),
+      resume: vi.fn<() => void>(),
+      stopRun,
+      stopAgent: vi.fn<(agentId: string) => void>(),
+      isPaused: () => false,
+      isStopped: () => false,
+    });
+    const command = registerCommand();
+
+    try {
+      await command.handler("", {
+        cwd: tempDir,
+        mode: "tui",
+        hasUI: true,
+        ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
+      });
+
+      const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as any;
+      tuiOptions?.onStopRun?.("wf_test");
+      await waitForRunStatus(store, "wf_test", "stopped");
+
+      expect(stopRun).toHaveBeenCalledOnce();
+    } finally {
+      unregister();
+    }
+  });
+
+  it("should wire stop agent callbacks to live run controls in the interactive TUI", async () => {
+    await writeRunManifest(
+      tempDir,
+      runState({
+        status: "running",
+        workflowProgress: [
+          {
+            type: "workflow_agent",
+            index: 0,
+            label: "scan-agent",
+            agentId: "agent_0",
+            agentType: "general-purpose",
+            model: "default",
+            state: "running",
+            queuedAt: 0,
+            attempt: 1,
+            promptPreview: "scan src",
+          },
+        ],
+      }),
+    );
+    const rootDir = join(tempDir, ".pi", "workflows");
+    const store = new WorkflowRunStore({ rootDir });
+    const stopAgent = vi.fn<(agentId: string) => void>();
+    const unregister = registerWorkflowRunControl("wf_test", {
+      pause: vi.fn<() => void>(),
+      resume: vi.fn<() => void>(),
+      stopRun: vi.fn<() => void>(),
+      stopAgent,
+      isPaused: () => false,
+      isStopped: () => false,
+    });
+    const command = registerCommand();
+
+    try {
+      await command.handler("", {
+        cwd: tempDir,
+        mode: "tui",
+        hasUI: true,
+        ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
+      });
+
+      const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as any;
+      expect(tuiOptions?.onStopAgent).toEqual(expect.any(Function));
+      tuiOptions.onStopAgent("wf_test", "agent_0");
+      await waitForAgentStatus(store, "wf_test", "agent_0", "stopped");
+
+      expect(stopAgent).toHaveBeenCalledWith("agent_0");
     } finally {
       unregister();
     }
@@ -135,4 +224,23 @@ async function waitForRunStatus(
     await delay(1);
   }
   expect(unwrap(await store.readRun(runId)).status).toBe(status);
+}
+
+async function waitForAgentStatus(
+  store: WorkflowRunStore,
+  runId: string,
+  agentId: string,
+  status: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const agent = unwrap(await store.readRun(runId)).workflowProgress.find(
+      (entry) => entry.type === "workflow_agent" && entry.agentId === agentId,
+    );
+    if (agent?.type === "workflow_agent" && agent.state === status) return;
+    await delay(1);
+  }
+  const agent = unwrap(await store.readRun(runId)).workflowProgress.find(
+    (entry) => entry.type === "workflow_agent" && entry.agentId === agentId,
+  );
+  expect(agent).toMatchObject({ state: status });
 }

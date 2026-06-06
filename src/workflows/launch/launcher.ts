@@ -345,9 +345,12 @@ async function executeWorkflowInBackground({
 > {
   const runtimeResult = await tryRunWorkflowScript(source, runtimeOptions);
   if (runtimeResult.status === "ok") {
-    const completed = completeRunState(initialState, runtimeResult.value, now(), outputPath);
+    const terminalState =
+      runtimeResult.value.stopped === true
+        ? stopRunState(initialState, runtimeResult.value, now(), outputPath)
+        : completeRunState(initialState, runtimeResult.value, now(), outputPath);
     const terminal = await writeTerminalArtifacts({
-      state: completed,
+      state: terminalState,
       outputPath,
       summarySource,
       notifyTerminal,
@@ -356,7 +359,7 @@ async function executeWorkflowInBackground({
     });
     if (terminal.status === "error")
       return err(backgroundError(initialState.runId, terminal.error));
-    return ok(completed);
+    return ok(terminalState);
   }
 
   const failed = failRunState(
@@ -555,6 +558,20 @@ function completeRunState(
   });
   if (completed.status === "error") throw new Error(completed.error.message);
   return { ...completed.value, outputPath };
+}
+
+function stopRunState(
+  initialState: WorkflowRunState,
+  runtimeState: WorkflowRuntimeState,
+  now: number,
+  outputPath: string,
+): WorkflowRunState {
+  const withRuntimeState = mergeRuntimeState(initialState, runtimeState);
+  const stopping = transitionRun(withRuntimeState, { type: "run_stop_requested", now });
+  if (stopping.status === "error") throw new Error(stopping.error.message);
+  const stopped = transitionRun(stopping.value, { type: "run_stopped", now });
+  if (stopped.status === "error") throw new Error(stopped.error.message);
+  return { ...stopped.value, result: runtimeState.result, outputPath };
 }
 
 function failRunState(

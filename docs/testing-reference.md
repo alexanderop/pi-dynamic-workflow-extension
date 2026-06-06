@@ -2,6 +2,8 @@
 
 This note records the testing patterns from the real Pi codebase that we should copy as this project grows.
 
+Companion planning spec: `docs/testing-dsl-page-objects-spec.md` describes the future testing DSL, domain builders, `/workflows` screen object, and workflow scenario harness we intend to use when refactoring noisy tests.
+
 ## Source Files To Read First
 
 - `repos/pi/packages/coding-agent/test/trigger-compact-extension.test.ts` shows the smallest useful extension unit-test style: mock `ExtensionAPI`, capture handlers, invoke them directly.

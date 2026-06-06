@@ -32,6 +32,7 @@ export interface WorkflowRuntimeState {
   }>;
   workflowProgress: WorkflowProgressEntry[];
   result?: unknown;
+  stopped?: boolean;
 }
 
 export interface WorkflowRuntimeReplayCache {
@@ -42,7 +43,10 @@ export interface WorkflowRuntimeReplayCache {
 export interface WorkflowRuntimeControl {
   pause(): void;
   resume(): void;
+  stopRun(): void;
+  stopAgent(agentId: string): void;
   isPaused(): boolean;
+  isStopped(): boolean;
 }
 
 export interface WorkflowRuntimeOptions {

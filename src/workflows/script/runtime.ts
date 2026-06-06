@@ -54,7 +54,14 @@ async function executeWorkflowScript(
     resume: () => {
       scheduler.resume();
     },
+    stopRun: () => {
+      scheduler.stopRun();
+    },
+    stopAgent: (agentId: string) => {
+      scheduler.stopAgent(agentId);
+    },
     isPaused: () => scheduler.isPaused(),
+    isStopped: () => scheduler.isStopped(),
   });
 
   const budget: WorkflowBudget = {
@@ -97,6 +104,7 @@ async function executeWorkflowScript(
     agentCalls,
     workflowProgress: [...phases, ...scheduler.progress()],
     result,
+    stopped: scheduler.isStopped(),
   });
 
   try {

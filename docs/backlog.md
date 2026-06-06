@@ -820,6 +820,8 @@ Spec coverage:
 
 - §16 Control Operations.
 
+Status: implemented for fake-agent runtime controls and `/workflows` command/TUI wiring.
+
 ### Slice 6.2: Stop Run And Stop Agent
 
 User value: users can cancel runaway or unwanted work.
@@ -837,6 +839,8 @@ Tests:
 - Running fake agent receives abort signal.
 - Run reaches `stopped`.
 - UI asks for confirmation.
+
+Status: implemented for fake-agent launches. Runtime controls expose `stopRun()` and `stopAgent()`, scheduler stop resolves queued work to `null`, aborts running work, writes `stopped` journal events, launcher persists stopped manifests/output/notifications, and `/workflows` confirms stop actions before invoking command callbacks.
 
 Dependencies:
 

@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok, type Result } from "../result.ts";
 import type { WorkflowAgentProgress } from "../agent/model.ts";
@@ -94,8 +94,11 @@ export class WorkflowRunStore {
   async writeRun(state: WorkflowRunState): Promise<Result<void, WorkflowRunWriteError>> {
     const path = manifestPath(this.#rootDir, state.runId);
     try {
-      await mkdir(join(this.#rootDir, state.runId), { recursive: true });
-      await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+      const runDir = join(this.#rootDir, state.runId);
+      await mkdir(runDir, { recursive: true });
+      const tempPath = join(runDir, `.manifest.${process.pid}.${Date.now()}.tmp`);
+      await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+      await rename(tempPath, path);
       return ok(undefined);
     } catch (cause) {
       return err({

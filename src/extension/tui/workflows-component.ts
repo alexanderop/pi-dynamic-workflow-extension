@@ -51,9 +51,20 @@ export interface WorkflowsTuiComponentOptions {
   readonly onClose?: () => void;
   readonly onPauseRun?: (runId: string) => void;
   readonly onResumeRun?: (runId: string) => void;
+  readonly onStopRun?: (runId: string) => void;
+  readonly onStopAgent?: (runId: string, agentId: string) => void;
 }
 
 const PROMPT_VISIBLE_ROWS = 15;
+
+type PendingStopConfirmation =
+  | { readonly type: "run"; readonly runId: string; readonly label: string }
+  | {
+      readonly type: "agent";
+      readonly runId: string;
+      readonly agentId: string;
+      readonly label: string;
+    };
 
 export class WorkflowsTuiComponent implements Component {
   #runs: WorkflowRunState[];
@@ -62,6 +73,9 @@ export class WorkflowsTuiComponent implements Component {
   #onClose?: () => void;
   #onPauseRun?: (runId: string) => void;
   #onResumeRun?: (runId: string) => void;
+  #onStopRun?: (runId: string) => void;
+  #onStopAgent?: (runId: string, agentId: string) => void;
+  #pendingStop?: PendingStopConfirmation;
   #nav: MonitorNavigationState;
   #promptScroll = 0;
   #promptMaxScroll = Number.MAX_SAFE_INTEGER;
@@ -75,6 +89,8 @@ export class WorkflowsTuiComponent implements Component {
     this.#onClose = options.onClose;
     this.#onPauseRun = options.onPauseRun;
     this.#onResumeRun = options.onResumeRun;
+    this.#onStopRun = options.onStopRun;
+    this.#onStopAgent = options.onStopAgent;
     this.#nav = {
       ...initialMonitorNavigation(options.runs.length),
       selectedRunIndex: defaultChooserSelection(options.runs),
@@ -98,6 +114,12 @@ export class WorkflowsTuiComponent implements Component {
 
     const before = this.#snapshot();
 
+    if (this.#pendingStop !== undefined) {
+      this.#handleStopConfirmation(data);
+      if (before !== this.#snapshot()) this.invalidate();
+      return;
+    }
+
     if (matchesKey(data, Key.escape)) {
       this.#handleEscape();
     } else if (matchesKey(data, Key.up) || data === "k") {
@@ -112,6 +134,8 @@ export class WorkflowsTuiComponent implements Component {
       this.#handleEnter();
     } else if (data === "p") {
       this.#handlePauseResume();
+    } else if (data === "x") {
+      this.#requestStopConfirmation();
     }
 
     if (before !== this.#snapshot()) this.invalidate();
@@ -132,6 +156,7 @@ export class WorkflowsTuiComponent implements Component {
         ? this.#renderAgentDetail(safeWidth)
         : this.#renderOverview(safeWidth);
     lines.push("", this.#line(safeWidth, this.#theme.fg("dim", this.#footerText())));
+    if (this.#pendingStop !== undefined) lines.push("", ...this.#renderStopConfirmation(safeWidth));
     return this.#cache(safeWidth, lines);
   }
 
@@ -356,7 +381,23 @@ export class WorkflowsTuiComponent implements Component {
     };
   }
 
+  #renderStopConfirmation(width: number): string[] {
+    const pending = this.#pendingStop;
+    if (pending === undefined) return [];
+    const title = pending.type === "run" ? "Stop workflow?" : "Stop agent?";
+    return [
+      this.#line(width, this.#theme.fg("warning", title)),
+      this.#line(width, `  ${pending.label}`),
+      this.#line(width, this.#theme.fg("dim", "  y confirm · esc cancel")),
+    ];
+  }
+
   #handleEscape(): void {
+    if (this.#pendingStop !== undefined) {
+      this.#pendingStop = undefined;
+      return;
+    }
+
     const result = escapeMonitor(this.#nav, this.#bounds());
     if (result.close === true) {
       this.#onClose?.();
@@ -393,6 +434,39 @@ export class WorkflowsTuiComponent implements Component {
     else if (canResumeRun(run.status)) this.#onResumeRun?.(run.runId);
   }
 
+  #requestStopConfirmation(): void {
+    const run = this.#selectedRun();
+    if (run === undefined) return;
+
+    if (this.#nav.screen === "agentDetail" || this.#nav.screen === "promptReader") {
+      const agent = this.#selectedAgentRow();
+      if (agent === undefined) return;
+      this.#pendingStop = {
+        type: "agent",
+        runId: run.runId,
+        agentId: agent.agentId,
+        label: agent.label,
+      };
+      return;
+    }
+
+    this.#pendingStop = { type: "run", runId: run.runId, label: run.workflowName };
+  }
+
+  #handleStopConfirmation(data: string): void {
+    if (matchesKey(data, Key.escape) || data === "n") {
+      this.#pendingStop = undefined;
+      return;
+    }
+    if (data !== "y") return;
+
+    const pending = this.#pendingStop;
+    this.#pendingStop = undefined;
+    if (pending === undefined) return;
+    if (pending.type === "run") this.#onStopRun?.(pending.runId);
+    else this.#onStopAgent?.(pending.runId, pending.agentId);
+  }
+
   #moveSelection(direction: -1 | 1): void {
     if (this.#nav.screen === "promptReader") {
       this.#promptScroll = Math.max(
@@ -425,7 +499,11 @@ export class WorkflowsTuiComponent implements Component {
   }
 
   #snapshot(): string {
-    return `${this.#nav.screen}:${this.#nav.selectedRunIndex}:${this.#nav.selectedPhaseIndex}:${this.#nav.selectedAgentIndex}:${this.#promptScroll}`;
+    const pending =
+      this.#pendingStop === undefined
+        ? "none"
+        : `${this.#pendingStop.type}:${this.#pendingStop.runId}`;
+    return `${this.#nav.screen}:${this.#nav.selectedRunIndex}:${this.#nav.selectedPhaseIndex}:${this.#nav.selectedAgentIndex}:${this.#promptScroll}:${pending}`;
   }
 
   #line(width: number, text: string): string {

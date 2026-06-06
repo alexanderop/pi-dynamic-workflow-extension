@@ -57,6 +57,7 @@ function toAgentRow(agent: WorkflowAgentProgress, now: number): MonitorAgentRow 
   return {
     glyph: agentGlyph(agent.state),
     label: agent.label,
+    agentId: agent.agentId,
     state: agent.state,
     modelLabel: hasModel ? agent.model : undefined,
     tokens: agent.tokens !== undefined && agent.tokens > 0 ? agent.tokens : undefined,

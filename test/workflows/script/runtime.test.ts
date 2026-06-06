@@ -181,6 +181,71 @@ return await parallel([
     expect(secondStarted).toBe(true);
     expect(state.result).toEqual(["first result", "second result"]);
   });
+
+  it("should expose a live runtime control that stops queued and running agents", async () => {
+    type StoppableRuntimeControl = WorkflowRuntimeControl & { stopRun(): void };
+
+    let control: WorkflowRuntimeControl | undefined;
+    const first = deferred<string>();
+    let firstAborted = false;
+    let secondStarted = false;
+    const statePromise = runWorkflowScript(
+      workflowScript({
+        meta: { name: "stoppable-agents" },
+        body: `
+return await parallel([
+  () => agent("first", { label: "first" }),
+  () => agent("second", { label: "second" }),
+]);
+`,
+      }),
+      {
+        maxConcurrentAgents: 1,
+        onControlReady: (runtimeControl) => {
+          control = runtimeControl;
+        },
+        schedulerRunner: async ({ prompt, signal }) => {
+          if (prompt === "first") {
+            signal.addEventListener(
+              "abort",
+              () => {
+                firstAborted = true;
+              },
+              { once: true },
+            );
+            return first.promise;
+          }
+          secondStarted = true;
+          return AgentResponse.text("second result");
+        },
+      },
+    );
+
+    try {
+      await delay(0);
+      expect(control).toBeDefined();
+
+      const stoppableControl = control as StoppableRuntimeControl;
+      expect(stoppableControl.stopRun).toEqual(expect.any(Function));
+      stoppableControl.stopRun();
+
+      expect(firstAborted).toBe(true);
+      await delay(0);
+      expect(secondStarted).toBe(false);
+
+      first.resolve("late first result");
+      const state = await statePromise;
+
+      expect(state.result).toEqual([null, null]);
+      expect(state.workflowProgress).toMatchObject([
+        { type: "workflow_agent", label: "first", state: "stopped" },
+        { type: "workflow_agent", label: "second", state: "stopped" },
+      ]);
+    } finally {
+      first.resolve("cleanup first result");
+      await statePromise.catch(() => undefined);
+    }
+  });
 });
 
 describe("parallel", () => {

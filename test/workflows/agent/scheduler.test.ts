@@ -309,6 +309,85 @@ describe("WorkflowAgentScheduler", () => {
     await expect(result).resolves.toBe("queued while paused");
     expect(scheduler.progress()).toMatchObject([{ state: "done" }]);
   });
+
+  it("should stop a run by aborting running agents and resolving queued agents to null", async () => {
+    type StoppableScheduler = WorkflowAgentScheduler & { stopRun(): boolean };
+
+    const firstExit = deferred<string>();
+    const started: string[] = [];
+    let firstAborted = false;
+    const scheduler = new WorkflowAgentScheduler({
+      maxConcurrent: 1,
+      createAgentId: sequenceIds("agent"),
+      runner: async ({ prompt, signal }) => {
+        started.push(prompt);
+        if (prompt === "first") {
+          signal.addEventListener(
+            "abort",
+            () => {
+              firstAborted = true;
+            },
+            { once: true },
+          );
+          return firstExit.promise;
+        }
+        return prompt;
+      },
+    }) as StoppableScheduler;
+
+    const first = scheduler.schedule("first");
+    const second = scheduler.schedule("second");
+
+    expect(scheduler.stopRun).toEqual(expect.any(Function));
+    expect(scheduler.stopRun()).toBe(true);
+    expect(firstAborted).toBe(true);
+    await delay(0);
+
+    expect(started).toEqual(["first"]);
+    await expect(second).resolves.toBeNull();
+
+    firstExit.resolve("late first result");
+    await expect(first).resolves.toBeNull();
+    expect(scheduler.progress()).toMatchObject([
+      { agentId: "agent_0", state: "stopped" },
+      { agentId: "agent_1", state: "stopped" },
+    ]);
+  });
+
+  it("should append stopped journal events and ignore late results after a run stop", async () => {
+    type StoppableScheduler = WorkflowAgentScheduler & { stopRun(): boolean };
+
+    const firstExit = deferred<string>();
+    const events: WorkflowJournalEvent[] = [];
+    const scheduler = new WorkflowAgentScheduler({
+      maxConcurrent: 1,
+      createAgentId: sequenceIds("agent"),
+      journal: {
+        append: async (event) => {
+          events.push(event);
+        },
+      },
+      runner: async () => firstExit.promise,
+    }) as StoppableScheduler;
+
+    const first = scheduler.schedule("first", { label: "first" });
+    const second = scheduler.schedule("second", { label: "second" });
+
+    await delay(0);
+    expect(scheduler.stopRun()).toBe(true);
+    await expect(second).resolves.toBeNull();
+
+    firstExit.resolve("late first result");
+    await expect(first).resolves.toBeNull();
+
+    expect(events.map((event) => event.type)).toEqual(["started", "stopped", "stopped"]);
+    expect(events).toMatchObject([
+      { type: "started", agentId: "agent_0" },
+      { type: "stopped", agentId: "agent_0", reason: "run-stopped" },
+      { type: "stopped", agentId: "agent_1", reason: "run-stopped" },
+    ]);
+    expect(events.some((event) => event.type === "result")).toBe(false);
+  });
 });
 
 interface Deferred<T> {

@@ -58,9 +58,12 @@ export class WorkflowAgentScheduler {
   readonly #queue: QueuedAgent[] = [];
   readonly #runningAgents = new Map<number, QueuedAgent>();
   readonly #stoppedAgents = new Set<number>();
+  readonly #journalStarts = new Map<number, Promise<void>>();
   readonly #progress: WorkflowAgentProgress[] = [];
+  #journalTail?: Promise<void>;
   #running = 0;
   #paused = false;
+  #runStopped = false;
 
   constructor(options: WorkflowAgentSchedulerOptions) {
     this.#maxConcurrent = options.maxConcurrent ?? calculateDefaultMaxConcurrent();
@@ -134,6 +137,11 @@ export class WorkflowAgentScheduler {
       return Promise.resolve(cachedResult);
     }
 
+    if (this.#runStopped) {
+      this.#stop(progressIndex, "run-stopped", journalKey);
+      return Promise.resolve(null);
+    }
+
     return new Promise((resolve, reject) => {
       this.#queue.push({
         progressIndex,
@@ -156,7 +164,7 @@ export class WorkflowAgentScheduler {
     const queuedIndex = this.#queue.findIndex((agent) => agent.progressIndex === progressIndex);
     if (queuedIndex !== -1) {
       const [queued] = this.#queue.splice(queuedIndex, 1);
-      this.#stop(progressIndex);
+      this.#stop(progressIndex, "agent-stopped", queued!.journalKey);
       queued!.resolve(null);
       return true;
     }
@@ -164,9 +172,39 @@ export class WorkflowAgentScheduler {
     const running = this.#runningAgents.get(progressIndex);
     if (running === undefined) return false;
 
-    this.#stop(progressIndex);
+    this.#stop(progressIndex, "agent-stopped", running.journalKey);
     running.abortController.abort();
     return true;
+  }
+
+  stopRun(): boolean {
+    const queued = this.#queue.splice(0);
+    const running = [...this.#runningAgents.values()];
+    const pending = [...queued, ...running].filter(
+      (agent) => !this.#stoppedAgents.has(agent.progressIndex),
+    );
+
+    if (pending.length === 0 && this.#runStopped) return false;
+    this.#runStopped = true;
+    this.#paused = true;
+
+    // #stop() is idempotent and abort()/resolve(null) are safe to call once per
+    // agent here, so no per-agent stopped guard is needed in these loops.
+    for (const agent of running) {
+      this.#stop(agent.progressIndex, "run-stopped", agent.journalKey);
+      agent.abortController.abort();
+    }
+
+    for (const agent of queued) {
+      this.#stop(agent.progressIndex, "run-stopped", agent.journalKey);
+      agent.resolve(null);
+    }
+
+    return pending.length > 0;
+  }
+
+  isStopped(): boolean {
+    return this.#runStopped;
   }
 
   pause(): boolean {
@@ -191,7 +229,7 @@ export class WorkflowAgentScheduler {
   }
 
   #drain(): void {
-    if (this.#paused) return;
+    if (this.#paused || this.#runStopped) return;
 
     while (this.#running < this.#maxConcurrent && this.#queue.length > 0) {
       const queued = this.#queue.shift()!;
@@ -207,8 +245,10 @@ export class WorkflowAgentScheduler {
   }
 
   async #run(queued: QueuedAgent): Promise<void> {
+    const started =
+      queued.journalKey === undefined ? undefined : this.#appendJournalStarted(queued);
+    if (started !== undefined) this.#journalStarts.set(queued.progressIndex, started);
     try {
-      if (queued.journalKey !== undefined) await this.#appendJournalStarted(queued);
       const result = await this.#runner({
         agentId: queued.agentId,
         journalKey: queued.journalKey,
@@ -217,6 +257,7 @@ export class WorkflowAgentScheduler {
         signal: queued.abortController.signal,
       });
       if (!this.#stoppedAgents.has(queued.progressIndex)) {
+        await started;
         if (queued.journalKey !== undefined) await this.#appendJournalResult(queued, result);
         this.#applyAgentEvent(queued.progressIndex, {
           type: "agent_succeeded",
@@ -227,6 +268,7 @@ export class WorkflowAgentScheduler {
       }
     } catch (cause) {
       if (!this.#stoppedAgents.has(queued.progressIndex)) {
+        await started;
         if (queued.journalKey !== undefined) await this.#appendJournalFailed(queued, cause);
         this.#applyAgentEvent(queued.progressIndex, {
           type: "agent_failed",
@@ -245,14 +287,16 @@ export class WorkflowAgentScheduler {
     }
   }
 
-  #stop(progressIndex: number): void {
+  #stop(progressIndex: number, reason?: string, journalKey?: WorkflowJournalKey): void {
+    if (this.#stoppedAgents.has(progressIndex)) return;
     this.#stoppedAgents.add(progressIndex);
     this.#applyAgentEvent(progressIndex, { type: "agent_stopped", now: this.#now() });
+    void this.#appendJournalStopped(this.#progress[progressIndex]!, journalKey, reason);
   }
 
   async #appendJournalStarted(queued: QueuedAgent): Promise<void> {
     if (this.#journal === undefined || queued.journalKey === undefined) return;
-    await this.#journal.append({
+    await this.#appendJournalEvent({
       type: "started",
       key: queued.journalKey,
       agentId: queued.agentId,
@@ -261,7 +305,7 @@ export class WorkflowAgentScheduler {
 
   async #appendJournalResult(queued: QueuedAgent, result: unknown): Promise<void> {
     if (this.#journal === undefined || queued.journalKey === undefined) return;
-    await this.#journal.append({
+    await this.#appendJournalEvent({
       type: "result",
       key: queued.journalKey,
       agentId: queued.agentId,
@@ -272,7 +316,7 @@ export class WorkflowAgentScheduler {
   async #appendJournalFailed(queued: QueuedAgent, cause: unknown): Promise<void> {
     if (this.#journal === undefined || queued.journalKey === undefined) return;
     try {
-      await this.#journal.append({
+      await this.#appendJournalEvent({
         type: "failed",
         key: queued.journalKey,
         agentId: queued.agentId,
@@ -282,6 +326,36 @@ export class WorkflowAgentScheduler {
       // Preserve the original agent failure. Journal write failures for failed
       // agents should not mask the runner error that already explains the run.
     }
+  }
+
+  async #appendJournalStopped(
+    agent: WorkflowAgentProgress,
+    journalKey?: WorkflowJournalKey,
+    reason?: string,
+  ): Promise<void> {
+    if (this.#journal === undefined || journalKey === undefined) return;
+    try {
+      await this.#journalStarts.get(agent.index);
+      await this.#appendJournalEvent({
+        type: "stopped",
+        key: journalKey,
+        agentId: agent.agentId,
+        reason,
+      });
+    } catch {
+      // Stopping should remain best-effort: cancellation must not hang because
+      // an audit-trail write failed while the run is already being torn down.
+    }
+  }
+
+  #appendJournalEvent(event: Parameters<WorkflowAgentJournal["append"]>[0]): Promise<void> {
+    if (this.#journal === undefined) return Promise.resolve();
+    const write =
+      this.#journalTail === undefined
+        ? this.#journal.append(event)
+        : this.#journalTail.then(() => this.#journal!.append(event));
+    this.#journalTail = write.catch(() => undefined);
+    return write;
   }
 
   #applyAgentEvent(progressIndex: number, event: Parameters<typeof transitionAgent>[1]): void {

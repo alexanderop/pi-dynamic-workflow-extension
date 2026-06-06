@@ -11,6 +11,8 @@ export interface ShowWorkflowsTuiOptions {
   readonly pollIntervalMs?: number;
   readonly onPauseRun?: (runId: string) => void;
   readonly onResumeRun?: (runId: string) => void;
+  readonly onStopRun?: (runId: string) => void;
+  readonly onStopAgent?: (runId: string, agentId: string) => void;
 }
 
 export async function showWorkflowsTui(
@@ -25,6 +27,8 @@ export async function showWorkflowsTui(
       onClose: () => done(undefined),
       onPauseRun: options.onPauseRun,
       onResumeRun: options.onResumeRun,
+      onStopRun: options.onStopRun,
+      onStopAgent: options.onStopAgent,
     });
 
     let disposed = false;

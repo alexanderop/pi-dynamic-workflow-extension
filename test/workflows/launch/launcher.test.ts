@@ -14,7 +14,7 @@ import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { projectSavedWorkflowDir, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "../script/workflow-factory.ts";
-import { delay, pathExists, unwrap } from "../../support.ts";
+import { deferred, delay, pathExists, unwrap } from "../../support.ts";
 
 async function writeSavedWorkflow(dir: string, name: string, source: string): Promise<void> {
   await mkdir(dir, { recursive: true });
@@ -281,6 +281,106 @@ return { result };
         journalKey: journal[0].key,
       },
     ]);
+  });
+
+  it("should stop an active launched workflow and persist stopped manifest, output, notification, and journal events", async () => {
+    type StoppableRuntimeControl = { stopRun(): void };
+
+    let control: StoppableRuntimeControl | undefined;
+    const first = deferred<string>();
+    let firstAborted = false;
+    let secondStarted = false;
+    const notifications: WorkflowTaskNotification[] = [];
+    const script = workflowScript({
+      meta: {
+        name: "stop-running-workflow",
+        phases: [{ title: "Scan" }],
+      },
+      body: `
+phase("Scan");
+return await parallel([
+  () => agent("first", { label: "first", phase: "Scan" }),
+  () => agent("second", { label: "second", phase: "Scan" }),
+]);
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          maxConcurrentAgents: 1,
+          onRuntimeControlReady: (runtimeControl) => {
+            control = runtimeControl as unknown as StoppableRuntimeControl;
+          },
+          notifyTerminal: async (notification) => {
+            notifications.push(notification);
+          },
+          schedulerRunner: async ({ prompt, signal }) => {
+            if (prompt === "first") {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  firstAborted = true;
+                },
+                { once: true },
+              );
+              return first.promise;
+            }
+            secondStarted = true;
+            return AgentResponse.text("second result");
+          },
+        }),
+      ),
+    );
+
+    try {
+      await delay(0);
+      expect(control?.stopRun).toEqual(expect.any(Function));
+
+      now = 175;
+      control!.stopRun();
+      expect(firstAborted).toBe(true);
+      await delay(0);
+      expect(secondStarted).toBe(false);
+
+      first.resolve("late first result");
+      const stopped = unwrap(await launch.completion);
+      expect(stopped).toMatchObject({
+        status: "stopped",
+        durationMs: 75,
+        result: [null, null],
+        workflowProgress: [
+          { type: "workflow_phase", title: "Scan" },
+          { type: "workflow_agent", label: "first", state: "stopped" },
+          { type: "workflow_agent", label: "second", state: "stopped" },
+        ],
+      });
+
+      const finalManifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+      expect(finalManifest).toMatchObject({
+        status: "stopped",
+        outputPath: workflowRunOutputPath(rootDir, "wf_test"),
+      });
+      expect(notifications).toMatchObject([{ details: { status: "stopped", runId: "wf_test" } }]);
+
+      const output = JSON.parse(await readFile(workflowRunOutputPath(rootDir, "wf_test"), "utf8"));
+      expect(output).toMatchObject({ status: "stopped", result: [null, null] });
+
+      const journal = (await readFile(workflowRunJournalPath(rootDir, "wf_test"), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(journal.map((event) => event.type)).toEqual(["started", "stopped", "stopped"]);
+      expect(journal).toMatchObject([
+        { type: "started", agentId: expect.any(String) },
+        { type: "stopped", agentId: expect.any(String), reason: "run-stopped" },
+        { type: "stopped", agentId: expect.any(String), reason: "run-stopped" },
+      ]);
+    } finally {
+      first.resolve("cleanup first result");
+      await launch.completion.catch(() => undefined);
+    }
   });
 
   it("should write terminal output and notify after the completed run manifest is persisted", async () => {
