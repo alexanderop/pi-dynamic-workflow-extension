@@ -138,10 +138,14 @@ Requirements:
   calls, spreads, or template interpolation. The launcher reads `meta`
   statically before executing the script body.
 - `meta.name` MUST be the command name.
-- `meta.description` SHOULD summarize what the workflow does. It is shown in the
-  launch/permission UI.
+- `meta.description` MUST summarize what the workflow does in one line. It is
+  shown in the launch/permission UI and supersedes any launch-level cosmetic
+  description.
 - `meta.whenToUse` MAY describe when to reach for this workflow. It is shown in
   the saved-workflow list.
+- `meta.model` MAY name a default workflow model. The Pi extension parser
+  preserves this field and the runtime applies it as the default model for
+  `agent()` calls that omit `options.model`.
 - `meta.phases` SHOULD define expected progress phases. Each entry has a `title`;
   titles MUST match the strings passed to `phase()`/`agent({ phase })` exactly.
   An entry MAY carry a `detail` string describing what the phase does (observed in
@@ -158,7 +162,9 @@ are not part of any executable script.
 
 Workflow scripts MUST be deterministic across replay. The runtime MUST make
 `Date.now()`, `Math.random()`, and the argument-less `new Date()` throw inside a
-workflow script, because resume (§14) re-executes the script and nondeterministic
+workflow script, and the Pi extension intentionally also rejects the literal text
+`Date.now`, `Math.random`, or `new Date()` anywhere in the script for closer
+Claude compatibility, because resume (§14) re-executes the script and nondeterministic
 values would change the computed agent keys and break the journal cache. Pass
 timestamps in through `args` and stamp results after the workflow returns; vary
 per-iteration work by index rather than by random values.
@@ -233,8 +239,15 @@ Runtime behavior:
   - Without `schema`, the resolved value is the subagent's final text as a
     string.
   - With `schema`, the resolved value is the validated structured output object.
+    Current Pi extension status: the real Pi subagent runner registers a
+    per-agent terminating `structured_output` custom tool from the workflow's
+    plain JSON object schema. The subagent MUST call that tool as its final
+    action; if it finishes without the tool call, the schema agent fails.
   - If the user skips the agent mid-run, the call resolves to `null`. Callers
     SHOULD filter with `.filter(Boolean)` when a skip is possible.
+  - If the scheduler rejects the call before queuing it, such as when the
+    `maxTotalAgents` lifetime cap is exceeded, the call MUST throw instead of
+    resolving to `null`; this is the runaway-loop backstop.
   - `options.isolation: "worktree"` runs the subagent in a fresh git worktree so
     agents that mutate files in parallel do not conflict. It is expensive
     (per-agent setup and disk) and the worktree is removed automatically if left
@@ -243,12 +256,15 @@ Runtime behavior:
   in input order. It is a barrier: it awaits all thunks. `parallel` MUST accept
   only thunks (`() => Promise<T>`), never already-started promises — a started
   promise has already invoked `agent()` before the scheduler can queue it, which
-  would bypass the concurrency cap. A thunk that throws resolves to `null` in
-  the result array; the `parallel` call itself MUST NOT reject.
+  would bypass the concurrency cap. A single `parallel()` call MUST accept at
+  most 4096 thunks. A thunk that throws resolves to `null` in the result array;
+  the `parallel` call itself MUST NOT reject.
 - `pipeline(items, ...stages)` runs each item through all stages independently,
   with no global barrier between stages. It accepts any number of stages. Each
-  stage callback receives `(previousStageResult, originalItem, index)`. A stage
-  that throws drops that item to `null` and skips its remaining stages.
+  stage callback receives `(previousStageResult, originalItem, index)`. For the
+  first stage, `previousStageResult === originalItem`. A single `pipeline()` call
+  MUST accept at most 4096 items. A stage that throws drops that item to `null`
+  and skips its remaining stages.
 - `workflow(nameOrRef, args)` runs another workflow inline as a sub-step and
   resolves to that workflow's return value. A string resolves a saved workflow
   by name; `{ scriptPath }` runs a script file. The child shares the parent
@@ -273,7 +289,8 @@ interface WorkflowLaunchRequest {
   scriptPath?: string;
   args?: unknown;
   resumeFromRunId?: string;
-  description?: string; // legacy/cosmetic; meta.description supersedes it
+  title?: string; // ignored; set the title/name in meta
+  description?: string; // ignored; meta.description is the real description
 }
 ```
 
@@ -292,14 +309,17 @@ You will be notified when it completes. Use /workflows to watch live progress.
 
 Launch rules:
 
-- Exactly one of `script`, `name`, or `scriptPath` MUST be provided. In the
-  reference session only `script` was exercised; `name`/`scriptPath`/`args`/
-  `resumeFromRunId` are part of the contract but unexercised by the artifacts.
-- `description` MAY be supplied but is cosmetic. When the script exports
-  `meta.description`, that value supersedes the request `description`.
-- If `script` is provided, the launcher compiles and runs that inline workflow.
-- If `name` is provided, the launcher loads the matching saved workflow.
+- No source field is schema-required, but the caller MUST supply at least one of
+  `script`, `name`, or `scriptPath`.
+- Source precedence is `scriptPath` > `script` > `name`. This lets the caller
+  iterate by passing the persisted script file while leaving older cosmetic
+  fields or a saved workflow name in place.
+- `title` and `description` MAY be supplied for compatibility but are ignored;
+  the real display values come from the script's `meta` block.
 - If `scriptPath` is provided, the launcher runs the script file at that path.
+- Else, if `script` is provided, the launcher compiles and runs that inline
+  workflow. `script` MUST NOT exceed 524288 characters.
+- Else, if `name` is provided, the launcher loads the matching saved workflow.
   Every launch persists its script under the run directory and surfaces that
   path in the confirmation, so a later launch can iterate on or resume the same
   script.
@@ -310,7 +330,7 @@ Launch rules:
 - The launcher MUST reject a script that calls nondeterministic primitives at
   launch. The reference runtime rejected one launch with
   `Workflow scripts must be deterministic: Date.now()/Math.random()/new Date()
-  are unavailable`, confirming the §6/§19 ban is enforced eagerly.
+  are unavailable`, confirming the §6/§20 ban is enforced eagerly.
 - The launcher MUST create the run directory and initial state before returning.
 - The launcher MUST start execution in the background.
 - The launcher MUST return the confirmation (carrying `taskId`, `runId`, and the
@@ -674,11 +694,12 @@ the main conversation.
 Requirements:
 
 - In Pi, the extension-specific notification message SHOULD include an explicit
-  continuation instruction around the `<task-notification>` XML when the original
-  user input was handled by an extension trigger (for example `ultracode`). Pi
-  converts custom messages into user-context messages, but it does not provide
-  Claude Code's private task-notification policy, so the notification must tell
-  the main agent to continue from the workflow result.
+  continuation instruction around the `<task-notification>` XML when the
+  workflow was launched because of an extension-controlled policy or trigger
+  (for example `ultracode`). Pi converts custom messages into user-context
+  messages, but it does not provide Claude Code's private task-notification
+  policy, so the notification must tell the main agent to continue from the
+  workflow result.
 - `output-file` MUST point to the full result. The reference run truncated the
   inline `<result>` (`truncated 94566 chars, full result in <output-file>`).
 - Inline `result` MAY be truncated.
@@ -784,7 +805,49 @@ session id is available from `ctx.sessionManager.getSessionId()`, the default
 without `sessionId` and manifests from other sessions are hidden by the default
 session-scoped view. Saved workflow scripts are not session-scoped.
 
-## 19. Security Requirements
+The Pi extension SHOULD also expose a passive active-workflow status line through
+`ctx.ui.setStatus("dynamic-workflows", text)`. This status line is a compact cue,
+not the full monitor: it selects the newest active run in the current session,
+formats workflow name, optional description, done/total agent count, elapsed
+runtime, and token usage, and clears itself when no active run remains. Because
+Pi footer statuses are non-interactive, arrow-key selection and `Enter` handling
+belong to a future below-editor widget or the `/workflows` TUI rather than this
+passive status entry.
+
+## 19. Pi Ultracode Session Policy
+
+This section is a Pi integration decision, not an observed Claude Code internal
+contract. It maps the Claude-like dynamic workflow model onto the public Pi
+extension API.
+
+`ultracode` is a user-facing trigger word and session policy, not a public LLM
+tool name. When a user submits a prompt beginning with `ultracode <goal>`, the
+extension SHOULD:
+
+1. transition a per-session `ultracode` mode state machine to `on`;
+2. persist the transition as a Pi custom session entry;
+3. return an input `transform` so the main agent still receives the task;
+4. inject a custom message and/or system-prompt addition from
+   `before_agent_start` while mode is `on`;
+5. expose a model-facing workflow-launch tool that validates scripts and calls
+   `launchWorkflow(...)`.
+
+While `ultracode` mode is `on`, the main agent SHOULD treat workflow
+orchestration as the default for substantive tasks. Trivial conversational turns
+and one-line mechanical edits MAY still be handled solo. The policy instruction
+SHOULD tell the agent to optimize for correctness over token cost and to
+adversarially verify findings before relying on them.
+
+The mode state machine SHOULD be restorable from Pi session entries through
+`ctx.sessionManager.getEntries()` on `session_start`. Direct bundled
+`ultracode` workflow launch MAY exist as a fallback or test fixture, but it is
+not the primary Pi behavior.
+
+Terminal workflow notifications for ultracode-launched runs SHOULD use
+`pi.sendMessage(..., { triggerTurn: true })`, not `pi.sendUserMessage(...)`, so
+the main agent is re-invoked with the result without creating a new user message.
+
+## 20. Security Requirements
 
 - Workflow JavaScript MUST NOT have direct filesystem, shell, network, browser,
   or MCP tools.
@@ -798,7 +861,7 @@ session-scoped view. Saved workflow scripts are not session-scoped.
   `Math.random()`, argument-less `new Date()`) in workflow scripts so resume
   stays sound (see §6).
 
-## 20. Acceptance Criteria
+## 21. Acceptance Criteria
 
 An implementation is complete when these scenarios pass:
 
@@ -836,7 +899,7 @@ An implementation is complete when these scenarios pass:
 23. `Date.now()`, `Math.random()`, and argument-less `new Date()` throw inside a
    workflow script.
 
-## 21. Observed Reference Run
+## 22. Observed Reference Run
 
 These facts came from the local pi-webfetch audit artifacts and can be used as a
 test fixture for validating a compatible implementation:
@@ -1160,7 +1223,7 @@ observed in real scripts:
   'worktree' })`, `agent({ model })`, `pipeline` with three or more stages, and
   `agent()` without a `schema` (the string-return branch).
 
-## 22. Open Questions
+## 23. Open Questions
 
 These details were not proven by the artifacts and should be implementation
 choices:
@@ -1180,7 +1243,7 @@ choices:
 A `/workflows` dialog demonstrably exists — the transcript shows a save
 confirmation and a "Dynamic workflows dialog dismissed" marker — but its live
 rendering is never surfaced into the agent-visible transcript. The terminal UI
-specified in §23 is therefore a normative implementation target based on the
+specified in §24 is therefore a normative implementation target based on the
 user-supplied Claude Code workflow-monitor reference screens. Treat it as the
 visual and interaction contract for this project, not as proof of Claude Code's
 private implementation internals.
@@ -1188,7 +1251,7 @@ private implementation internals.
 Document the chosen answers before implementation so downstream behavior is
 predictable.
 
-## 23. Workflow UI Reference Screens
+## 24. Workflow UI Reference Screens
 
 > Status: not yet implemented. This section is the source of truth for how the
 > `/workflows` terminal UI should look and behave. Existing implementations that
@@ -1196,7 +1259,7 @@ predictable.
 > and behavior below. The ASCII layouts are normative: renderer tests should use
 > them as golden references, adjusted only for terminal width and elapsed time.
 
-### 23.1 Problem
+### 24.1 Problem
 
 The workflow UI should match the real Claude Code dynamic-workflow monitor
 reference screens instead of showing a generic job browser. The monitor needs to
@@ -1210,7 +1273,7 @@ feel like a live terminal dashboard:
 - when multiple workflows are present/running in the session, `/workflows`
   starts with a workflow chooser list.
 
-### 23.2 Visual style requirements
+### 24.2 Visual style requirements
 
 - Dark Pi terminal background.
 - A thin accent line across the top of the monitor.
@@ -1234,7 +1297,7 @@ feel like a live terminal dashboard:
   `/workflows` list-browser sections such as generic `Runs`, `Progress`,
   `Agents`, and `Details` headings unless they appear in the screens below.
 
-### 23.3 State A: one active workflow opens to the overview
+### 24.3 State A: one active workflow opens to the overview
 
 When exactly one workflow is active in the session, `/workflows` should skip the
 workflow chooser and open this monitor directly.
@@ -1256,7 +1319,7 @@ Slice the workflow-correctness-hardening spec into TDD-ready implementation plan
 │                       │                                                                            │
 │                       │                                                                            │
 └───────────────────────┴────────────────────────────────────────────────────────────────────────────┘
-↑↓ select · ← detail · x stop workflow · p pause · esc back · s save
+↑↓ select · → detail · x stop workflow · p pause · esc back · s save
 ```
 
 Overview behavior:
@@ -1272,12 +1335,12 @@ Overview behavior:
 - If no model/token/tool data exists, omit those fields rather than showing
   placeholders.
 - `↑/↓` selects the phase in the left pane.
-- `←` switches into the selected phase's agent detail view.
+- `→` switches into the selected phase's agent detail view.
 - `esc` returns to chat/previous Pi screen.
 
-### 23.4 State B: arrow-left switches to structured agent detail
+### 24.4 State B: arrow-right switches to structured agent detail
 
-From the overview, pressing `←` opens the selected phase's agent-focused view.
+From the overview, pressing `→` opens the selected phase's agent-focused view.
 This is not a raw dump. It is structured into list + detail panes.
 
 ```text
@@ -1327,7 +1390,7 @@ Structured detail behavior:
   support exists, but the UI contract should reserve these keys and footer
   slots.
 
-### 23.5 State C: enter opens the original prompt view
+### 24.5 State C: enter opens the original prompt view
 
 Pressing `enter` in the structured detail view opens a prompt-focused view for
 the selected agent. This view is allowed to show the original prompt text in
@@ -1363,7 +1426,7 @@ Original prompt behavior:
 - No prompt text should be lost; wrapping/truncation should preserve readability
   while respecting width.
 
-### 23.6 State D: multiple workflows use a chooser first
+### 24.6 State D: multiple workflows use a chooser first
 
 When more than one workflow exists in the current session, and especially when
 two or more workflows are running, `/workflows` should first show a
@@ -1413,7 +1476,7 @@ Chooser behavior:
 - `s` saves the selected workflow.
 - `esc` closes the chooser.
 
-### 23.7 Navigation summary
+### 24.7 Navigation summary
 
 ```text
 /workflows
@@ -1423,12 +1486,12 @@ Chooser behavior:
 
 State A overview
   ↑/↓ select phase
-  ←   open State B structured agent detail
+  →   open State B structured agent detail
   esc close/back
 
 State B structured agent detail
   ↑/↓ select agent
-  →   return to State A overview
+  ←   return to State A overview
   ↵   open State C original prompt
   esc return/back
 
@@ -1437,7 +1500,7 @@ State C original prompt
   esc return to State B
 ```
 
-### 23.8 UI acceptance criteria
+### 24.8 UI acceptance criteria
 
 - `/workflows` with one active workflow opens directly to the overview monitor.
 - The overview monitor matches State A: header, description, phases pane, agent
@@ -1452,7 +1515,7 @@ State C original prompt
   pane; they never break borders.
 - Existing workflow lifecycle behavior is unchanged by this UI spec.
 
-### 23.9 UI non-goals
+### 24.9 UI non-goals
 
 - Implement runtime pause/restart/agent-stop if the workflow manager does not
   yet support them.
@@ -1461,7 +1524,7 @@ State C original prompt
   already shown in these screens.
 - Add mouse support.
 
-### 23.10 UI implementation contract
+### 24.10 UI implementation contract
 
 The UI implementation should be judged against the screens above, not against the
 current exploratory `/workflows` component. In particular:

@@ -366,7 +366,7 @@ export class WorkflowsTuiComponent implements Component {
 
   #footerText(): string {
     if (this.#nav.screen === "overview") {
-      return "↑↓ select · ← detail · x stop workflow · p pause · esc back · s save";
+      return "↑↓ select · → detail · x stop workflow · p pause · esc back · s save";
     }
     return "↑↓ agent · ↵ prompt · x stop · r restart · p pause · esc back · s save";
   }

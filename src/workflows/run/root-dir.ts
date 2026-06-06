@@ -14,6 +14,22 @@ export function workflowRootDirForCwd(cwd: string): string {
   return candidates.at(-1) ?? join(cwd, ".pi", "workflows");
 }
 
+export function workflowRunScriptPath(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "script.js");
+}
+
+export function workflowRunTranscriptDir(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "transcripts");
+}
+
+export function workflowRunOutputPath(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "output.json");
+}
+
+export function workflowRunJournalPath(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "journal.jsonl");
+}
+
 function existingWorkflowRootsFrom(cwd: string): string[] {
   const candidates: string[] = [];
   let current = resolve(cwd);

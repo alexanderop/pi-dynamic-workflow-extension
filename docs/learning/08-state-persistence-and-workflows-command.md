@@ -205,6 +205,6 @@ None of this exists in code today. The intended rich TUI has multiple states:
 - structured agent detail
 - full prompt reader
 
-The normative UI reference is in [`spec.md` §23 (Workflow UI Reference
+The normative UI reference is in [`spec.md` §24 (Workflow UI Reference
 Screens)](../../spec.md). Until that TUI is built, the plain-text summary above
 is the only thing `/workflows` renders, and it works in every mode.

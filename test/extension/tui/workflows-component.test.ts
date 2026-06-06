@@ -130,7 +130,7 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).toContain("41.1k tok · 11 tools");
     expect(screen).toContain("idle ");
     expect(screen).toContain(
-      "↑↓ select · ← detail · x stop workflow · p pause · esc back · s save",
+      "↑↓ select · → detail · x stop workflow · p pause · esc back · s save",
     );
     expect(screen).not.toContain("Progress");
     expect(screen).not.toContain("Details");
@@ -195,7 +195,7 @@ describe("WorkflowsTuiComponent State A overview", () => {
 describe("WorkflowsTuiComponent State B agent detail", () => {
   it("should render structured detail as a bordered two-pane with ordered sections", () => {
     const component = make([hardeningRun()]);
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     const screen = component.render(120).join("\n");
 
     expect(screen).toContain("┌ Slice · 7 agents");
@@ -236,7 +236,7 @@ describe("WorkflowsTuiComponent State B agent detail", () => {
       ],
     });
     const component = make([run]);
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     const screen = component.render(120).join("\n");
 
     expect(screen).not.toContain("SENTINEL_FULL_PROMPT_BODY");
@@ -258,7 +258,7 @@ describe("WorkflowsTuiComponent State B agent detail", () => {
       ],
     });
     const component = make([run]);
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     const screen = component.render(120).join("\n");
 
     expect(screen).toContain("Prompt · 2 lines · ↵ expand");
@@ -287,7 +287,7 @@ describe("WorkflowsTuiComponent State B agent detail", () => {
       ],
     });
     const component = make([run]);
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     const screen = component.render(120).join("\n");
 
     expect(screen).toContain("Activity");
@@ -297,7 +297,7 @@ describe("WorkflowsTuiComponent State B agent detail", () => {
 
   it("should not crash when rendering box screens at width one", () => {
     const component = make([hardeningRun()]);
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     component.handleInput("\r");
 
     expect(() => component.render(1)).not.toThrow();
@@ -324,7 +324,7 @@ describe("WorkflowsTuiComponent State C prompt reader", () => {
       workflowProgress: [agent({ state: "running", prompt, promptPreview: "LINE_1_END" })],
     });
     const component = make([run]);
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     component.handleInput("\r");
     void width;
     return component;
@@ -441,7 +441,7 @@ describe("WorkflowsTuiComponent golden screens", () => {
   it("should snapshot the canonical State B agent detail monitor", () => {
     const component = make([hardeningRun()]);
 
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
 
     expectGoldenScreen(component);
   });
@@ -474,7 +474,7 @@ describe("WorkflowsTuiComponent golden screens", () => {
       }),
     ]);
 
-    component.handleInput("\x1b[D");
+    component.handleInput("\x1b[C");
     component.handleInput("\r");
 
     expectGoldenScreen(component);
@@ -514,7 +514,7 @@ describe("WorkflowsTuiComponent width contract", () => {
     for (const width of [42, 120]) {
       const component = make([hardeningRun()]);
       expect(component.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
-      component.handleInput("\x1b[D");
+      component.handleInput("\x1b[C");
       expect(component.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
     }
   });
@@ -539,7 +539,7 @@ describe("WorkflowsTuiComponent width contract", () => {
           workflowProgress: [agent({ state: "running", prompt: longPrompt })],
         }),
       ]);
-      reader.handleInput("\x1b[D");
+      reader.handleInput("\x1b[C");
       reader.handleInput("\r");
       expect(reader.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
     }

@@ -247,7 +247,7 @@ Additional artifact paths:
 
 Saved workflows live outside per-run directories under `.pi/workflows/*.js`.
 
-### §19 Security Requirements
+### §20 Security Requirements
 
 Partially implemented:
 
@@ -259,6 +259,6 @@ Partially implemented:
 
 Known limitation: Node VM is not treated as a complete security boundary. See [ADR 0002](../adr/0002-use-acorn-and-node-vm-for-first-workflow-runtime.md).
 
-### §20 Acceptance Criteria
+### §21 Acceptance Criteria
 
 Many criteria are partially satisfied in fake-agent form. Use [`../backlog.md`](../backlog.md) for the slice-by-slice status.

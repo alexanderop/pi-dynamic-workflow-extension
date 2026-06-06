@@ -1,7 +1,7 @@
-# Implementation Plan — Rebuild the Pi `/workflows` TUI (spec §23)
+# Implementation Plan — Rebuild the Pi `/workflows` TUI (spec §24)
 
 Single source of truth for rebuilding `/workflows` into the four-state monitor of
-spec §23 (State A overview, State B structured agent detail, State C prompt
+spec §24 (State A overview, State B structured agent detail, State C prompt
 reader, State D chooser). Follow top-to-bottom with strict TDD
 (red → green → refactor) per step.
 
@@ -83,7 +83,7 @@ line `visibleWidth === width` and throws in dev if not (caught by tests).
   `1h 2m 3s`). `formatIdle(ms)` = same minutes/seconds shape (`72_000 → "1m 12s"`,
   `42_000 → "42s"`). Both live in `layout.ts`; the projector keeps its own
   `formatDuration` OR re-exports layout's — see §0.8.
-- Header elapsed in State A screen shows `1m12s` (no space) but spec §23.6 chooser
+- Header elapsed in State A screen shows `1m12s` (no space) but spec §24.6 chooser
   shows `5m 58s` (space). **Decision:** header/chooser elapsed both use
   `formatDuration` with a SPACE (`1m 12s`). The State A test asserts
   `/1\/8 agents · 1m ?12s/` (optional space) so a space passes. Replace the
@@ -115,10 +115,10 @@ Constructor/`setRuns` route by **active** count, not `runs.length`:
 - `runs.length >= 1 && activeRunCount(runs) <= 1` → `overview` (State A).
   (A single completed run still opens overview.)
 - `runs.length > 1` with `activeRunCount > 1` → `chooser`. Refinement: spec
-  §23.6 shows chooser whenever multiple workflows exist in session. **Decision:**
+  §24.6 shows chooser whenever multiple workflows exist in session. **Decision:**
   `chooser` when `runs.length > 1`; `overview` when `runs.length === 1`. The
   "active" nuance only matters for default selection and counts, not the
-  overview-vs-chooser branch — because §23.10 says "one active visible workflow
+  overview-vs-chooser branch — because §24.10 says "one active visible workflow
   → State A; multiple visible → State D". So: `runs.length <= 1 → overview`,
   `runs.length > 1 → chooser`. This keeps Case3 (single completed → overview)
   correct and Case2 (two running → chooser) correct.
@@ -180,7 +180,7 @@ delivering the tested pure machine.
 
 ### 0.17 Reserved keys
 `s` (save), `x` (stop), `r` (restart) remain footer labels with no handlers
-(no-ops) for v1, per §23.10. `p` keeps its existing pause/resume handler.
+(no-ops) for v1, per §24.10. `p` keeps its existing pause/resume handler.
 Footers are STATIC text (`p pause`) per spec, replacing the dynamic
 `#pauseHelpText()`.
 

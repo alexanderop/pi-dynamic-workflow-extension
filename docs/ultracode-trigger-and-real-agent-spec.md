@@ -5,10 +5,11 @@
 Implement `ultracode` as the user-facing trigger and visual identity for Pi
 dynamic workflows.
 
-`ultracode` is not an LLM tool name. It is a TUI/editor trigger word. When a user
-types `ultracode`, Pi should visually highlight that word with an animated
-rainbow/blink effect. When the user submits a prompt beginning with
-`ultracode`, the extension should start the dynamic workflow launch path.
+`ultracode` is not an LLM tool name. It is a TUI/editor trigger word and a
+session-level policy switch. When a user types `ultracode`, Pi should visually
+highlight that word with an animated rainbow/blink effect. When the user submits
+a prompt beginning with `ultracode`, the extension should turn on a standing
+session opt-in that steers the main agent toward workflow orchestration.
 
 The workflow engine remains generic. `ultracode` is only the entrypoint and
 experience layer that makes workflows feel native in Pi.
@@ -46,7 +47,10 @@ persistence, journal, resume, saved workflow, and `/workflows` foundations.
 - Show animated rainbow/blinking `ultracode` text in the Pi editor while the user
   types the trigger word.
 - Intercept submitted prompts that begin with `ultracode`.
-- Launch a persisted dynamic workflow run from that prompt.
+- Turn on a durable per-session `ultracode` mode.
+- Inject Pi-native policy context before main-agent turns while the mode is on.
+- Let the main agent author and launch persisted dynamic workflow runs through a
+  model-facing workflow tool.
 - Replace fake `agent()` execution with real Pi subagent sessions.
 - Keep `/workflows` as the run monitor and controller.
 - Persist terminal output and notify the main conversation when the workflow
@@ -79,6 +83,15 @@ The real Pi extension API supports:
   - `{ action: "handled" }`
 - `event.source` can be `"interactive"`, `"rpc"`, or `"extension"`. Extension
   injected input should be ignored by the ultracode input handler to avoid loops.
+- `pi.on("before_agent_start", handler)` runs after prompt expansion and before
+  the main agent loop. It can return a custom message and/or replacement system
+  prompt for the upcoming turn.
+- Custom messages returned from `before_agent_start` are persisted in the
+  session and sent to the LLM as context for that turn.
+- `pi.appendEntry(customType, data)` persists extension state as a custom session
+  entry that does not participate in LLM context.
+- `ctx.sessionManager.getEntries()` and `ctx.sessionManager.getBranch()` let the
+  extension restore custom state on `session_start`.
 - `ctx.ui.setWorkingIndicator(...)` can customize the streaming/running
   indicator.
 - `pi.sendMessage(...)` injects a custom session message and can avoid triggering
@@ -133,7 +146,7 @@ ultracoder audit
 ```
 
 The first implementation should require the trigger at the start of the prompt
-to avoid accidental launches.
+to avoid accidental activation.
 
 If the user submits only `ultracode` with no goal, do not launch. Show a warning
 such as:
@@ -144,13 +157,22 @@ Usage: ultracode <workflow goal>
 
 ### Running
 
-After a launch starts:
+After activation:
 
-- Show a short confirmation with `runId` and `scriptPath`.
-- Set a rainbow/pulse working indicator while the workflow is active.
-- Persist the run under the resolved Pi workflow root (`.pi/workflows/<runId>/`, preferring an existing workspace-level ancestor root over a nested repo-local root).
-- Wire `agent()` calls to real Pi sidechain sessions for plain-text agent results; do not leave ultracode on the development fallback runner that echoes prompts.
-- Let `/workflows` show the run and its agents.
+- Persist the `ultracode` mode transition as a custom session entry.
+- Transform the triggering input so the main agent still receives the task.
+- Inject an `ultracode` custom message and system-prompt policy through
+  `before_agent_start`.
+- Tell the main agent that workflow opt-in is automatic for substantive tasks.
+- Expose a model-facing workflow launch tool that validates workflow scripts and
+  calls `launchWorkflow(...)`.
+- Persist launched runs under the resolved Pi workflow root
+  (`.pi/workflows/<runId>/`, preferring an existing workspace-level ancestor root
+  over a nested repo-local root).
+- Wire `agent()` calls to real Pi sidechain sessions for plain-text agent
+  results; do not leave workflow launches on the development fallback runner
+  that echoes prompts.
+- Let `/workflows` show each run and its agents.
 
 ### Completion
 
@@ -162,13 +184,35 @@ When a workflow reaches a terminal state:
 - Clear or reset the ultracode working indicator.
 
 Do not use `sendUserMessage()` for terminal workflow notifications, because that
-would trigger a new main-agent turn.
+would create a new user message. Use `pi.sendMessage(..., { triggerTurn: true })`
+for workflow completion so the main agent is re-invoked with the result.
 
 ## Architecture
 
-Add the implementation in three layers.
+Add the implementation in five layers.
 
-### 1. Ultracode TUI Layer
+### 1. Ultracode Mode State Machine
+
+Suggested files:
+
+```text
+src/extension/ultracode/mode-state-machine.ts
+src/extension/ultracode/session-mode-store.ts
+```
+
+Responsibilities:
+
+- Model `off`, `arming`, `on`, and `disabled` states.
+- Transition to `on` when a valid `ultracode <goal>` trigger is submitted.
+- Restore mode from custom session entries on `session_start`.
+- Append state-transition entries with `pi.appendEntry(...)`.
+- Clear in-memory state on `session_shutdown` and restore from the replacement
+  session when Pi switches/forks/resumes.
+
+This layer is pure TypeScript except for the small adapter that reads and writes
+Pi session entries.
+
+### 2. Ultracode TUI Layer
 
 Suggested files:
 
@@ -182,30 +226,58 @@ Responsibilities:
 
 - Install the animated editor on `session_start`.
 - Detect submitted `ultracode` prompts through the Pi `input` event.
-- Coordinate UI state while workflows are running.
+- Coordinate UI state while ultracode mode is active and while workflows are
+  running.
 
 This layer depends on Pi extension/TUI APIs. It should not contain workflow
 runtime logic.
 
-### 2. Workflow Launch Adapter
+### 3. Main-Agent Policy Injection
 
-Suggested file:
+Suggested files:
 
 ```text
+src/extension/ultracode/system-reminder.ts
+src/extension/ultracode/workflow-authoring-prompt.ts
+src/extension/ultracode/task-policy.ts
+```
+
+Responsibilities:
+
+- Generate the short standing `ultracode is ON` reminder.
+- Generate the full workflow-authoring contract for substantive tasks.
+- Register a `before_agent_start` handler that injects a custom message and
+  appends policy text to the system prompt while mode is `on`.
+- Keep trivial chat turns and one-line mechanical edits allowed as solo work.
+- Require dynamic workflow orchestration for substantive tasks.
+
+### 4. Model-Facing Workflow Launch Tool
+
+Suggested files:
+
+```text
+src/extension/tools/workflow-launch-tool.ts
 src/extension/ultracode/launch-ultracode-workflow.ts
 ```
 
 Responsibilities:
 
-- Convert an ultracode prompt into a `WorkflowLaunchRequest`.
-- Call `launchWorkflow(...)`.
+- Register a Pi tool named `Workflow` with `pi.registerTool(...)` that accepts
+  the Claude-like launch parameters: `script`, `scriptPath`, `name`,
+  `resumeFromRunId`, `args`, and ignored cosmetic `title`/`description`.
+- Validate the generated script with the existing parser through
+  `launchWorkflow(...)`.
+- Return the launch confirmation, `runId`, `taskId`, and artifact paths to the
+  main agent.
 - Wire `rootDir`, `cwd`, `notifyTerminal`, real agent runner, and runtime
   options from the Pi extension context.
+- Keep the direct `launchUltracodeWorkflow(...)` adapter only as a legacy or
+  emergency fallback.
 
-The adapter should call the existing launcher rather than duplicating persistence
-logic.
+The tool must call the existing launcher rather than duplicating persistence
+logic. The public tool name is `Workflow`; it must not be named `ultracode`.
 
-### 3. Real Pi Agent Runner
+### 5. Real Pi Agent Runner
 
 Suggested files:
 
@@ -228,7 +300,8 @@ Responsibilities:
 
 ## Launch Strategy
 
-There are two viable launch strategies. Implement Strategy B first.
+There are three viable launch strategies. Strategy C is the accepted path; see
+[ADR 0012](./adr/0012-use-pi-session-policy-for-ultracode.md).
 
 ### Strategy A: Transform To Main-Agent Workflow Authoring
 
@@ -250,6 +323,7 @@ Cons:
 - Relies on the main model following workflow authoring instructions.
 - Requires a generic workflow-launching tool or command to be available to the
   model. The user-facing name still must not be `ultracode`.
+- Does not by itself create durable standing opt-in for later turns.
 
 ### Strategy B: Direct Saved Workflow Launch
 
@@ -269,17 +343,105 @@ Cons:
 
 - Requires a saved/default `ultracode` workflow script to exist or be bundled.
 - Less flexible until workflow templates are mature.
+- Bypasses the main-agent behavior change that `ultracode` is meant to signal.
+- Treats `ultracode` as a one-shot command instead of a session policy.
+
+### Strategy C: Pi Session Policy With Model-Facing Workflow Tool
+
+Input handler behavior:
+
+1. Detect `ultracode <goal>`.
+2. Transition the mode state machine to `on`.
+3. Persist the transition with `pi.appendEntry("ultracode-mode", ...)`.
+4. Return `{ action: "transform", text }`, preserving the user's task while
+   removing the trigger prefix or wrapping it with concise activation context.
+5. On this and later turns, `before_agent_start` injects policy context when the
+   session mode is `on`.
+6. The main agent authors workflow scripts using the workflow-authoring prompt
+   and launches them through the registered workflow launch tool.
+
+Pros:
+
+- Matches the intended standing opt-in behavior.
+- Uses Pi's native input and pre-agent hooks.
+- Keeps the main agent responsible for decomposition and phase sequencing.
+- Keeps run creation in the existing `launchWorkflow(...)` path.
+- Allows later substantive turns to inherit `ultracode` without repeating the
+  keyword.
+
+Cons:
+
+- Requires a model-facing workflow launch tool and strong prompt policy.
+- Requires tests for session-state restoration from custom entries.
+- Enforcement is partly prompt/tool-contract based: the parser validates scripts,
+  but the model must choose to call the tool for substantive work.
 
 Recommended path:
 
-1. Build Strategy B with a simple bundled/default workflow for the first working
-   vertical slice.
-2. Add Strategy A later for open-ended workflow authoring once the model-facing
-   workflow launch surface is designed.
+1. Build Strategy C with a pure mode state machine and Pi `before_agent_start`
+   policy injection.
+2. Add the model-facing workflow launch tool.
+3. Keep Strategy B's bundled workflow as a test fixture or fallback only.
+4. Add deeper enforcement later by classifying trivial vs substantive tasks with
+   a dedicated policy tool if prompt-only enforcement proves too weak.
 
-## Bundled First Workflow
+## Workflow Authoring Prompt
 
-For the first shippable vertical slice, include a minimal built-in workflow
+When `ultracode` is on and the task is substantive, the main agent should receive
+the workflow-authoring contract below, either in the `before_agent_start` system
+prompt addition or in the workflow launch tool description.
+
+```text
+# Task: Write a Workflow script
+
+You are writing a script for an agent-orchestration runtime. The script is
+deterministic JavaScript that spawns subagents via helper functions. Produce a
+single self-contained script. Before writing any code, do step 0.
+
+## Step 0 — design first (output this as a short plan, then the script)
+
+State, in 3-5 lines:
+1. The work-list: what is the unit of work being fanned out over?
+2. The stages each unit passes through (find -> verify -> synthesize, etc.).
+3. Where, if anywhere, you genuinely need ALL results from one stage before the
+   next can start (a "barrier"). Default answer: nowhere.
+4. Which calls need structured output (a JSON schema) vs. plain text.
+
+## Hard rules
+
+- The script MUST begin with a pure literal `export const meta = { ... }` block.
+- `meta` is a PURE LITERAL: no variables, function calls, spreads, or template
+  strings inside it.
+- `meta.phases` must be an array of objects such as `[{ title: "Inspect" }]`,
+  never bare strings such as `["Inspect"]`.
+- Phase titles in `meta.phases` must match `phase()` calls.
+- It is JavaScript, not TypeScript.
+- Forbidden: `Date.now()`, `Math.random()`, and argument-less `new Date()`.
+- No filesystem or Node APIs.
+- The body runs in an async context; use `await` directly.
+
+## Helpers
+
+- `agent(prompt, opts?)`
+- `pipeline(items, stage1, stage2, ...)` — stage callbacks receive
+  `(previousStageResult, originalItem, index)`; for the first stage,
+  `previousStageResult === originalItem`.
+- `parallel(thunks)`
+- `phase(title)`
+- `log(message)`
+- `budget.total` / `budget.remaining()`
+
+Default to `pipeline()`. Use a `parallel()` barrier only when a later stage
+genuinely needs all earlier results together.
+
+THE ACTUAL TASK:
+<describe what the workflow should accomplish, the codebase/domain, and how
+thorough it should be>
+```
+
+## Bundled Fallback Workflow
+
+The previous direct-launch implementation used a minimal built-in workflow
 script equivalent to:
 
 ```js
@@ -308,8 +470,8 @@ const synthesis = await agent(
 return { goal: args.goal, exploration, synthesis }
 ```
 
-The actual bundled script may be stored as a string constant or as a package
-asset. It must still pass the existing workflow parser.
+This remains useful as a fixture or fallback, but it is not the primary
+`ultracode` behavior.
 
 ## Input Trigger Contract
 
@@ -530,7 +692,26 @@ Deliverable:
 - Render tests that assert `ultracode` is colorized without changing other text.
 - Timer behavior tested with fake timers where practical.
 
-### Slice 3: Extension Wiring
+### Slice 3: Mode State Machine And Session Store
+
+Files:
+
+```text
+src/extension/ultracode/mode-state-machine.ts
+src/extension/ultracode/session-mode-store.ts
+test/extension/ultracode/mode-state-machine.test.ts
+test/extension/ultracode/session-mode-store.test.ts
+```
+
+Deliverable:
+
+- Pure transitions for `off -> arming -> on -> disabled`.
+- Custom session entry serialization and restoration.
+- Session shutdown clears in-memory state.
+- Restoring a session with prior `ultracode-mode` entries puts the mode back in
+  the expected state.
+
+### Slice 4: Extension Wiring
 
 Files:
 
@@ -543,11 +724,53 @@ test/extension/ultracode/register-ultracode.test.ts
 Deliverable:
 
 - `session_start` installs the editor in TUI mode.
+- `session_start` restores ultracode mode from `ctx.sessionManager.getEntries()`.
 - `input` handler detects the trigger.
 - Empty `ultracode` prompt warns and returns `handled`.
 - Non-trigger input returns `continue`.
+- Valid trigger transitions mode to `on`, appends a custom entry, and returns
+  `transform` rather than `handled`.
+- `event.source === "extension"` returns `continue`.
 
-### Slice 4: Direct Launch With Fake Agents
+### Slice 5: Main-Agent Policy Injection
+
+Files:
+
+```text
+src/extension/ultracode/system-reminder.ts
+src/extension/ultracode/workflow-authoring-prompt.ts
+test/extension/ultracode/system-reminder.test.ts
+test/extension/ultracode/workflow-authoring-prompt.test.ts
+```
+
+Deliverable:
+
+- `before_agent_start` injects a custom message while mode is `on`.
+- The injected content states that `ultracode` is a standing session opt-in.
+- The system prompt addition tells the main agent to author/run workflows for
+  substantive tasks and to handle trivial turns solo.
+- Tests prove no policy is injected while mode is `off`.
+
+### Slice 6: Model-Facing Workflow Launch Tool
+
+Files:
+
+```text
+src/extension/tools/workflow-launch-tool.ts
+test/extension/tools/workflow-launch-tool.test.ts
+```
+
+Deliverable:
+
+- Register a workflow launch tool with `pi.registerTool(...)`.
+- Tool accepts a JavaScript workflow script plus optional args/description.
+- Tool calls `launchWorkflow(...)` with Pi cwd/session/model context.
+- Parser failures return clear tool errors.
+- Successful launch returns task id, run id, script path, transcript dir, and
+  confirmation text.
+- The tool name is not `ultracode`.
+
+### Slice 7: Legacy Direct Launch Fallback
 
 Files:
 
@@ -558,13 +781,10 @@ test/extension/ultracode/launch-ultracode-workflow.test.ts
 
 Deliverable:
 
-- Input `ultracode <goal>` calls `launchWorkflow(...)`.
-- Uses bundled ultracode workflow script.
-- Uses fake agent runner in tests.
-- Writes manifest, journal, output, notification payload.
-- `/workflows` can list the run.
+- Keep direct bundled launch covered by tests as an explicit fallback.
+- Do not call it from the normal `ultracode <goal>` input path.
 
-### Slice 5: Real Pi Agent Runner
+### Slice 8: Real Pi Agent Runner
 
 Files:
 
@@ -580,7 +800,7 @@ Deliverable:
   it, captures final text, and disposes it.
 - Filesystem test proves transcript and metadata files are written.
 
-### Slice 6: Structured Output
+### Slice 9: Structured Output
 
 Files:
 
@@ -595,7 +815,7 @@ Deliverable:
 - Missing structured output fails the agent.
 - Journal result is written only after valid capture.
 
-### Slice 7: Polished Running Indicator
+### Slice 10: Polished Running Indicator
 
 Files:
 
@@ -666,7 +886,20 @@ Assertions:
 - `event.source === "extension"` returns `continue`.
 - non-trigger returns `continue`.
 - empty trigger warns and returns `handled`.
-- valid trigger launches and returns `handled`.
+- valid trigger transitions mode to `on`.
+- valid trigger appends an `ultracode-mode` custom entry.
+- valid trigger returns `transform`, not `handled`.
+
+#### Policy Injection
+
+Assertions:
+
+- `before_agent_start` returns no message/system prompt change while mode is
+  `off`.
+- `before_agent_start` returns an ultracode custom message while mode is `on`.
+- The system prompt addition includes the workflow-authoring contract.
+- Trivial-task allowance and substantive-task workflow requirement are both
+  present.
 
 ### Filesystem Integration Tests
 
@@ -676,7 +909,22 @@ Scenario:
 
 1. Create fake Pi command/input context with `cwd = tempDir`.
 2. Submit `ultracode audit repo`.
-3. Use fake scheduler runner with deterministic outputs.
+3. Assert the transformed prompt reaches the main-agent path.
+4. Call the workflow launch tool with a deterministic script and fake scheduler
+   runner.
+5. Assert:
+
+   - `.pi/workflows/<runId>/manifest.json` exists.
+   - copied `script.js` exists.
+   - `journal.jsonl` has started/result events.
+   - `output.json` exists after completion.
+   - notification payload points to output file.
+   - `/workflows` can list the run.
+
+Legacy fallback scenario:
+
+1. Call `launchUltracodeWorkflow(...)` directly in a test.
+2. Use fake scheduler runner with deterministic outputs.
 4. Assert:
    - `.pi/workflows/<runId>/manifest.json` exists.
    - copied `script.js` exists.
@@ -746,8 +994,9 @@ variable such as `PI_E2E_LIVE=1`.
 
 Add or update ADRs for:
 
-- Whether the first trigger path is direct saved workflow launch or transformed
-  main-agent authoring.
+- Whether the first trigger path is direct saved workflow launch or Pi session
+  policy with transformed main-agent authoring. Current decision:
+  [ADR 0012](./adr/0012-use-pi-session-policy-for-ultracode.md).
 - How `agentType` maps to Pi concepts.
 - Structured-output retry/nudge policy.
 - Transcript retention and privacy policy.
@@ -758,11 +1007,15 @@ Add or update ADRs for:
 The implementation is ready for the first `ultracode` milestone when:
 
 - Typing `ultracode` in TUI animates the word without breaking editor behavior.
-- Submitting `ultracode <goal>` starts a persisted workflow run.
-- The first slice works with fake agents in automated tests.
+- Submitting `ultracode <goal>` turns on session mode and transforms the prompt
+  for the main agent.
+- While mode is on, `before_agent_start` injects the standing opt-in policy.
+- The main agent can launch a persisted workflow run through the workflow launch
+  tool.
+- The first state-machine/policy slices work without live model credentials.
 - Real Pi subagent runner exists behind an injectable seam and is covered by
   mocked-session tests.
 - Terminal workflow output and notification are persisted/sent through the
   existing launcher path.
-- `/workflows` lists ultracode-launched runs.
+- `/workflows` lists workflow runs launched while ultracode mode is active.
 - No user-facing LLM tool named `ultracode` is registered.

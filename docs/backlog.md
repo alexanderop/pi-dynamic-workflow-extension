@@ -12,6 +12,63 @@ This backlog treats the dynamic workflow feature as one epic that should be buil
 - Preserve every new workflow-model finding in `spec.md`.
 - Do not add live model tests until fake-runner and filesystem integration tests pass.
 
+## Agent Use
+
+Use this file to pick bounded implementation work. Use
+[`docs/spec-coverage.md`](./spec-coverage.md) to find the production and test
+owners for a spec area before editing code.
+
+When updating a slice:
+
+- Keep the detailed slice history below, but update the summary tables first.
+- Link status claims to concrete production files, tests, ADRs, or spec sections.
+- Split a large future slice into a smaller chunk before handing it to an agent.
+- Do not mark a slice implemented unless the behavior has tests or a documented
+  reason tests are not useful.
+
+## Current Slice Index
+
+### Open Or Partial Work
+
+| Slice | Status | Likely owners | Tests/docs to touch | Next bounded step |
+|---|---|---|---|---|
+| 0.0 Test Harness And Fixtures | Partial | `test/support.ts`, `test/builders/*`, `test/workflows/launch/workflow-scenario.ts` | `test/builders/*`, `test/workflows/*` | Add missing reusable temp-run fixture helpers only when a new slice needs them. |
+| 0.2 Reference Docs And Backlog | Ongoing | `AGENTS.md`, `README.md`, `docs/backlog.md`, `docs/spec-coverage.md`, `docs/learning/*` | Docs review | Keep docs synchronized with implemented behavior and remove stale "future" claims as slices land. |
+| 0.3 Decisions Log | Partial | `docs/adr/*`, `docs/adr/README.md` | ADR review | Add ADRs for structured-output retry policy and Claude-style `agentType` to Pi mapping before implementing those areas. |
+| 4.3 Restart Agent Invalidates Cache | Open | `src/workflows/journal/*`, `src/workflows/run/controller.ts`, `src/workflows/agent/scheduler.ts` | `test/workflows/journal/*`, `test/workflows/run/controller.test.ts` | Add journal invalidation behavior and prove replay ignores invalidated results. |
+| 5.3 Child `workflow()` | Open | `src/workflows/script/runtime.ts`, `src/workflows/saved/resolver.ts`, `src/workflows/launch/launcher.ts` | `test/workflows/script/runtime.test.ts`, `test/workflows/launch/launcher.test.ts` | Expose child workflow execution with shared scheduler/budget and one-level nesting guard. |
+| 7.1 Pi AgentSession Adapter | Partial | `src/workflows/agent/pi-runner.ts`, `src/extension/ultracode/*` | `test/workflows/agent/pi-runner.test.ts`, Pi reference docs | Add optional live smoke coverage only after mocked sidechain-session behavior remains stable. |
+| 7.2 Structured Output Validation | Partial | `src/workflows/agent/pi-runner.ts`, `src/workflows/agent/structured-output-tool.ts`, `src/workflows/script/runtime.ts`, `src/workflows/journal/*` | `test/workflows/agent/*`, `test/workflows/script/runtime.test.ts` | ADR 0014 defines the Pi-native terminating tool and two-nudge policy; implement the bounded correction loop. Current Pi runner captures validated `structured_output` tool results and fails missing tool calls. |
+| 7.3 Worktree Isolation | Open | `src/workflows/agent/pi-runner.ts`, launch/runtime agent options | New filesystem integration tests | Define preservation/cleanup policy before creating worktrees. |
+| 8.1 Budget Accounting | Open | `src/workflows/script/runtime.ts`, child workflow runtime when added | `test/workflows/script/runtime.test.ts` | Enforce the hard budget ceiling for `agent()` calls and share budget with child workflows. |
+| 8.2 Failure Recovery And Atomic Persistence | Open | `src/workflows/run/store.ts`, `src/workflows/journal/store.ts`, `src/workflows/launch/launcher.ts` | `test/workflows/run/store.test.ts`, `test/workflows/journal/store.test.ts`, `test/workflows/launch/launcher.test.ts` | Add atomic manifest writes and tolerant journal replay for partial trailing lines. |
+
+### Implemented Slices To Preserve
+
+| Slice | Primary proof |
+|---|---|
+| 0.1 Installable Pi Package Shell | `package.json`, `src/extension/index.ts`, `test/extension/index.test.ts` |
+| 0.5.1 Fake One-Agent Workflow Smoke | `test/workflows/launch/one-agent-smoke.test.ts` |
+| 1.1 Run-State File Discovery | `src/workflows/run/store.ts`, `test/workflows/run/store.test.ts` |
+| 1.2 `/workflows` List Command | `src/extension/commands/workflows-command.ts`, `test/extension/commands/workflows-command.test.ts` |
+| 1.3 Custom TUI Viewer | `src/extension/tui/*`, `test/extension/tui/*` |
+| 1.4 `/workflows` UI States | `src/workflows/view/*`, `test/workflows/view/*`, TUI snapshot tests |
+| 1.5 Active Workflow Footer Statusline | `src/workflows/statusline/projector.ts`, `src/extension/statusline/workflow-statusline.ts`, ADR 0013 |
+| 2.0 Workflow And Agent State Machines | `src/workflows/run/state-machine.ts`, `test/workflows/run/state-machine*.test.ts`, ADR 0003 |
+| 2.2 `parallel()` Semantics | `src/workflows/script/runtime.ts`, `test/workflows/script/runtime.test.ts` |
+| 2.3 `pipeline()` Semantics | `src/workflows/script/runtime.ts`, `test/workflows/script/runtime.test.ts` |
+| 2.4 Scheduler With Fake Agents | `src/workflows/agent/scheduler.ts`, `test/workflows/agent/scheduler*.test.ts` |
+| 3.1 Meta Parsing | `src/workflows/script/parser.ts`, `test/workflows/script/parser*.test.ts` |
+| 3.2 Launch Inline Script With Fake Agents | `src/workflows/launch/launcher.ts`, `test/workflows/launch/launcher.test.ts` |
+| 3.3 Sandboxed Script Evaluation | `src/workflows/script/runtime.ts`, `test/workflows/script/runtime*.test.ts`, ADR 0002 |
+| 3.4 Terminal Status And Notification Payload | `src/workflows/launch/launcher.ts`, `test/workflows/launch/launcher.test.ts` |
+| 4.1 Journal Writer And Stable Keys | `src/workflows/journal/*`, `test/workflows/journal/*`, ADR 0008 |
+| 4.2 Resume Cache Replay | `src/workflows/launch/launcher.ts`, `test/workflows/launch/launcher.test.ts` |
+| 5.1 Saved Workflow Discovery | `src/workflows/saved/resolver.ts`, `src/workflows/saved/list.ts`, tests under `test/workflows/saved/`, ADR 0009 |
+| 5.2 Save Run Script | `src/workflows/saved/save-run-script.ts`, `test/workflows/saved/save-run-script.test.ts` |
+| 6.1 Pause And Resume Run | `src/workflows/run/controller.ts`, `/workflows` command and TUI tests |
+| 6.2 Stop Run And Stop Agent | `src/workflows/run/controller.ts`, scheduler stop behavior, `/workflows` confirmation tests |
+
 ## Epic 0: Package And Developer Baseline
 
 Goal: make the repository installable, testable, and easy for future agents to navigate.
@@ -191,7 +248,7 @@ Spec coverage:
 
 - §12 Run State Model.
 - §18 Storage Layout.
-- §20 acceptance criterion 11.
+- §21 acceptance criterion 11.
 
 Status: implemented for project-local `.pi/workflows/<runId>/manifest.json`
 discovery. The store reads typed run-state manifests, normalizes the current
@@ -221,7 +278,7 @@ Dependencies:
 Spec coverage:
 
 - §12 Run State Model.
-- §20 acceptance criterion 11.
+- §21 acceptance criterion 11.
 
 Status: implemented as a non-interactive command that reads project-local
 `.pi/workflows/<runId>/manifest.json` files through `WorkflowRunStore`, renders
@@ -253,7 +310,7 @@ Dependencies:
 Spec coverage:
 
 - §12 Run State Model.
-- §20 acceptance criterion 11.
+- §21 acceptance criterion 11.
 
 Status: implemented as a first custom Pi TUI viewer. The command now opens
 `ctx.ui.custom()` in interactive TUI mode, keeps text/json fallbacks for
@@ -286,12 +343,38 @@ Dependencies:
 Spec coverage:
 
 - §12 Run State Model.
-- §20 acceptance criterion 11.
+- §21 acceptance criterion 11.
 
 Status: implemented as a first stateful `/workflows` monitor. One run opens an
 overview monitor, multiple runs open a chooser, left-arrow opens structured
 agent detail, enter opens the selected agent prompt reader, escape steps back
 through states, and render tests protect the TUI width contract.
+
+### Slice 1.5: Active Workflow Footer Statusline
+
+User value: users can see that a background workflow is still running without
+opening `/workflows`.
+
+Scope:
+
+- Project the newest active session workflow into a compact Pi footer status.
+- Use `ctx.ui.setStatus("dynamic-workflows", text)` instead of replacing Pi's
+  footer.
+- Keep the status passive; interactive selection remains `/workflows` or a future
+  widget.
+- Add a best-effort launcher observer hook for immediate live updates.
+
+Tests:
+
+- Pure projector formats name, description, agent progress, elapsed time, token
+  usage, truncation, and active-run selection.
+- Launcher observer receives initial, live, and terminal states without affecting
+  execution when it throws.
+- Extension controller sets, refreshes, and clears the Pi footer status.
+
+Status: implemented with `formatWorkflowStatusline`, `onRunStateChange`, and a
+session-scoped `dynamic-workflows` footer status controller. ADR 0013 records why
+this slice uses a passive Pi status entry rather than an interactive strip.
 
 ## Epic 2: Pure Workflow Runtime Semantics
 
@@ -330,7 +413,7 @@ Spec coverage:
 
 - §12 Run State Model.
 - §16 Controller Operations.
-- §20 acceptance criteria 10, 11, 13, 14, and 15 in pure state-machine form.
+- §21 acceptance criteria 10, 11, 13, 14, and 15 in pure state-machine form.
 
 Status: implemented with pure transition functions and ADR 0003. Not wired into
 launcher, scheduler, persistence, journal replay, or `/workflows` UI yet.
@@ -359,7 +442,7 @@ Spec coverage:
 
 - §7 Runtime API.
 - §12 Run State Model.
-- §20 acceptance criteria 4 and 11.
+- §21 acceptance criteria 4 and 11.
 
 ### Slice 2.2: `parallel()` Semantics
 
@@ -387,7 +470,7 @@ Spec coverage:
 
 - §7 Runtime API.
 - §10 Scheduling.
-- §20 acceptance criteria 8 and 19.
+- §21 acceptance criteria 8 and 19.
 
 Status: implemented for pure runtime semantics. Scheduler-cap integration still
 belongs to Slice 2.4.
@@ -400,6 +483,7 @@ Scope:
 
 - Implement `pipeline(items, ...stages)`.
 - Thread `(previousStageResult, originalItem, index)`.
+- Seed the first stage with `previousStageResult === originalItem`.
 - Drop failed item to `null` and skip remaining stages for that item.
 
 Tests:
@@ -416,7 +500,7 @@ Dependencies:
 Spec coverage:
 
 - §11 Pipeline Semantics.
-- §20 acceptance criteria 9 and 18.
+- §21 acceptance criteria 9 and 18.
 
 Status: implemented for pure runtime semantics.
 
@@ -447,7 +531,7 @@ Spec coverage:
 
 - §9 Subagent Contract, fake only.
 - §10 Scheduling.
-- §20 acceptance criteria 8, 10, and 20 partially.
+- §21 acceptance criteria 8, 10, and 20 partially.
 
 Status: implemented for fake agents. `WorkflowAgentScheduler` enforces the
 recommended default concurrency cap (`min(16, max(1, cpuCores - 2))`), supports
@@ -515,7 +599,7 @@ Spec coverage:
 
 - §5 Launcher.
 - §8 Launch Contract.
-- §20 acceptance criteria 1 and 3.
+- §21 acceptance criteria 1 and 3.
 
 Status: implemented for inline scripts with fake agents. `launchWorkflow()`
 validates the launch source, rejects unsupported saved/path launches with typed
@@ -552,8 +636,8 @@ Spec coverage:
 
 - §6 Workflow Script Format.
 - §7 Runtime API.
-- §19 Security Requirements.
-- §20 acceptance criteria 17 and 23.
+- §20 Security Requirements.
+- §21 acceptance criteria 17 and 23.
 
 Status: partially implemented with fake agents and no launcher/persistence. The
 current runtime executes parsed workflow bodies in `node:vm`, exposes
@@ -585,7 +669,7 @@ Dependencies:
 Spec coverage:
 
 - §17 Notification Contract.
-- §20 acceptance criterion 16.
+- §21 acceptance criterion 16.
 
 Status: implemented for fake-agent inline launches. Terminal runs now write
 `.pi/workflows/<runId>/output.json`, persist `outputPath` on the terminal
@@ -623,7 +707,7 @@ Dependencies:
 Spec coverage:
 
 - §13 Journal Model.
-- §20 acceptance criterion 12.
+- §21 acceptance criterion 12.
 
 Status: implemented for fake-agent launches with ADR 0008. The journal module
 writes `.pi/workflows/<runId>/journal.jsonl`, computes `v2:<sha256>` keys from
@@ -658,7 +742,7 @@ Dependencies:
 Spec coverage:
 
 - §14 Resume Semantics.
-- §20 acceptance criterion 13.
+- §21 acceptance criterion 13.
 
 Status: implemented for inline fake workflow launches through
 `resumeFromRunId`. The launcher reads the source run's `journal.jsonl`, builds a
@@ -691,7 +775,7 @@ Spec coverage:
 
 - §13 Journal Model.
 - §16 Control Operations.
-- §20 acceptance criterion 14.
+- §21 acceptance criterion 14.
 
 ## Epic 5: Saved Workflows And Nested Workflows
 
@@ -721,7 +805,7 @@ Spec coverage:
 
 - §6 Workflow Script Format.
 - §8 Launch Contract.
-- §20 acceptance criterion 2.
+- §21 acceptance criterion 2.
 
 Status: implemented for fake-agent launches. Saved workflow name lookup resolves
 Pi-namespaced project workflows under `<project>/.pi/workflows/*.js` before
@@ -757,7 +841,7 @@ Dependencies:
 Spec coverage:
 
 - §15 Save Semantics.
-- §20 acceptance criterion 15.
+- §21 acceptance criterion 15.
 
 Status: implemented as a core saved-workflow helper. `saveRunScript()` reads a
 completed run manifest, copies only that run's `script.js` to the selected
@@ -790,7 +874,7 @@ Dependencies:
 Spec coverage:
 
 - §7 Runtime API.
-- §20 acceptance criterion 22.
+- §21 acceptance criterion 22.
 
 ## Epic 6: Controls And `/workflows` Actions
 
@@ -879,7 +963,7 @@ Dependencies:
 Spec coverage:
 
 - §9 Subagent Contract.
-- §20 acceptance criteria 5 and 20 partially.
+- §21 acceptance criteria 5 and 20 partially.
 
 ### Slice 7.2: Structured Output Validation
 
@@ -907,7 +991,7 @@ Spec coverage:
 
 - §9 Subagent Contract.
 - §17 Notification Contract failures.
-- §20 acceptance criteria 6, 7, 12, and 20.
+- §21 acceptance criteria 6, 7, 12, and 20.
 
 ### Slice 7.3: Worktree Isolation
 
@@ -962,7 +1046,7 @@ Dependencies:
 Spec coverage:
 
 - §7 Runtime API.
-- §20 acceptance criterion 21.
+- §21 acceptance criterion 21.
 
 ### Slice 8.2: Failure Recovery And Atomic Persistence
 

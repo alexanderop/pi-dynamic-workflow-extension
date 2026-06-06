@@ -161,7 +161,7 @@ function agentsForPhase(agents: WorkflowAgentProgress[], title: string): Workflo
   return agents.filter((agent) => agent.phaseTitle === undefined);
 }
 
-function isWorkflowAgentProgress(
+export function isWorkflowAgentProgress(
   value: WorkflowRunState["workflowProgress"][number],
 ): value is WorkflowAgentProgress {
   return value.type === "workflow_agent";

@@ -19,8 +19,9 @@ const phaseArbitrary = record({
 });
 const metaArbitrary = record({
   name: nonEmptyPrintableText,
-  description: printableText,
+  description: nonEmptyPrintableText,
   whenToUse: printableText,
+  model: printableText,
   phases: array(phaseArbitrary, { maxLength: 8 }),
 });
 
@@ -44,10 +45,10 @@ describe("workflow parser properties", () => {
       property(
         constantFrom(
           "{ name }",
-          "{ name: buildName() }",
-          "{ name: `templated` }",
-          '{ name: "spread", ...extra }',
-          '{ ["name"]: "computed" }',
+          "{ name: buildName(), description: 'Description' }",
+          "{ name: `templated`, description: 'Description' }",
+          '{ name: "spread", description: "Description", ...extra }',
+          '{ ["name"]: "computed", description: "Description" }',
         ),
         (metaSource) => {
           expect(() => parseWorkflowScript(invalidWorkflowScript(metaSource))).toThrow(
@@ -66,7 +67,7 @@ describe("workflow parser properties", () => {
         printableText,
         (forbiddenExpression, suffix) => {
           const source = workflowScript(
-            { name: "deterministic" },
+            { name: "deterministic", description: "Check deterministic guards" },
             `const value = ${forbiddenExpression};\n${commentLine(suffix)}\nreturn value;`,
           );
 

@@ -111,7 +111,7 @@ export class WorkflowsScreen {
   );
 
   openSelectedAgent(): this {
-    return this.press.left();
+    return this.press.right();
   }
 
   openOriginalPrompt(): this {

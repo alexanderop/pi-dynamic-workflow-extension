@@ -31,6 +31,7 @@ export interface WorkflowAgentSchedulerOptions {
   readonly cwd?: string;
   readonly journal?: WorkflowAgentJournal;
   readonly replayCache?: WorkflowAgentReplayCache;
+  readonly onProgress?: (progress: WorkflowAgentProgress[]) => void;
 }
 
 interface QueuedAgent {
@@ -55,6 +56,7 @@ export class WorkflowAgentScheduler {
   readonly #cwd: string;
   readonly #journal?: WorkflowAgentJournal;
   readonly #replayCache?: WorkflowAgentReplayCache;
+  readonly #onProgress?: (progress: WorkflowAgentProgress[]) => void;
   readonly #queue: QueuedAgent[] = [];
   readonly #runningAgents = new Map<number, QueuedAgent>();
   readonly #stoppedAgents = new Set<number>();
@@ -76,6 +78,7 @@ export class WorkflowAgentScheduler {
     this.#cwd = options.cwd ?? process.cwd();
     this.#journal = options.journal;
     this.#replayCache = options.replayCache;
+    this.#onProgress = options.onProgress;
 
     if (!Number.isInteger(this.#maxConcurrent) || this.#maxConcurrent < 1) {
       throw new TypeError("WorkflowAgentScheduler maxConcurrent must be a positive integer.");
@@ -125,6 +128,7 @@ export class WorkflowAgentScheduler {
       promptPreview: prompt.slice(0, 160),
       prompt,
     });
+    this.#emitProgress();
 
     if (journalKey !== undefined && this.#replayCache?.has(journalKey) === true) {
       const cachedResult = this.#replayCache.get(journalKey);
@@ -362,6 +366,11 @@ export class WorkflowAgentScheduler {
     const result = transitionAgent(this.#progress[progressIndex]!, event);
     if (result.status === "error") throw new Error(result.error.message);
     this.#progress[progressIndex] = result.value;
+    this.#emitProgress();
+  }
+
+  #emitProgress(): void {
+    this.#onProgress?.(this.progress());
   }
 }
 

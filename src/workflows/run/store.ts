@@ -64,10 +64,11 @@ export class WorkflowRunStore {
       return err(readError(this.#rootDir, cause));
     }
 
+    const results = await Promise.all(
+      entries.filter((entry) => entry.isDirectory()).map((entry) => this.#readManifest(entry.name)),
+    );
     const runs: WorkflowRunState[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const result = await this.#readManifest(entry.name);
+    for (const result of results) {
       if (result.status === "ok") runs.push(result.value);
     }
 
@@ -193,6 +194,7 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
       workflowName: value.workflowName,
       description: isString(value.description) ? value.description : undefined,
       status: value.status,
+      defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
       script: value.script,
       scriptPath: value.scriptPath,
       phases: normalizePhases(value.phases),
@@ -245,6 +247,7 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
         ? snapshot.description
         : undefined,
     status: normalizeObservedStatus(value.status),
+    defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
     script: value.script,
     scriptPath: value.scriptPath,
     phases,

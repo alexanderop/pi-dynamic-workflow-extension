@@ -33,12 +33,15 @@ Before making changes in this repo:
 
 Use `pnpm` for project scripts:
 
+- `pnpm run verify` — canonical local harness for code changes; runs type checking, lint, format check, and the Vitest suite.
 - `pnpm run check` — run TypeScript type checking with `tsc --noEmit`.
 - `pnpm test` — run the Vitest test suite once.
 - `pnpm run lint` — run Oxlint on `src`, `test`, and `.pi/workflows/scripts`.
 - `pnpm run lint:fix` — apply safe Oxlint fixes in the same lint scope.
 - `pnpm run fmt` — run Oxfmt on code, tests, workflow scripts, and project config files.
 - `pnpm run fmt:check` — check that the Oxfmt-targeted files are formatted.
+
+For code changes, prefer `pnpm run verify` before reporting completion unless the task specifically calls for a narrower check or the user asks not to run the full harness.
 
 The Oxfmt scripts intentionally do not target the whole repository. Do not format `spec.md`, ADRs, or exploratory docs unless the task is specifically about formatting those documents.
 
@@ -49,6 +52,8 @@ Use these like wiki links when orienting:
 - [[spec.md]] — current working specification for Claude-Code-like dynamic workflows.
 - [[README.md]] — package overview, install commands, planned structure, and `/workflows` UI plan.
 - [[docs/backlog.md]] — incremental backlog for building the dynamic workflow epic through tested slices.
+- [[docs/chunks/README.md]] — agent-ready task chunks split out from broad backlog slices.
+- [[docs/spec-coverage.md]] — spec-to-code ownership map showing production files, tests, status, and next gaps by spec area.
 - [[docs/learning/README.md]] — guided onboarding path for learning Pi, dynamic workflows, and the current implementation.
 - [[docs/error-handling.md]] — project-local Result pattern and workflow error-handling conventions.
 - [[docs/adr/README.md]] — how to record architecture decisions for this project.

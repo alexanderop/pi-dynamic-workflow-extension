@@ -15,7 +15,7 @@ Slice the spec into TDD plans and author a pipeline workflow
 │                   │ ● slice:P2.2-l… 41.1k tok · 11 tools │
 └───────────────────┴──────────────────────────────────────┘
 
-↑↓ select · ← detail · x stop workflow · p pause · esc back "
+↑↓ select · → detail · x stop workflow · p pause · esc back "
 `;
 
 exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical State A overview monitor 1`] = `
@@ -33,7 +33,7 @@ Slice the spec into TDD plans and author a pipeline workflow
 │                   │ ● slice:P2.2-limiter-queue Opus 4.8 (1M context)                            41.1k tok · 11 tools │
 └───────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────┘
 
-↑↓ select · ← detail · x stop workflow · p pause · esc back · s save"
+↑↓ select · → detail · x stop workflow · p pause · esc back · s save"
 `;
 
 exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical State B agent detail monitor 1`] = `

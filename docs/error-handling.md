@@ -104,7 +104,8 @@ Do not replace all workflow-level `null` values with `Result` objects.
 
 `spec.md` currently defines these externally visible behaviors:
 
-- `agent()` resolves to `null` when the user skips the agent.
+- `agent()` resolves to `null` when the user skips the agent or a non-schema
+  subagent dies/fails before producing a usable result.
 - `parallel()` resolves a throwing thunk to `null` at that result index.
 - `pipeline()` drops a failed item to `null` and skips its remaining stages.
 

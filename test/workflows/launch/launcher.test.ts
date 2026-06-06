@@ -9,8 +9,12 @@ import {
   workflowRunScriptPath,
   workflowRunTranscriptDir,
   type WorkflowTaskNotification,
+  type WorkflowTerminalOutput,
 } from "#src/workflows/launch/launcher.ts";
+import type { WorkflowLaunchOperations } from "#src/workflows/launch/operations.ts";
+import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
+import { ok } from "#src/workflows/result.ts";
 import { projectSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "../script/workflow-factory.ts";
@@ -32,20 +36,32 @@ describe("launchWorkflow", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("should reject launch requests that do not provide exactly one source", async () => {
-    const script = workflowScript({ meta: { name: "too-many" } });
-
+  it("should reject launch requests that do not provide a source", async () => {
     const missing = await launchWorkflow({}, launchOptions());
-    const tooMany = await launchWorkflow({ script, name: "saved" }, launchOptions());
 
     expect(missing).toMatchObject({
       status: "error",
       error: { _tag: "WorkflowLaunchInvalidRequestError" },
     });
-    expect(tooMany).toMatchObject({
+  });
+
+  it("should choose sources by scriptPath, script, then name precedence", async () => {
+    const scriptPath = join(tempDir, "missing-wins.js");
+    const script = workflowScript({ meta: { name: "inline-wins" }, body: "return 'inline';" });
+
+    const byScriptPath = await launchWorkflow(
+      { scriptPath, script, name: "saved" },
+      launchOptions(),
+    );
+    expect(byScriptPath).toMatchObject({
       status: "error",
-      error: { _tag: "WorkflowLaunchInvalidRequestError" },
+      error: { _tag: "WorkflowSavedWorkflowReadError", path: scriptPath },
     });
+
+    const byScript = await launchWorkflow({ script, name: "saved" }, launchOptions());
+    const launch = unwrap(byScript);
+    const completed = unwrap(await launch.completion);
+    expect(completed).toMatchObject({ workflowName: "inline-wins", result: "inline" });
   });
 
   it("should return clear errors for missing saved workflow sources before run storage is created", async () => {
@@ -90,6 +106,62 @@ describe("launchWorkflow", () => {
     expect(await pathExists(rootDir)).toBe(false);
   });
 
+  it("should support fully fake launch operations for offline launcher tests", async () => {
+    const writes: WorkflowRunState[] = [];
+    const outputs: WorkflowTerminalOutput[] = [];
+    let preparedRun: WorkflowRunState | undefined;
+    const operations: WorkflowLaunchOperations = {
+      resolveSavedWorkflowByName: async () => {
+        throw new Error("not used");
+      },
+      readSavedWorkflowScriptPath: async () => {
+        throw new Error("not used");
+      },
+      readJournalEvents: async () => [],
+      createJournal: () => ({ append: async () => undefined }),
+      prepareRunFiles: async ({ initialState }) => {
+        preparedRun = initialState;
+        return ok(undefined);
+      },
+      writeRun: async ({ state }) => {
+        writes.push(state);
+        return ok(undefined);
+      },
+      writeTerminalOutput: async ({ output }) => {
+        outputs.push(output);
+        return ok(undefined);
+      },
+    };
+
+    const result = await launchWorkflow(
+      {
+        script: workflowScript({
+          meta: { name: "fake-ops", description: "Uses fake operations" },
+          body: "return { ok: true };",
+        }),
+      },
+      launchOptions({ operations, defer: (start) => start() }),
+    );
+
+    const launch = unwrap(result);
+    now = 125;
+    const completed = unwrap(await launch.completion);
+
+    expect(preparedRun).toMatchObject({ runId: "wf_test", status: "running" });
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ runId: "wf_test", status: "completed" });
+    expect(outputs).toMatchObject([
+      {
+        runId: "wf_test",
+        taskId: "task_test",
+        workflowName: "fake-ops",
+        status: "completed",
+        result: { ok: true },
+      },
+    ]);
+    expect(completed).toMatchObject({ status: "completed", result: { ok: true } });
+  });
+
   it("should launch a saved workflow by name from project scripts before personal scripts", async () => {
     const projectScript = workflowScript({
       meta: {
@@ -126,6 +198,37 @@ return { result };
       phases: [{ title: "Review" }],
     });
     scenario.agents.expectNoUnhandledAgents();
+  });
+
+  it("should persist meta.model as the run default model and apply it to agents", async () => {
+    const agents = setupAgentMock(
+      agent.call({ label: "scan-agent", model: "opus" }, () => AgentResponse.text("model result")),
+    );
+    const script = workflowScript({
+      meta: {
+        name: "model-default",
+        description: "Apply workflow model metadata",
+        model: "opus",
+      },
+      body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow({ script }, launchOptions({ schedulerRunner: agents.schedulerRunner })),
+    );
+    now = 150;
+    const completed = unwrap(await launch.completion);
+
+    expect(completed).toMatchObject({
+      status: "completed",
+      defaultModel: "opus",
+      workflowProgress: [{ type: "workflow_agent", label: "scan-agent", model: "opus" }],
+    });
+    const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+    expect(manifest.defaultModel).toBe("opus");
+    agents.expectNoUnhandledAgents();
   });
 
   it("should launch a workflow from an explicit script path", async () => {
@@ -229,6 +332,29 @@ return { result };
 
     await scan.waitUntilStarted();
     expect(scan.prompt).toBe("scan src");
+    const store = new WorkflowRunStore({ rootDir });
+    let liveManifest = unwrap(await store.readRun("wf_test"));
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const hasRunningAgent = liveManifest.workflowProgress.some(
+        (entry) =>
+          entry.type === "workflow_agent" &&
+          entry.label === "scan-agent" &&
+          entry.state === "running",
+      );
+      if (hasRunningAgent) break;
+      await delay(1);
+      liveManifest = unwrap(await store.readRun("wf_test"));
+    }
+    expect(liveManifest).toMatchObject({
+      status: "running",
+      logs: ["starting scan"],
+      agentCount: 1,
+      workflowProgress: [
+        { type: "workflow_phase", title: "Scan" },
+        { type: "workflow_agent", label: "scan-agent", state: "running" },
+      ],
+    });
+
     now = 175;
     scan.resolve("fake agent result");
 
@@ -271,6 +397,76 @@ return { result };
         journalKey: journal[0].key,
       },
     ]);
+  });
+
+  it("should notify run-state observers with initial, progress, and terminal workflow states", async () => {
+    const observed: WorkflowRunState[] = [];
+    const scan = agent.pending({ prompt: "scan src", label: "scan-agent", phase: "Scan" });
+    const agents = setupAgentMock(scan);
+    const script = workflowScript({
+      meta: { name: "statusline-hook", phases: [{ title: "Scan" }] },
+      body: `
+phase("Scan");
+const result = await agent("scan src", { label: "scan-agent", phase: "Scan" });
+return { result };
+`,
+    });
+
+    const result = await launchWorkflow(
+      { script },
+      launchOptions({
+        schedulerRunner: agents.schedulerRunner,
+        onRunStateChange: (state) => observed.push(state),
+      }),
+    );
+
+    const launch = unwrap(result);
+    expect(observed[0]).toMatchObject({
+      runId: "wf_test",
+      status: "running",
+      agentCount: 0,
+    });
+
+    await scan.waitUntilStarted();
+    expect(observed.some((state) => state.agentCount === 1)).toBe(true);
+
+    now = 175;
+    scan.resolve("scan result");
+    unwrap(await launch.completion);
+
+    expect(observed.at(-1)).toMatchObject({
+      status: "completed",
+      agentCount: 1,
+      outputPath: workflowRunOutputPath(rootDir, "wf_test"),
+    });
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should keep workflow execution running when a run-state observer throws", async () => {
+    const script = workflowScript({
+      meta: { name: "throwing-statusline-hook", phases: [{ title: "Scan" }] },
+      body: `
+phase("Scan");
+return await agent("scan src", { label: "scan-agent", phase: "Scan" });
+`,
+    });
+    const agents = setupAgentMock(agent.label("scan-agent").replyText("ok"));
+
+    const result = await launchWorkflow(
+      { script },
+      launchOptions({
+        schedulerRunner: agents.schedulerRunner,
+        onRunStateChange: () => {
+          throw new Error("statusline exploded");
+        },
+      }),
+    );
+
+    now = 175;
+    await expect(unwrap(result).completion).resolves.toMatchObject({
+      status: "ok",
+      value: { status: "completed", result: "ok" },
+    });
   });
 
   it("should stop an active launched workflow and persist stopped manifest, output, notification, and journal events", async () => {
@@ -834,7 +1030,18 @@ return { scan };
         }),
       ),
     );
-    await expect(incomplete.completion).resolves.toMatchObject({ status: "error" });
+    await expect(incomplete.completion).resolves.toMatchObject({
+      status: "ok",
+      value: { status: "completed", result: null },
+    });
+
+    const incompleteJournal = (
+      await readFile(workflowRunJournalPath(rootDir, "wf_incomplete"), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(incompleteJournal.map((event) => event.type)).toEqual(["started", "failed"]);
 
     const resumed = unwrap(
       await launchWorkflow(

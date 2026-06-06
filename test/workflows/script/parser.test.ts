@@ -14,6 +14,7 @@ describe("parseWorkflowScript", () => {
           name: "inspect",
           description: "Inspect the project",
           whenToUse: "When orientation is needed",
+          model: "opus",
           phases: [{ title: "Scan", detail: "Read files", model: "fast" }],
         },
         body: `
@@ -27,6 +28,7 @@ return "done";
       name: "inspect",
       description: "Inspect the project",
       whenToUse: "When orientation is needed",
+      model: "opus",
       phases: [{ title: "Scan", detail: "Read files", model: "fast" }],
     });
     expect(parsed.body).not.toContain("export const meta");
@@ -47,6 +49,20 @@ return before;
         }),
       ),
     ).toThrow(WorkflowParseError);
+  });
+
+  it("should require meta.description as a non-empty string", () => {
+    expect(() =>
+      parseWorkflowScript(invalidWorkflowScript({ metaSource: '{ name: "missing-description" }' })),
+    ).toThrow(/meta\.description/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource: '{ name: "empty-description", description: "" }',
+        }),
+      ),
+    ).toThrow(/meta\.description/);
   });
 
   it("should reject non-literal meta values when exported meta uses dynamic expressions", () => {
@@ -117,6 +133,19 @@ return new Date();
         }),
       ),
     ).toThrow(/new Date/);
+  });
+
+  it("should reject forbidden nondeterministic text even inside prompt strings", () => {
+    expect(() =>
+      parseWorkflowScript(
+        workflowScript({
+          meta: { name: "prompt-text" },
+          body: `
+return await agent("Audit code that mentions Date.now in docs");
+`,
+        }),
+      ),
+    ).toThrow(/Date.now.*inside strings/);
   });
 
   it("should return parse errors as Result values when workflow script is invalid", () => {

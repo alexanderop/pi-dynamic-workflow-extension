@@ -134,7 +134,7 @@ This likely needs an ADR for retry/nudge policy.
 
 ### Rich `/workflows` TUI
 
-Need custom TUI states from `spec.md` §23:
+Need custom TUI states from `spec.md` §24:
 
 - State A: overview
 - State B: structured agent detail

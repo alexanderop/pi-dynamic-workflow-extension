@@ -60,10 +60,10 @@ export function focusInMonitor(
   bounds: MonitorBounds,
   direction: "left" | "right",
 ): MonitorNavigationState {
-  if (state.screen === "overview" && direction === "left" && bounds.agentCount > 0) {
+  if (state.screen === "overview" && direction === "right" && bounds.agentCount > 0) {
     return { ...state, screen: "agentDetail" };
   }
-  if (state.screen === "agentDetail" && direction === "right") {
+  if (state.screen === "agentDetail" && direction === "left") {
     return { ...state, screen: "overview" };
   }
   return state;

@@ -22,6 +22,7 @@ export interface WorkflowRunState {
   workflowName: string;
   description?: string;
   status: WorkflowRunStatus;
+  defaultModel?: string;
   script: string;
   scriptPath: string;
   phases: Array<{ title: string }>;

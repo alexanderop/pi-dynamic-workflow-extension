@@ -17,6 +17,8 @@ export type {
   WorkflowRuntimeState,
 } from "./model.ts";
 
+export const WORKFLOW_COLLECTION_ITEM_LIMIT = 4096;
+
 export async function runWorkflowScript(
   source: string,
   options: WorkflowRuntimeOptions = {},
@@ -35,12 +37,15 @@ async function executeWorkflowScript(
   const logs: string[] = [];
   const agentCalls: WorkflowRuntimeState["agentCalls"] = [];
   let spentTokens = 0;
+  let emitStateChange = noop;
   const scheduler = new WorkflowAgentScheduler({
     maxConcurrent: options.maxConcurrentAgents,
     maxTotalAgents: options.maxTotalAgents,
+    defaultModel: parsed.meta.model ?? options.defaultModel,
     cwd: options.cwd,
     journal: options.journal,
     replayCache: options.replayCache,
+    onProgress: () => emitStateChange(),
     runner:
       options.schedulerRunner ??
       (async ({ prompt, options: agentOptions }) =>
@@ -73,10 +78,21 @@ async function executeWorkflowScript(
 
   const agent = async (prompt: string, agentOptions: AgentOptions = {}) => {
     if (typeof prompt !== "string") throw new TypeError("agent(prompt) requires a string prompt.");
+    if (budget.total !== null && spentTokens >= budget.total) {
+      throw new Error("Workflow token budget exhausted; no further agent() calls are allowed.");
+    }
     agentCalls.push({ prompt, options: agentOptions });
-    const result = await scheduler.schedule(prompt, agentOptions);
-    spentTokens += estimateTokens(prompt, result);
-    return result;
+    const progressCountBeforeSchedule = scheduler.progress().length;
+    try {
+      const result = await scheduler.schedule(prompt, agentOptions);
+      spentTokens += estimateTokens(prompt, result);
+      return result;
+    } catch (cause) {
+      if (scheduler.progress().length === progressCountBeforeSchedule) throw cause;
+      if (agentOptions.schema !== undefined || isSchemaAgentFailure(cause)) throw cause;
+      spentTokens += estimateTokens(prompt, null);
+      return null;
+    }
   };
 
   const context = vm.createContext({
@@ -86,9 +102,11 @@ async function executeWorkflowScript(
       if (typeof title !== "string" || title.length === 0)
         throw new TypeError("phase(title) requires a non-empty string.");
       phases.push({ type: "workflow_phase", index: phases.length, title });
+      emitStateChange();
     },
     log: (message: string) => {
       logs.push(String(message));
+      emitStateChange();
     },
     agent,
     parallel,
@@ -106,6 +124,7 @@ async function executeWorkflowScript(
     result,
     stopped: scheduler.isStopped(),
   });
+  emitStateChange = () => options.onStateChange?.(currentState());
 
   try {
     const wrapped = `(async () => {\n${parsed.body}\n})()`;
@@ -136,6 +155,8 @@ export async function tryRunWorkflowScript(
   }
 }
 
+function noop(): void {}
+
 function errorMessage(cause: unknown): string {
   if (cause instanceof Error) return cause.message;
   if (hasMessage(cause)) return cause.message;
@@ -151,8 +172,15 @@ function hasMessage(value: unknown): value is { message: string } {
   );
 }
 
+function isSchemaAgentFailure(cause: unknown): boolean {
+  return (
+    typeof cause === "object" && cause !== null && "variant" in cause && cause.variant === "schema"
+  );
+}
+
 export async function parallel<T>(thunks: Array<() => Promise<T>>): Promise<Array<T | null>> {
   if (!Array.isArray(thunks)) throw new TypeError("parallel() requires an array of thunks.");
+  assertCollectionItemLimit("parallel", thunks.length);
   for (const thunk of thunks) {
     if (typeof thunk !== "function")
       throw new TypeError("parallel() accepts only thunks: () => Promise<T>.");
@@ -174,13 +202,14 @@ export async function pipeline<T>(
   ...stages: Array<(previous: unknown, item: T, index: number) => Promise<unknown>>
 ): Promise<unknown[]> {
   if (!Array.isArray(items)) throw new TypeError("pipeline() requires an array of items.");
+  assertCollectionItemLimit("pipeline", items.length);
   for (const stage of stages) {
     if (typeof stage !== "function") throw new TypeError("pipeline() stages must be functions.");
   }
 
   return Promise.all(
     items.map(async (item, index) => {
-      let previous: unknown;
+      let previous: unknown = item;
       for (const stage of stages) {
         try {
           previous = await stage(previous, item, index);
@@ -191,6 +220,14 @@ export async function pipeline<T>(
       return previous;
     }),
   );
+}
+
+function assertCollectionItemLimit(name: "parallel" | "pipeline", length: number): void {
+  if (length > WORKFLOW_COLLECTION_ITEM_LIMIT) {
+    throw new TypeError(
+      `${name}() accepts at most ${WORKFLOW_COLLECTION_ITEM_LIMIT} items, got ${length}.`,
+    );
+  }
 }
 
 async function defaultAgentRunner(prompt: string): Promise<string> {

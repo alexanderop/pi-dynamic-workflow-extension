@@ -6,7 +6,7 @@ Planned
 
 ## Product owner summary
 
-Users expect `/workflows` to feel like the real Claude Code dynamic-workflow monitor: a live terminal dashboard with phases, agents, compact detail, and prompt drill-down. The current exploratory UI still feels like a generic job browser. Replace it with the monitor shape defined in `spec.md` §23.
+Users expect `/workflows` to feel like the real Claude Code dynamic-workflow monitor: a live terminal dashboard with phases, agents, compact detail, and prompt drill-down. The current exploratory UI still feels like a generic job browser. Replace it with the monitor shape defined in `spec.md` §24.
 
 ## User story
 
@@ -16,7 +16,7 @@ so that I can quickly understand which phase is active, which agents are running
 
 ## Source of truth
 
-- Primary: `spec.md` §23 Workflow UI Reference Screens.
+- Primary: `spec.md` §24 Workflow UI Reference Screens.
 - This ticket translates that section into an implementation-ready product ticket.
 - Existing workflow execution semantics must not change.
 
@@ -307,7 +307,7 @@ To satisfy the UI without reading full transcripts for the overview:
 
 ## Done means
 
-- `/workflows` visually matches `spec.md` §23 at normal terminal widths.
+- `/workflows` visually matches `spec.md` §24 at normal terminal widths.
 - The old generic job-browser layout is gone from TUI mode.
 - Prompt reader can show the full original prompt.
 - All relevant tests pass with `pnpm run check` and `pnpm test`.

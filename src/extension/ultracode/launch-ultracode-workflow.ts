@@ -4,6 +4,7 @@ import {
   type WorkflowLaunchError,
   type WorkflowLaunchOptions,
   type WorkflowLaunchRequest,
+  type WorkflowRunStateObserver,
   type WorkflowTaskNotification,
 } from "#src/workflows/launch/launcher.ts";
 import { createPiWorkflowAgentRunner } from "#src/workflows/agent/pi-runner.ts";
@@ -42,6 +43,7 @@ export interface UltracodeLaunchContext {
   readonly model?: PiWorkflowAgentRunnerOptions["model"];
   readonly modelRegistry?: PiWorkflowAgentRunnerOptions["modelRegistry"];
   readonly agentRunner?: PiWorkflowAgentRunnerOptions["sessionFactory"];
+  readonly onRunStateChange?: WorkflowRunStateObserver;
   readonly sendMessage?: (
     notification: WorkflowTaskNotification,
     options?: UltracodeNotificationDeliveryOptions,
@@ -98,6 +100,7 @@ export async function launchUltracodeWorkflow(
         modelRegistry: ctx.modelRegistry,
         sessionFactory: ctx.agentRunner,
       }),
+      onRunStateChange: ctx.onRunStateChange,
       notifyTerminal:
         ctx.sendMessage === undefined
           ? undefined

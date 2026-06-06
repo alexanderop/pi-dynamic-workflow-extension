@@ -5,6 +5,11 @@ import {
   getAgentDir,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import {
+  createWorkflowStructuredOutputTool,
+  WorkflowAgentSchemaError,
+} from "./structured-output-tool.ts";
 import type { WorkflowAgentRunRequest, WorkflowAgentRunner } from "./scheduler.ts";
 
 export interface PiWorkflowAgentSession {
@@ -37,6 +42,9 @@ export interface PiWorkflowAgentRunnerOptions {
   readonly sessionFactory?: PiWorkflowAgentSessionFactory;
 }
 
+type PiModel = Model<Api>;
+type PiModelRegistry = NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
+
 export function createPiWorkflowAgentRunner(
   options: PiWorkflowAgentRunnerOptions,
 ): WorkflowAgentRunner {
@@ -46,18 +54,23 @@ export function createPiWorkflowAgentRunner(
 async function runPiWorkflowAgent(
   request: WorkflowAgentRunRequest,
   options: PiWorkflowAgentRunnerOptions,
-): Promise<string> {
-  if (request.options.schema !== undefined) {
-    throw new Error(
-      "Pi workflow agent runner does not support agent({ schema }) yet; structured output requires the planned structured_output tool slice.",
-    );
-  }
+): Promise<unknown> {
+  let structuredOutput: unknown;
+  let hasStructuredOutput = false;
+  const structuredOutputTool =
+    request.options.schema === undefined
+      ? undefined
+      : createWorkflowStructuredOutputTool(request.options.schema, (value) => {
+          structuredOutput = value;
+          hasStructuredOutput = true;
+        });
 
   const { session } = await (options.sessionFactory ?? defaultSessionFactory)({
     cwd: options.cwd,
-    model: options.model,
+    model: resolveRequestedModel(request.options.model, options.model, options.modelRegistry),
     modelRegistry: options.modelRegistry,
     sessionManager: SessionManager.inMemory(options.cwd),
+    customTools: structuredOutputTool === undefined ? undefined : [structuredOutputTool],
   });
   const abort = () => {
     void session.abort();
@@ -78,6 +91,15 @@ async function runPiWorkflowAgent(
 
     if (request.signal.aborted) {
       throw new Error(`Workflow agent '${request.agentId}' was aborted.`);
+    }
+
+    if (request.options.schema !== undefined) {
+      if (!hasStructuredOutput) {
+        throw new WorkflowAgentSchemaError(
+          "Pi workflow subagent finished without calling structured_output.",
+        );
+      }
+      return structuredOutput;
     }
 
     return extractFinalAssistantText(session);
@@ -103,6 +125,55 @@ async function defaultSessionFactory(
   })) as PiWorkflowAgentSessionFactoryResult;
 }
 
+function resolveRequestedModel(
+  requestedModel: string | undefined,
+  fallbackModel: PiModel | undefined,
+  modelRegistry: PiModelRegistry | undefined,
+): PiModel | undefined {
+  if (requestedModel === undefined || isDefaultModelPlaceholder(requestedModel))
+    return fallbackModel;
+
+  if (
+    fallbackModel !== undefined &&
+    (modelReferencesEqual(requestedModel, `${fallbackModel.provider}/${fallbackModel.id}`) ||
+      modelReferencesEqual(requestedModel, fallbackModel.id))
+  ) {
+    return fallbackModel;
+  }
+
+  if (modelRegistry === undefined) {
+    throw new Error(
+      `Workflow agent requested model '${requestedModel}', but no Pi model registry is available to resolve it.`,
+    );
+  }
+
+  const models = modelRegistry.getAll();
+  const canonicalMatch = models.find((model) =>
+    modelReferencesEqual(requestedModel, `${model.provider}/${model.id}`),
+  );
+  if (canonicalMatch !== undefined) return canonicalMatch;
+
+  const idMatches = models.filter((model) => modelReferencesEqual(requestedModel, model.id));
+  if (idMatches.length === 1) return idMatches[0];
+  if (idMatches.length > 1) {
+    throw new Error(
+      `Workflow agent requested ambiguous model '${requestedModel}'. Use provider/model-id.`,
+    );
+  }
+
+  throw new Error(
+    `Workflow agent requested unknown model '${requestedModel}'. Use provider/model-id or a unique model id.`,
+  );
+}
+
+function modelReferencesEqual(left: string | undefined, right: string | undefined): boolean {
+  return left?.trim().toLowerCase() === right?.trim().toLowerCase();
+}
+
+function isDefaultModelPlaceholder(model: string): boolean {
+  return model.trim().toLowerCase() === "default";
+}
+
 function buildPiSubagentPrompt(request: WorkflowAgentRunRequest): string {
   const lines = [
     "You are a dynamic-workflow subagent running in an isolated Pi sidechain.",
@@ -115,12 +186,26 @@ function buildPiSubagentPrompt(request: WorkflowAgentRunRequest): string {
     request.options.agentType === undefined
       ? undefined
       : `Agent type: ${request.options.agentType}`,
+    request.options.schema === undefined
+      ? undefined
+      : structuredOutputInstructions(request.options.schema),
     "",
     "Assigned task:",
     request.prompt,
   ];
 
   return lines.filter((line): line is string => line !== undefined).join("\n");
+}
+
+function structuredOutputInstructions(schema: unknown): string {
+  return [
+    "",
+    "Structured output is required.",
+    "When you finish the assigned task, call the structured_output tool as your final action.",
+    "Do not answer with prose instead of calling structured_output.",
+    "The structured_output arguments must satisfy this JSON schema:",
+    JSON.stringify(schema, null, 2),
+  ].join("\n");
 }
 
 function extractFinalAssistantText(session: PiWorkflowAgentSession): string {

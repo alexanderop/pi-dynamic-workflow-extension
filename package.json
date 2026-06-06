@@ -21,7 +21,8 @@
     "lint:fix": "oxlint --fix src test tools",
     "pi": "pi --no-extensions -e .",
     "test": "vitest --run",
-    "test:coverage": "vitest --run --coverage"
+    "test:coverage": "vitest --run --coverage",
+    "verify": "pnpm run check && pnpm run lint && pnpm run fmt:check && pnpm test"
   },
   "dependencies": {
     "acorn": "^8.16.0"

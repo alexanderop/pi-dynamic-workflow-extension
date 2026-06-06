@@ -6,10 +6,14 @@ import type {
 } from "#src/workflows/run/model.ts";
 import type { WorkflowParseError } from "#src/workflows/script/parser.ts";
 import type { WorkflowRuntimeOptions } from "#src/workflows/script/model.ts";
+import type { WorkflowLaunchOperations } from "./operations.ts";
 import type {
   WorkflowSavedWorkflowError,
   WorkflowSavedWorkflowLocations,
 } from "#src/workflows/saved/resolver.ts";
+
+/** Maximum byte length accepted for an inline workflow launch script. */
+export const WORKFLOW_SCRIPT_MAX_LENGTH = 524_288;
 
 export interface WorkflowLaunchRequest {
   readonly script?: string;
@@ -22,6 +26,7 @@ export interface WorkflowLaunchRequest {
 
 export interface WorkflowLaunchOptions {
   readonly rootDir: string;
+  readonly operations?: WorkflowLaunchOperations;
   readonly sessionId?: string;
   readonly triggerSource?: WorkflowRunTriggerSource;
   readonly cwd?: string;
@@ -34,8 +39,10 @@ export interface WorkflowLaunchOptions {
   readonly maxConcurrentAgents?: number;
   readonly maxTotalAgents?: number;
   readonly budgetTotal?: number | null;
+  readonly defaultModel?: WorkflowRuntimeOptions["defaultModel"];
   readonly onRuntimeControlReady?: WorkflowRuntimeOptions["onControlReady"];
   readonly notifyTerminal?: WorkflowTerminalNotifier;
+  readonly onRunStateChange?: WorkflowRunStateObserver;
   readonly inlineResultMaxChars?: number;
   readonly savedWorkflowDirs?: WorkflowSavedWorkflowLocations;
 }
@@ -52,6 +59,8 @@ export interface WorkflowLaunch {
 export type WorkflowTerminalNotifier = (
   notification: WorkflowTaskNotification,
 ) => void | Promise<void>;
+
+export type WorkflowRunStateObserver = (state: WorkflowRunState) => void;
 
 export interface WorkflowTaskUsage {
   readonly agentCount: number;

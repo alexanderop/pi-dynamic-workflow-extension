@@ -11,8 +11,9 @@ export interface WorkflowPhase {
 
 export interface WorkflowMeta {
   name: string;
-  description?: string;
+  description: string;
   whenToUse?: string;
+  model?: string;
   phases?: WorkflowPhase[];
 }
 
@@ -53,6 +54,7 @@ export interface WorkflowRuntimeOptions {
   args?: unknown;
   cwd?: string;
   budgetTotal?: number | null;
+  defaultModel?: string;
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;
   agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;
@@ -60,6 +62,7 @@ export interface WorkflowRuntimeOptions {
   journal?: WorkflowAgentJournal;
   replayCache?: WorkflowRuntimeReplayCache;
   onControlReady?: (control: WorkflowRuntimeControl) => void;
+  onStateChange?: (state: WorkflowRuntimeState) => void;
 }
 
 export interface WorkflowRuntimeError {
