@@ -184,6 +184,7 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
       runId: value.runId,
       taskId: value.taskId,
       workflowName: value.workflowName,
+      description: isString(value.description) ? value.description : undefined,
       status: value.status,
       script: value.script,
       scriptPath: value.scriptPath,
@@ -227,6 +228,11 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
     runId: value.runId,
     taskId: isString(value.taskId) ? value.taskId : `task_${String(value.id ?? value.runId)}`,
     workflowName: value.name,
+    description: isString(value.description)
+      ? value.description
+      : isString(snapshot.description)
+        ? snapshot.description
+        : undefined,
     status: normalizeObservedStatus(value.status),
     script: value.script,
     scriptPath: value.scriptPath,
@@ -302,9 +308,11 @@ function normalizeObservedAgents(value: unknown): WorkflowAgentProgress[] {
           startedAt === undefined || endedAt === undefined
             ? undefined
             : Math.max(0, endedAt - startedAt),
+        lastProgressAt: isNumber(agent.lastProgressAt) ? agent.lastProgressAt : undefined,
         attempt: isNumber(agent.attempt) ? agent.attempt : 1,
         phaseTitle: isString(agent.phase) ? agent.phase : undefined,
         promptPreview: isString(agent.prompt) ? agent.prompt.slice(0, 160) : "",
+        prompt: isString(agent.prompt) ? agent.prompt : undefined,
         resultPreview: isString(agent.resultPreview) ? agent.resultPreview : undefined,
         toolCalls: isNumber(agent.toolCount) ? agent.toolCount : undefined,
       };

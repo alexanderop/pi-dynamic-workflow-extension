@@ -25,6 +25,8 @@ export interface WorkflowAgentProgress {
   lastToolName?: string;
   lastToolSummary?: string;
   promptPreview: string;
+  /** Full original prompt for the prompt reader; optional for legacy manifests/snapshots. */
+  prompt?: string;
   resultPreview?: string;
   tokens?: number;
   toolCalls?: number;

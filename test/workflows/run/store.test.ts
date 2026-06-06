@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import type { Result } from "#src/workflows/result.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 
 describe("WorkflowRunStore", () => {
   let tempDir: string;
@@ -151,7 +152,116 @@ describe("WorkflowRunStore", () => {
       failures: [{ scope: "run", message: "boom" }],
     });
   });
+
+  it("should preserve the full agent prompt when reloading a persisted manifest", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({
+        runId: "wf_full_prompt",
+        workflowProgress: [agentEntry({ promptPreview: "P".repeat(160), prompt: "P".repeat(400) })],
+        agentCount: 1,
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_full_prompt");
+
+    const [agent] = unwrap(result).workflowProgress;
+    expect(agent?.type === "workflow_agent" && agent.prompt).toBe("P".repeat(400));
+  });
+
+  it("should recover the full agent prompt from an observed snapshot manifest", async () => {
+    await writeInvalidManifest(
+      rootDir,
+      "wf_observed_prompt",
+      JSON.stringify({
+        runId: "wf_observed_prompt",
+        name: "observed",
+        script: "return null;",
+        scriptPath: "/tmp/observed.workflow.js",
+        snapshot: { agents: [{ prompt: "X".repeat(300), status: "success" }] },
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_observed_prompt");
+
+    const agent = unwrap(result).workflowProgress.find((entry) => entry.type === "workflow_agent");
+    expect(agent?.type === "workflow_agent" && agent.prompt).toBe("X".repeat(300));
+    expect(agent?.type === "workflow_agent" && agent.promptPreview).toBe("X".repeat(160));
+  });
+
+  it("should preserve observed agent progress timestamps for idle display", async () => {
+    await writeInvalidManifest(
+      rootDir,
+      "wf_observed_progress",
+      JSON.stringify({
+        runId: "wf_observed_progress",
+        name: "observed",
+        script: "return null;",
+        scriptPath: "/tmp/observed.workflow.js",
+        snapshot: {
+          agents: [
+            {
+              label: "review",
+              status: "running",
+              prompt: "Review the repo",
+              lastProgressAt: 25_000,
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_observed_progress");
+
+    const agent = unwrap(result).workflowProgress.find((entry) => entry.type === "workflow_agent");
+    expect(agent?.type === "workflow_agent" && agent.lastProgressAt).toBe(25_000);
+  });
+
+  it("should accept legacy manifests whose agent rows omit the prompt field", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({
+        runId: "wf_legacy_prompt",
+        workflowProgress: [agentEntry({ promptPreview: "legacy preview" })],
+        agentCount: 1,
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_legacy_prompt");
+
+    const [agent] = unwrap(result).workflowProgress;
+    expect(agent?.type === "workflow_agent" && agent.prompt).toBeUndefined();
+    expect(agent?.type === "workflow_agent" && agent.promptPreview).toBe("legacy preview");
+  });
+
+  it("should expose the workflow description from a persisted manifest and omit it when absent", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({ runId: "wf_described", description: "Audit the extension" }),
+    );
+    await writeRunManifest(rootDir, runState({ runId: "wf_undescribed" }));
+
+    const store = new WorkflowRunStore({ rootDir });
+    expect(unwrap(await store.readRun("wf_described")).description).toBe("Audit the extension");
+    expect(unwrap(await store.readRun("wf_undescribed")).description).toBeUndefined();
+  });
 });
+
+function agentEntry(overrides: Partial<WorkflowAgentProgress> = {}): WorkflowAgentProgress {
+  return {
+    type: "workflow_agent",
+    index: 0,
+    label: "review",
+    agentId: "agent_0",
+    agentType: "general-purpose",
+    model: "fake-model",
+    state: "running",
+    queuedAt: 0,
+    attempt: 1,
+    promptPreview: "preview",
+    ...overrides,
+  };
+}
 
 function runState(overrides: Partial<WorkflowRunState> = {}): WorkflowRunState {
   return {

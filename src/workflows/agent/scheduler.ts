@@ -120,6 +120,7 @@ export class WorkflowAgentScheduler {
       attempt: 1,
       phaseTitle: options.phase,
       promptPreview: prompt.slice(0, 160),
+      prompt,
     });
 
     if (journalKey !== undefined && this.#replayCache?.has(journalKey) === true) {

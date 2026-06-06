@@ -1,0 +1,94 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`WorkflowsTuiComponent golden screens > should snapshot a narrow overview monitor for truncation regressions 1`] = `
+"────────────────────────────────────────────────────────────
+hardening_slice_and_author               1/8 agents · 1m 12s
+Slice the spec into TDD plans and author a pipeline workflow
+
+┌ Phases ───────────┬ Slice · 7 agents ────────────────────┐
+│ › 1 Slice  0/7    │ ● slice:P0.1-j… 41.1k tok · 11 tools │
+│   ✓ Author  1/1   │ ● slice:P0.2-f… 41.1k tok · 11 tools │
+│                   │ ● slice:P0.3-j… 41.1k tok · 11 tools │
+│                   │ ● slice:P1.1-m… 41.1k tok · 11 tools │
+│                   │ ● slice:P1.2-f… 41.1k tok · 11 tools │
+│                   │ ● slice:P2.1-drain-on-a… idle 1m 12s │
+│                   │ ● slice:P2.2-l… 41.1k tok · 11 tools │
+└───────────────────┴──────────────────────────────────────┘
+
+↑↓ select · ← detail · x stop workflow · p pause · esc back "
+`;
+
+exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical State A overview monitor 1`] = `
+"────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+hardening_slice_and_author                                                                           1/8 agents · 1m 12s
+Slice the spec into TDD plans and author a pipeline workflow
+
+┌ Phases ───────────┬ Slice · 7 agents ────────────────────────────────────────────────────────────────────────────────┐
+│ › 1 Slice  0/7    │ ● slice:P0.1-journal-keying Opus 4.8 (1M context)                           41.1k tok · 11 tools │
+│   ✓ Author  1/1   │ ● slice:P0.2-fault-isolation Opus 4.8 (1M context)                          41.1k tok · 11 tools │
+│                   │ ● slice:P0.3-journal-clone Opus 4.8 (1M context)                            41.1k tok · 11 tools │
+│                   │ ● slice:P1.1-model-threading Opus 4.8 (1M context)                          41.1k tok · 11 tools │
+│                   │ ● slice:P1.2-forced-structured Opus 4.8 (1M context)                        41.1k tok · 11 tools │
+│                   │ ● slice:P2.1-drain-on-abort                                                          idle 1m 12s │
+│                   │ ● slice:P2.2-limiter-queue Opus 4.8 (1M context)                            41.1k tok · 11 tools │
+└───────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+↑↓ select · ← detail · x stop workflow · p pause · esc back · s save"
+`;
+
+exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical State B agent detail monitor 1`] = `
+"────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+hardening_slice_and_author                                                                           1/8 agents · 1m 12s
+Slice the spec into TDD plans and author a pipeline workflow
+
+┌ Slice · 7 agents ──────────────────┬ slice:P0.1-journal-keying ──────────────────────────────────────────────────────┐
+│ › ● slice:P0.1-journal-keying      │ ● Running · Opus 4.8 (1M context)                                               │
+│   ● slice:P0.2-fault-isolation     │ 41.1k tok · 11 tool calls                                                       │
+│   ● slice:P0.3-journal-clone       │                                                                                 │
+│   ● slice:P1.1-model-threading     │ Prompt · 1 lines · ↵ expand                                                     │
+│   ● slice:P1.2-forced-structured   │   review security                                                               │
+│   ● slice:P2.1-drain-on-abort      │                                                                                 │
+│   ● slice:P2.2-limiter-queue       │ Activity · last 1 of 11 tool calls                                              │
+│                                    │   Read                                                                          │
+│                                    │                                                                                 │
+│                                    │ Outcome                                                                         │
+│                                    │   Still running…                                                                │
+└────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
+
+↑↓ agent · ↵ prompt · x stop · r restart · p pause · esc back · s save"
+`;
+
+exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical State C prompt reader 1`] = `
+"┌ Prompt · 15 lines ───────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ You are designing ONE fix from docs/workflow-correctness-hardening-spec.md for this repo.                            │
+│ Read the spec section AND the actual current code in: src/workflow.ts, src/agent.ts, src/prompts/workflow-agent.ts.  │
+│ Also read the existing tests under tests/ and vitest.config.ts to match the test style and import paths exactly.     │
+│ Determine how tests are currently run.                                                                               │
+│                                                                                                                      │
+│ Produce a TDD-ready plan: (1) a complete failing test (RED) written in the repo's exact test style/imports.          │
+│ Then provide the precise implementation edits (GREEN). Do NOT edit any files — design only.                          │
+│ Quote real function names and line anchors.                                                                          │
+│ Be concrete enough that an implementer can apply it without re-deriving anything.                                    │
+│                                                                                                                      │
+│ FINDING P0.1 - Journal replay is non-deterministic under pipeline()/concurrency.                                     │
+│ The hash chain threads a mutable global previousJournalKey synchronously at agent() call time.                       │
+│ Concurrent re-runs can change call ordering.                                                                         │
+│ This prompt is intentionally long enough to exercise the reader footer and scrolling affordance.                     │
+│ END_OF_VISIBLE_PROMPT_FIXTURE                                                                                        │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+• x stop · r restart · p pause · esc back · s save                                                          1-15 of 15 ↓"
+`;
+
+exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical State D workflow chooser 1`] = `
+"› /workflows
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  Dynamic workflows
+  2 running · 0 completed
+
+  › ↻ hardening_slice_and_author   8 agents · 266.1k tok · 5m 58s
+    ↻ generate_joke   4 agents · 0ms
+
+  ↑/↓ to select · Enter to view · s to save · Esc to close"
+`;

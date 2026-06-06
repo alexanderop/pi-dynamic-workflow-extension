@@ -88,6 +88,7 @@ export async function launchWorkflow(
     runId,
     taskId,
     workflowName: parsed.value.meta.name,
+    description: parsed.value.meta.description ?? request.description,
     status: "running",
     script: source.value.script,
     scriptPath,

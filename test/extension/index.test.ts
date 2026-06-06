@@ -151,7 +151,6 @@ describe("dynamicWorkflowExtension", () => {
     });
 
     expect(custom).toHaveBeenCalledOnce();
-    expect(rendered.join("\n")).toContain("wf_tui");
     expect(rendered.join("\n")).toContain("tui-review");
   });
 

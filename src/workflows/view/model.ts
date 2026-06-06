@@ -1,38 +1,51 @@
 import type { WorkflowAgentProgress } from "../agent/model.ts";
-import type { WorkflowRunState, WorkflowRunStatus } from "../run/model.ts";
+import type { WorkflowRunStatus } from "../run/model.ts";
 
-export type WorkflowViewFocus = "runs" | "agents" | "details";
-
-export interface WorkflowRunsViewModel {
-  runs: WorkflowRunRow[];
-  savedWorkflowCount: number;
-  selectedRun?: WorkflowRunDetails;
+export interface MonitorAgentRow {
+  glyph: string;
+  label: string;
+  state: WorkflowAgentProgress["state"];
+  modelLabel?: string;
+  tokens?: number;
+  toolCalls?: number;
+  idleMs?: number;
+  fullPrompt: string;
+  promptPreview: string;
+  lastToolName?: string;
+  lastToolSummary?: string;
+  resultPreview?: string;
 }
 
-export interface WorkflowRunRow {
-  runId: string;
-  workflowName: string;
-  status: WorkflowRunStatus;
-  agentCount: number;
-  durationLabel?: string;
-  outputPath?: string;
-  run: WorkflowRunState;
-}
-
-export interface WorkflowRunDetails extends WorkflowRunRow {
-  phases: WorkflowPhaseSummary[];
-  agents: WorkflowAgentProgress[];
-  logs: string[];
-  failures: string[];
-  totalTokens: number;
-  totalToolCalls: number;
-}
-
-export interface WorkflowPhaseSummary {
+export interface MonitorPhaseRow {
   title: string;
-  totalAgents: number;
   doneAgents: number;
-  runningAgents: number;
-  failedAgents: number;
-  stoppedAgents: number;
+  totalAgents: number;
+}
+
+export interface MonitorViewModel {
+  header: {
+    workflowName: string;
+    description?: string;
+    doneAgents: number;
+    totalAgents: number;
+    elapsedLabel: string;
+  };
+  phases: MonitorPhaseRow[];
+  selectedPhaseAgents: MonitorAgentRow[];
+}
+
+export interface ChooserRow {
+  glyph: string;
+  workflowName: string;
+  agentCount: number;
+  tokens?: number;
+  durationLabel: string;
+  status: WorkflowRunStatus;
+}
+
+export interface ChooserViewModel {
+  runningCount: number;
+  completedCount: number;
+  rows: ChooserRow[];
+  defaultSelectedIndex: number;
 }

@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import {
@@ -6,6 +7,8 @@ import {
 } from "#src/extension/tui/workflows-component.ts";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+
+const NOW = 1_000_000;
 
 const theme: WorkflowsComponentTheme = {
   fg: (_color, text) => text,
@@ -18,16 +21,17 @@ const agent = (overrides: Partial<WorkflowAgentProgress> = {}): WorkflowAgentPro
   label: "review:security",
   agentId: "agent_1",
   agentType: "general-purpose",
-  model: "fake-model",
+  model: "Opus 4.8 (1M context)",
   state: "done",
   queuedAt: 0,
   attempt: 1,
   phaseTitle: "Review",
   promptPreview: "review security",
+  prompt: "review security",
   resultPreview: "looks good",
-  tokens: 31_000,
-  toolCalls: 14,
-  lastToolName: "read",
+  tokens: 41_100,
+  toolCalls: 11,
+  lastToolName: "Read",
   ...overrides,
 });
 
@@ -35,7 +39,7 @@ const runState = (overrides: Partial<WorkflowRunState> = {}): WorkflowRunState =
   runId: "wf_test",
   taskId: "task_test",
   workflowName: "test-workflow",
-  status: "created",
+  status: "running",
   script: "return null;",
   scriptPath: "/tmp/wf_test/script.js",
   phases: [],
@@ -44,228 +48,479 @@ const runState = (overrides: Partial<WorkflowRunState> = {}): WorkflowRunState =
   agentCount: 0,
   totalTokens: 0,
   totalToolCalls: 0,
-  startTime: 0,
+  startTime: NOW,
   ...overrides,
 });
 
-describe("WorkflowsTuiComponent", () => {
-  it("should render workflow runs progress agents and details", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
-        runState({
-          runId: "wf_repo_audit",
-          workflowName: "repo-audit",
-          status: "running",
-          phases: [{ title: "Review" }],
-          workflowProgress: [agent()],
-          agentCount: 1,
-          totalTokens: 31_000,
-          totalToolCalls: 14,
-          outputPath: ".pi/workflows/wf_repo_audit/output.json",
-        }),
-      ],
-      savedWorkflowCount: 2,
-      theme,
-    });
-
-    const screen = component.render(100).join("\n");
-
-    expect(screen).toContain("Workflows");
-    expect(screen).toContain("1 run • 2 saved workflows");
-    expect(screen).toContain("Runs");
-    expect(screen).toContain("wf_repo_audit");
-    expect(screen).toContain("Progress");
-    expect(screen).toContain("Review  1/1 done");
-    expect(screen).toContain("Agents");
-    expect(screen).toContain("review:security");
-    expect(screen).toContain("Details");
-    expect(screen).toContain("output: .pi/workflows/wf_repo_audit/output.json");
+const make = (
+  runs: WorkflowRunState[],
+  options: Partial<{ onClose: () => void; savedWorkflowCount: number }> = {},
+): WorkflowsTuiComponent =>
+  new WorkflowsTuiComponent({
+    runs,
+    theme,
+    now: () => NOW,
+    savedWorkflowCount: options.savedWorkflowCount,
+    onClose: options.onClose,
   });
 
-  it("should open the monitor overview directly when exactly one workflow is active", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
-        runState({
-          runId: "wf_repo_audit",
-          workflowName: "repo-audit",
-          status: "running",
-          phases: [{ title: "Review" }, { title: "Verify" }],
-          workflowProgress: [
-            { type: "workflow_phase", index: 1, title: "Review" },
-            { type: "workflow_phase", index: 2, title: "Verify" },
-            agent({ label: "review:security", state: "done", phaseTitle: "Review" }),
-            agent({ index: 1, label: "verify:security", state: "running", phaseTitle: "Verify" }),
-          ],
-          agentCount: 2,
-          startTime: Date.now() - 72_000,
-        }),
-      ],
-      theme,
-    });
-
-    const screen = component.render(100).join("\n");
-
-    expect(screen).toContain("repo-audit");
-    expect(screen).toContain("1/2 agents");
-    expect(screen).toContain("Phases");
-    expect(screen).toContain("Review");
-    expect(screen).toContain("Verify");
-    expect(screen).not.toContain("Runs");
+const hardeningRun = (): WorkflowRunState =>
+  runState({
+    runId: "wf_hard",
+    workflowName: "hardening_slice_and_author",
+    description: "Slice the spec into TDD plans and author a pipeline workflow",
+    status: "running",
+    startTime: NOW - 72_000,
+    agentCount: 8,
+    phases: [{ title: "Slice" }, { title: "Author" }],
+    workflowProgress: [
+      { type: "workflow_phase", index: 0, title: "Slice" },
+      { type: "workflow_phase", index: 1, title: "Author" },
+      agent({
+        index: 0,
+        label: "slice:P0.1-journal-keying",
+        state: "running",
+        phaseTitle: "Slice",
+      }),
+      agent({
+        index: 1,
+        label: "slice:P0.2-fault-isolation",
+        state: "running",
+        phaseTitle: "Slice",
+      }),
+      agent({ index: 2, label: "slice:P0.3-journal-clone", state: "running", phaseTitle: "Slice" }),
+      agent({
+        index: 3,
+        label: "slice:P1.1-model-threading",
+        state: "running",
+        phaseTitle: "Slice",
+      }),
+      agent({
+        index: 4,
+        label: "slice:P1.2-forced-structured",
+        state: "running",
+        phaseTitle: "Slice",
+      }),
+      agent({
+        index: 5,
+        label: "slice:P2.1-drain-on-abort",
+        state: "running",
+        phaseTitle: "Slice",
+        model: "",
+        tokens: undefined,
+        toolCalls: undefined,
+        lastProgressAt: NOW - 72_000,
+      }),
+      agent({ index: 6, label: "slice:P2.2-limiter-queue", state: "running", phaseTitle: "Slice" }),
+      agent({ index: 7, label: "author:pipeline", state: "done", phaseTitle: "Author" }),
+    ],
   });
 
-  it("should open a workflow chooser when multiple workflows are available", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
-        runState({ runId: "wf_running", workflowName: "running-review", status: "running" }),
-        runState({ runId: "wf_completed", workflowName: "finished-audit", status: "completed" }),
-      ],
-      theme,
-    });
+describe("WorkflowsTuiComponent State A overview", () => {
+  it("should render the overview as a bordered two-pane monitor with phases and agent metrics", () => {
+    const screen = make([hardeningRun()]).render(120).join("\n");
 
-    const screen = component.render(100).join("\n");
-
-    expect(screen).toContain("Choose a workflow");
-    expect(screen).toContain("↻ wf_running");
-    expect(screen).toContain("✓ wf_completed");
+    expect(screen).toContain("┌ Phases");
+    expect(screen).toContain("Slice · 7 agents");
+    expect(screen).toMatch(/1\/8 agents · 1m ?12s/);
+    expect(screen).toContain("› 1 Slice");
+    expect(screen).toContain("0/7");
+    expect(screen).toContain("✓ Author");
+    expect(screen).toContain("41.1k tok · 11 tools");
+    expect(screen).toContain("idle ");
+    expect(screen).toContain(
+      "↑↓ select · ← detail · x stop workflow · p pause · esc back · s save",
+    );
+    expect(screen).not.toContain("Progress");
+    expect(screen).not.toContain("Details");
   });
 
-  it("should switch from overview to structured agent detail with left arrow", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
-        runState({
-          runId: "wf_repo_audit",
-          workflowName: "repo-audit",
-          status: "running",
-          phases: [{ title: "Review" }],
-          workflowProgress: [
-            agent({
-              label: "review:security",
-              state: "running",
-              promptPreview:
-                "You are auditing security.\nRead src/security.ts.\nReport validated findings.",
-              lastToolName: "Read",
-              lastToolSummary: "src/security.ts",
-              resultPreview: undefined,
-            }),
-          ],
-          agentCount: 1,
-          totalTokens: 41_100,
-          totalToolCalls: 11,
+  it("should show the workflow description in the overview header", () => {
+    const screen = make([hardeningRun()]).render(120).join("\n");
+
+    expect(screen).toContain("Slice the spec into TDD plans and author a pipeline workflow");
+  });
+
+  it("should omit absent model and metric fields in overview agent rows", () => {
+    const run = runState({
+      phases: [{ title: "Slice" }],
+      agentCount: 1,
+      workflowProgress: [
+        agent({
+          label: "slice:bare",
+          state: "running",
+          model: "",
+          tokens: undefined,
+          toolCalls: undefined,
+          lastProgressAt: undefined,
         }),
       ],
-      theme,
     });
 
+    const screen = make([run]).render(120).join("\n");
+
+    expect(screen).not.toContain("No metrics yet");
+    expect(screen).not.toContain("Still collecting");
+    expect(screen).not.toContain("unknown");
+  });
+});
+
+describe("WorkflowsTuiComponent State B agent detail", () => {
+  it("should render structured detail as a bordered two-pane with ordered sections", () => {
+    const component = make([hardeningRun()]);
     component.handleInput("\x1b[D");
-    const screen = component.render(100).join("\n");
+    const screen = component.render(120).join("\n");
 
-    expect(screen).toContain("review:security");
-    expect(screen).toContain("Prompt ·");
-    expect(screen).toContain("Activity · last 3");
+    expect(screen).toContain("┌ Slice · 7 agents");
+    expect(screen).toContain("› ● slice:P0.1-journal-keying");
+    expect(screen).toContain("Opus 4.8 (1M context)");
+    expect(screen).toContain("41.1k tok · 11 tool calls");
+    expect(screen).toContain("Prompt · 1 lines · ↵ expand");
+    expect(screen).toContain("Activity · last 1 of 11 tool calls");
     expect(screen).toContain("Outcome");
     expect(screen).toContain("Still running");
+    expect(screen).toContain(
+      "↑↓ agent · ↵ prompt · x stop · r restart · p pause · esc back · s save",
+    );
+
+    const statusIndex = screen.indexOf("● Running");
+    const metricsIndex = screen.indexOf("41.1k tok · 11 tool calls");
+    const promptIndex = screen.indexOf("Prompt ·");
+    const activityIndex = screen.indexOf("Activity ·");
+    const outcomeIndex = screen.indexOf("Outcome");
+    expect(statusIndex).toBeLessThan(metricsIndex);
+    expect(metricsIndex).toBeLessThan(promptIndex);
+    expect(promptIndex).toBeLessThan(activityIndex);
+    expect(activityIndex).toBeLessThan(outcomeIndex);
   });
 
-  it("should open the selected agent prompt reader from structured detail", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
-        runState({
-          runId: "wf_repo_audit",
-          workflowName: "repo-audit",
-          status: "running",
-          phases: [{ title: "Review" }],
-          workflowProgress: [
-            agent({
-              label: "review:security",
-              promptPreview: Array.from(
-                { length: 12 },
-                (_, index) => `Prompt line ${index + 1}`,
-              ).join("\n"),
-            }),
-          ],
-          agentCount: 1,
+  it("should report the full prompt line count from the full prompt, not the preview", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      agentCount: 1,
+      workflowProgress: [
+        agent({
+          label: "review:security",
+          state: "running",
+          promptPreview: "preview line one\npreview line two",
+          prompt:
+            "preview line one\npreview line two\nSENTINEL_FULL_PROMPT_BODY\nmore secret lines",
         }),
       ],
-      theme,
     });
+    const component = make([run]);
+    component.handleInput("\x1b[D");
+    const screen = component.render(120).join("\n");
+
+    expect(screen).not.toContain("SENTINEL_FULL_PROMPT_BODY");
+    expect(screen).toContain("Prompt · 4 lines · ↵ expand");
+    expect(screen).toContain("… 2 more lines");
+  });
+
+  it("should render only the compact prompt preview in the detail pane body", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      agentCount: 1,
+      workflowProgress: [
+        agent({
+          label: "review:security",
+          state: "running",
+          promptPreview: "compact prompt preview",
+          prompt: "compact prompt preview\nSENTINEL_FULL_PROMPT_LINE_2",
+        }),
+      ],
+    });
+    const component = make([run]);
+    component.handleInput("\x1b[D");
+    const screen = component.render(120).join("\n");
+
+    expect(screen).toContain("Prompt · 2 lines · ↵ expand");
+    expect(screen).toContain("compact prompt preview");
+    expect(screen).not.toContain("SENTINEL_FULL_PROMPT_LINE_2");
+  });
+
+  it("should show a muted empty activity state without a zero placeholder when no tools ran", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      agentCount: 1,
+      workflowProgress: [
+        agent({ state: "running", lastToolName: undefined, toolCalls: undefined }),
+      ],
+    });
+    const component = make([run]);
+    component.handleInput("\x1b[D");
+    const screen = component.render(120).join("\n");
+
+    expect(screen).toContain("Activity");
+    expect(screen).toContain("No tool activity");
+    expect(screen).not.toContain("of 0 tool calls");
+  });
+
+  it("should not crash when rendering box screens at width one", () => {
+    const component = make([hardeningRun()]);
+    component.handleInput("\x1b[D");
+    component.handleInput("\r");
+
+    expect(() => component.render(1)).not.toThrow();
+  });
+});
+
+const footerOf = (component: WorkflowsTuiComponent): string =>
+  (component.render(108).findLast((line) => line.trimEnd().length > 0) ?? "").trimEnd();
+
+const expectGoldenScreen = (component: WorkflowsTuiComponent, width = 120): void => {
+  const lines = component.render(width);
+  const visualScreen = stripVTControlCharacters(lines.join("\n"));
+
+  expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+  expect(visualScreen).toMatchSnapshot();
+};
+
+describe("WorkflowsTuiComponent State C prompt reader", () => {
+  const promptRun = (lines: number, width = 120): WorkflowsTuiComponent => {
+    const prompt = Array.from({ length: lines }, (_, index) => `LINE_${index + 1}_END`).join("\n");
+    const run = runState({
+      phases: [{ title: "Review" }],
+      agentCount: 1,
+      workflowProgress: [agent({ state: "running", prompt, promptPreview: "LINE_1_END" })],
+    });
+    const component = make([run]);
+    component.handleInput("\x1b[D");
+    component.handleInput("\r");
+    void width;
+    return component;
+  };
+
+  it("should render the prompt reader as a bordered box titled with the full line count", () => {
+    const screen = promptRun(17).render(120).join("\n");
+
+    expect(screen).toContain("┌ Prompt · 17 lines");
+    expect(screen).toContain("LINE_1_END");
+    const lines = promptRun(17).render(120);
+    expect(lines.some((line) => line.startsWith("│") && line.endsWith("│"))).toBe(true);
+    expect(lines.some((line) => line.includes("└"))).toBe(true);
+  });
+
+  it("should preserve the full prompt across scrolling without losing text", () => {
+    const component = promptRun(40);
+    const collected: string[] = [component.render(120).join("\n")];
+    expect(collected[0]).not.toContain("LINE_40_END");
+
+    for (let i = 0; i < 40; i += 1) {
+      component.handleInput("j");
+      collected.push(component.render(120).join("\n"));
+    }
+
+    const all = collected.join("\n");
+    for (let line = 1; line <= 40; line += 1) {
+      expect(all).toContain(`LINE_${line}_END`);
+    }
+  });
+
+  it("should show a right-aligned scroll indicator of the visible prompt window", () => {
+    const component = promptRun(29);
+
+    expect(footerOf(component)).toMatch(/\b1-\d+ of 29 ↓$/);
+    expect(component.render(108).join("\n")).toContain("esc back");
+
+    component.handleInput("j");
+    expect(footerOf(component)).toContain("2-");
+  });
+
+  it("should scroll with j k and arrows and return to detail on escape", () => {
+    const component = promptRun(29);
+
+    component.handleInput("j");
+    const afterDown = component.render(108).join("\n");
+    component.handleInput("k");
+    const afterUp = component.render(108).join("\n");
+    expect(afterDown).not.toBe(afterUp);
+
+    component.handleInput("\x1b");
+    const detail = component.render(108).join("\n");
+    expect(detail).toContain("Activity · last 1");
+    expect(detail).not.toContain("┌ Prompt ·");
+  });
+});
+
+describe("WorkflowsTuiComponent State D chooser", () => {
+  it("should render the dynamic workflows chooser with running and completed counts", () => {
+    const runs = [
+      runState({
+        runId: "wf_hard",
+        workflowName: "hardening_slice_and_author",
+        status: "running",
+        agentCount: 8,
+        totalTokens: 266_100,
+        startTime: NOW,
+      }),
+      runState({
+        runId: "wf_joke",
+        workflowName: "generate_joke",
+        status: "running",
+        agentCount: 4,
+        startTime: NOW - 1_000,
+      }),
+    ];
+
+    const screen = make(runs).render(120).join("\n");
+
+    expect(screen).toContain("/workflows");
+    expect(screen).toContain("Dynamic workflows");
+    expect(screen).toContain("2 running · 0 completed");
+    expect(screen).toMatch(/›\s+↻\s+hardening_slice_and_author/);
+    expect(screen).toContain("8 agents");
+    expect(screen).toContain("266.1k tok");
+    expect(screen).toContain("↑/↓ to select · Enter to view · s to save · Esc to close");
+    expect(screen).not.toContain("Choose a workflow");
+  });
+
+  it("should default the chooser selection to the newest running workflow", () => {
+    const runs = [
+      runState({
+        runId: "wf_done",
+        workflowName: "finished",
+        status: "completed",
+        startTime: 1_000,
+      }),
+      runState({ runId: "wf_fresh", workflowName: "fresh", status: "running", startTime: NOW }),
+    ];
+
+    const screen = make(runs).render(120).join("\n");
+
+    expect(screen).toMatch(/›\s+↻\s+fresh/);
+    expect(screen).toContain("1 running · 1 completed");
+    expect(screen).toMatch(/\n\s+✓\s+finished/);
+  });
+});
+
+describe("WorkflowsTuiComponent golden screens", () => {
+  it("should snapshot the canonical State A overview monitor", () => {
+    expectGoldenScreen(make([hardeningRun()]));
+  });
+
+  it("should snapshot the canonical State B agent detail monitor", () => {
+    const component = make([hardeningRun()]);
+
+    component.handleInput("\x1b[D");
+
+    expectGoldenScreen(component);
+  });
+
+  it("should snapshot the canonical State C prompt reader", () => {
+    const prompt = [
+      "You are designing ONE fix from docs/workflow-correctness-hardening-spec.md for this repo.",
+      "Read the spec section AND the actual current code in: src/workflow.ts, src/agent.ts, src/prompts/workflow-agent.ts.",
+      "Also read the existing tests under tests/ and vitest.config.ts to match the test style and import paths exactly.",
+      "Determine how tests are currently run.",
+      "",
+      "Produce a TDD-ready plan: (1) a complete failing test (RED) written in the repo's exact test style/imports.",
+      "Then provide the precise implementation edits (GREEN). Do NOT edit any files — design only.",
+      "Quote real function names and line anchors.",
+      "Be concrete enough that an implementer can apply it without re-deriving anything.",
+      "",
+      "FINDING P0.1 - Journal replay is non-deterministic under pipeline()/concurrency.",
+      "The hash chain threads a mutable global previousJournalKey synchronously at agent() call time.",
+      "Concurrent re-runs can change call ordering.",
+      "This prompt is intentionally long enough to exercise the reader footer and scrolling affordance.",
+      "END_OF_VISIBLE_PROMPT_FIXTURE",
+    ].join("\n");
+    const component = make([
+      runState({
+        phases: [{ title: "Review" }],
+        agentCount: 1,
+        workflowProgress: [
+          agent({ state: "running", prompt, promptPreview: "You are designing ONE fix" }),
+        ],
+      }),
+    ]);
 
     component.handleInput("\x1b[D");
     component.handleInput("\r");
-    const screen = component.render(100).join("\n");
 
-    expect(screen).toContain("Prompt · 12 lines");
-    expect(screen).toContain("Prompt line 1");
-    expect(screen).toContain("Prompt line 12");
-    expect(screen).not.toContain("Activity ·");
+    expectGoldenScreen(component);
   });
 
-  it("should keep every rendered line within the requested width", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
+  it("should snapshot the canonical State D workflow chooser", () => {
+    const component = make([
+      runState({
+        runId: "wf_hard",
+        workflowName: "hardening_slice_and_author",
+        status: "running",
+        agentCount: 8,
+        totalTokens: 266_100,
+        startTime: NOW - 358_000,
+      }),
+      runState({
+        runId: "wf_joke",
+        workflowName: "generate_joke",
+        status: "running",
+        agentCount: 4,
+        startTime: NOW,
+      }),
+    ]);
+
+    component.handleInput("\x1b[A");
+
+    expectGoldenScreen(component);
+  });
+
+  it("should snapshot a narrow overview monitor for truncation regressions", () => {
+    expectGoldenScreen(make([hardeningRun()]), 60);
+  });
+});
+
+describe("WorkflowsTuiComponent width contract", () => {
+  it("should keep overview and agent detail lines within width at narrow and wide terminals", () => {
+    for (const width of [42, 120]) {
+      const component = make([hardeningRun()]);
+      expect(component.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
+      component.handleInput("\x1b[D");
+      expect(component.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
+    }
+  });
+
+  it("should keep chooser and prompt reader lines within width at 42 and 120", () => {
+    const longPrompt = Array.from({ length: 8 }, () => "z".repeat(200)).join("\n");
+    for (const width of [42, 120]) {
+      const chooser = make([
         runState({
-          runId: "wf_very_long_identifier_that_must_be_truncated",
-          workflowName: "very-long-workflow-name-that-must-not-overflow-the-terminal-width",
-          status: "completed",
-          workflowProgress: [
-            agent({
-              label: "verify:an-extremely-long-agent-label-that-should-be-truncated",
-              resultPreview:
-                "a very long result preview that should be truncated to fit the terminal",
-            }),
-          ],
+          runId: "wf_a",
+          workflowName: "a-very-long-workflow-name-that-should-be-truncated-cleanly",
+          status: "running",
+        }),
+        runState({ runId: "wf_b", workflowName: "another-running-workflow", status: "running" }),
+      ]);
+      expect(chooser.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
+
+      const reader = make([
+        runState({
+          phases: [{ title: "Review" }],
           agentCount: 1,
-          outputPath: "/tmp/a/very/long/output/path/that/should/not/overflow/output.json",
+          workflowProgress: [agent({ state: "running", prompt: longPrompt })],
         }),
-      ],
-      theme,
-    });
-
-    const width = 42;
-    const lines = component.render(width);
-
-    expect(lines.length).toBeGreaterThan(0);
-    expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+      ]);
+      reader.handleInput("\x1b[D");
+      reader.handleInput("\r");
+      expect(reader.render(width).every((line) => visibleWidth(line) <= width)).toBe(true);
+    }
   });
+});
 
-  it("should move selection through runs and agents with keyboard input", () => {
-    const component = new WorkflowsTuiComponent({
-      runs: [
-        runState({ runId: "wf_first", workflowName: "first" }),
-        runState({
-          runId: "wf_second",
-          workflowName: "second",
-          workflowProgress: [
-            agent({ label: "first-agent" }),
-            agent({ index: 1, label: "second-agent" }),
-          ],
-          agentCount: 2,
-        }),
-      ],
-      theme,
-    });
-
-    component.handleInput("\x1b[B");
-    component.handleInput("\t");
-    component.handleInput("\x1b[B");
-    const screen = component.render(100).join("\n");
-
-    expect(screen).toContain("> wf_second");
-    expect(screen).toContain("> done    second-agent");
-  });
-
+describe("WorkflowsTuiComponent lifecycle", () => {
   it("should refresh rendered state when runs are replaced", () => {
-    const component = new WorkflowsTuiComponent({ runs: [runState({ runId: "wf_old" })], theme });
+    const component = make([runState({ runId: "wf_old", workflowName: "old-flow" })]);
 
-    component.setRuns([runState({ runId: "wf_new" })]);
+    component.setRuns([runState({ runId: "wf_new", workflowName: "new-flow" })]);
     const screen = component.render(80).join("\n");
 
-    expect(screen).toContain("wf_new");
-    expect(screen).not.toContain("wf_old");
+    expect(screen).toContain("new-flow");
+    expect(screen).not.toContain("old-flow");
   });
 
-  it("should call onClose when escape is pressed", () => {
+  it("should call onClose when escape is pressed at the root", () => {
     const onClose = vi.fn<() => void>();
-    const component = new WorkflowsTuiComponent({ runs: [], theme, onClose });
+    const component = make([], { onClose });
 
     component.handleInput("\x1b");
 

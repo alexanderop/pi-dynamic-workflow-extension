@@ -64,6 +64,26 @@ describe("registerWorkflowsCommand", () => {
       unregister();
     }
   });
+
+  it("should forward all visible runs to the TUI so the component decides State A versus State D", async () => {
+    await writeRunManifest(tempDir, runState({ runId: "wf_running", status: "running" }));
+    await writeRunManifest(
+      tempDir,
+      runState({ runId: "wf_done", workflowName: "finished", status: "completed" }),
+    );
+    const command = registerCommand();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
+    });
+
+    expect(showWorkflowsTui).toHaveBeenCalledOnce();
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1];
+    expect(tuiOptions?.runs).toHaveLength(2);
+  });
 });
 
 interface RegisteredCommandForTest {

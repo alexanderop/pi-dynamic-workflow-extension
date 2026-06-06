@@ -5,10 +5,35 @@ import {
   visibleWidth,
   type Component,
 } from "@earendil-works/pi-tui";
-import type { WorkflowAgentProgress } from "../../workflows/agent/model.ts";
 import type { WorkflowRunState, WorkflowRunStatus } from "../../workflows/run/model.ts";
-import type { WorkflowRunDetails, WorkflowRunsViewModel } from "../../workflows/view/model.ts";
-import { projectWorkflowsView } from "../../workflows/view/projector.ts";
+import type { MonitorAgentRow, MonitorViewModel } from "../../workflows/view/model.ts";
+import {
+  formatIdle,
+  formatTokens,
+  headerSummaryLine,
+  padTo,
+  paneInnerWidths,
+  titleSegment,
+  truncateEllipsis,
+  twoPaneBox,
+  wordWrap,
+} from "../../workflows/view/layout.ts";
+import {
+  buildChooserView,
+  buildMonitorView,
+  defaultChooserSelection,
+} from "../../workflows/view/projector.ts";
+import {
+  clampIndex,
+  clampMonitorNavigation,
+  enterMonitor,
+  escapeMonitor,
+  focusInMonitor,
+  initialMonitorNavigation,
+  moveMonitorSelection,
+  type MonitorBounds,
+  type MonitorNavigationState,
+} from "../../workflows/view/navigation.ts";
 
 export interface WorkflowsComponentTheme {
   fg(
@@ -22,50 +47,46 @@ export interface WorkflowsTuiComponentOptions {
   readonly runs: WorkflowRunState[];
   readonly savedWorkflowCount?: number;
   readonly theme: WorkflowsComponentTheme;
+  readonly now?: () => number;
   readonly onClose?: () => void;
   readonly onPauseRun?: (runId: string) => void;
   readonly onResumeRun?: (runId: string) => void;
 }
 
-type WorkflowTuiScreen = "chooser" | "overview" | "agentDetail" | "promptReader";
+const PROMPT_VISIBLE_ROWS = 15;
 
 export class WorkflowsTuiComponent implements Component {
   #runs: WorkflowRunState[];
-  #savedWorkflowCount: number;
   #theme: WorkflowsComponentTheme;
+  #now: () => number;
   #onClose?: () => void;
   #onPauseRun?: (runId: string) => void;
   #onResumeRun?: (runId: string) => void;
-  #screen: WorkflowTuiScreen;
-  #selectedRunIndex = 0;
-  #selectedPhaseIndex = 0;
-  #selectedAgentIndex = 0;
+  #nav: MonitorNavigationState;
+  #promptScroll = 0;
+  #promptMaxScroll = Number.MAX_SAFE_INTEGER;
   #cachedWidth?: number;
   #cachedLines?: string[];
 
   constructor(options: WorkflowsTuiComponentOptions) {
     this.#runs = options.runs;
-    this.#savedWorkflowCount = options.savedWorkflowCount ?? 0;
     this.#theme = options.theme;
+    this.#now = options.now ?? (() => Date.now());
     this.#onClose = options.onClose;
     this.#onPauseRun = options.onPauseRun;
     this.#onResumeRun = options.onResumeRun;
-    this.#screen = options.runs.length === 1 ? "overview" : "chooser";
+    this.#nav = {
+      ...initialMonitorNavigation(options.runs.length),
+      selectedRunIndex: defaultChooserSelection(options.runs),
+    };
   }
 
   setRuns(runs: WorkflowRunState[]): void {
     this.#runs = runs;
-    this.#selectedRunIndex = clampIndex(this.#selectedRunIndex, runs.length);
-    this.#selectedPhaseIndex = clampIndex(
-      this.#selectedPhaseIndex,
-      this.#selectedRun()?.phases.length ?? 0,
-    );
-    this.#selectedAgentIndex = clampIndex(
-      this.#selectedAgentIndex,
-      this.#selectedPhaseAgents().length,
-    );
-    if (runs.length === 0) this.#screen = "chooser";
-    if (runs.length === 1 && this.#screen === "chooser") this.#screen = "overview";
+    this.#nav = clampMonitorNavigation(this.#nav, this.#bounds());
+    if (runs.length <= 1 && this.#nav.screen === "chooser") {
+      this.#nav = { ...this.#nav, screen: "overview" };
+    }
     this.invalidate();
   }
 
@@ -75,16 +96,13 @@ export class WorkflowsTuiComponent implements Component {
       return;
     }
 
-    const previousScreen = this.#screen;
-    const previousRun = this.#selectedRunIndex;
-    const previousPhase = this.#selectedPhaseIndex;
-    const previousAgent = this.#selectedAgentIndex;
+    const before = this.#snapshot();
 
     if (matchesKey(data, Key.escape)) {
       this.#handleEscape();
-    } else if (matchesKey(data, Key.up)) {
+    } else if (matchesKey(data, Key.up) || data === "k") {
       this.#moveSelection(-1);
-    } else if (matchesKey(data, Key.down)) {
+    } else if (matchesKey(data, Key.down) || data === "j") {
       this.#moveSelection(1);
     } else if (matchesKey(data, Key.left)) {
       this.#handleLeft();
@@ -92,51 +110,28 @@ export class WorkflowsTuiComponent implements Component {
       this.#handleRight();
     } else if (matchesKey(data, Key.enter)) {
       this.#handleEnter();
-    } else if (matchesKey(data, Key.tab)) {
-      this.#handleTab();
     } else if (data === "p") {
       this.#handlePauseResume();
     }
 
-    if (
-      previousScreen !== this.#screen ||
-      previousRun !== this.#selectedRunIndex ||
-      previousPhase !== this.#selectedPhaseIndex ||
-      previousAgent !== this.#selectedAgentIndex
-    ) {
-      this.invalidate();
-    }
+    if (before !== this.#snapshot()) this.invalidate();
   }
 
   render(width: number): string[] {
     if (this.#cachedLines !== undefined && this.#cachedWidth === width) return this.#cachedLines;
 
     const safeWidth = Math.max(1, width);
-    const view = this.#view();
-    const lines: string[] = [
-      this.#line(safeWidth, this.#theme.fg("accent", this.#theme.bold("Workflows"))),
-      this.#line(safeWidth, this.#subtitle(view)),
-      "",
-    ];
+    if (this.#runs.length === 0) return this.#cache(safeWidth, this.#renderEmpty(safeWidth));
+    if (this.#nav.screen === "chooser")
+      return this.#cache(safeWidth, this.#renderChooser(safeWidth));
+    if (this.#nav.screen === "promptReader")
+      return this.#cache(safeWidth, this.#renderPromptReader(safeWidth));
 
-    if (view.runs.length === 0) {
-      lines.push(this.#line(safeWidth, "No workflow runs found in .pi/workflows."));
-      lines.push(this.#line(safeWidth, this.#helpText()));
-      return this.#cache(safeWidth, lines);
-    }
-
-    if (this.#screen === "chooser") {
-      lines.push(...this.#renderChooser(view, safeWidth));
-    } else if (this.#screen === "overview") {
-      lines.push(...this.#renderOverview(view.selectedRun, safeWidth));
-    } else if (this.#screen === "agentDetail") {
-      lines.push(...this.#renderAgentDetail(view.selectedRun, safeWidth));
-    } else {
-      lines.push(...this.#renderPromptReader(view.selectedRun, safeWidth));
-    }
-
-    lines.push("");
-    lines.push(this.#line(safeWidth, this.#helpText()));
+    const lines =
+      this.#nav.screen === "agentDetail"
+        ? this.#renderAgentDetail(safeWidth)
+        : this.#renderOverview(safeWidth);
+    lines.push("", this.#line(safeWidth, this.#theme.fg("dim", this.#footerText())));
     return this.#cache(safeWidth, lines);
   }
 
@@ -145,293 +140,292 @@ export class WorkflowsTuiComponent implements Component {
     this.#cachedLines = undefined;
   }
 
+  #renderEmpty(width: number): string[] {
+    return [
+      this.#line(width, this.#theme.fg("accent", this.#theme.bold("Dynamic workflows"))),
+      "",
+      this.#line(width, this.#theme.fg("dim", "No workflow runs found in .pi/workflows.")),
+      "",
+      this.#line(width, this.#theme.fg("dim", "esc close")),
+    ];
+  }
+
+  #renderHeader(view: MonitorViewModel, width: number): string[] {
+    const summary = `${view.header.doneAgents}/${view.header.totalAgents} agents · ${view.header.elapsedLabel}`;
+    const name = this.#theme.bold(this.#theme.fg("accent", view.header.workflowName));
+    const lines = [this.#line(width, "─".repeat(width)), headerSummaryLine(name, summary, width)];
+    if (view.header.description !== undefined && view.header.description.length > 0) {
+      lines.push(
+        this.#line(
+          width,
+          this.#theme.fg("muted", truncateEllipsis(view.header.description, width)),
+        ),
+      );
+    }
+    lines.push("");
+    return lines;
+  }
+
+  #renderOverview(width: number): string[] {
+    const run = this.#selectedRun();
+    if (run === undefined) return [this.#line(width, "No run selected")];
+    const view = this.#monitorView(run);
+    const header = this.#renderHeader(view, width);
+
+    const phaseRows = view.phases.map((phase, index) => {
+      const cursor = index === this.#nav.selectedPhaseIndex ? "› " : "  ";
+      const complete = phase.totalAgents > 0 && phase.doneAgents === phase.totalAgents;
+      const marker = complete ? "✓" : String(index + 1);
+      return `${cursor}${marker} ${phase.title}  ${phase.doneAgents}/${phase.totalAgents}`;
+    });
+    const rightTitle = `${view.phases[this.#nav.selectedPhaseIndex]?.title ?? ""} · ${view.selectedPhaseAgents.length} agents`;
+    const leftWidth = clampLeftWidth(phaseRows, width);
+    const { rightWidth } = paneInnerWidths(width, leftWidth);
+    const agentRows = view.selectedPhaseAgents.map((agent) =>
+      this.#overviewAgentRow(agent, rightWidth),
+    );
+
+    return [
+      ...header,
+      ...twoPaneBox({
+        leftTitle: "Phases",
+        rightTitle,
+        leftLines: phaseRows,
+        rightLines: agentRows,
+        leftWidth,
+        width,
+      }),
+    ];
+  }
+
+  #renderAgentDetail(width: number): string[] {
+    const run = this.#selectedRun();
+    if (run === undefined) return [this.#line(width, "No run selected")];
+    const view = this.#monitorView(run);
+    const header = this.#renderHeader(view, width);
+    const agents = view.selectedPhaseAgents;
+    const selected = agents[this.#nav.selectedAgentIndex];
+
+    const leftTitle = `${view.phases[this.#nav.selectedPhaseIndex]?.title ?? ""} · ${agents.length} agents`;
+    const agentRows = agents.map((agent, index) => {
+      const cursor = index === this.#nav.selectedAgentIndex ? "› " : "  ";
+      return `${cursor}${agent.glyph} ${agent.label}`;
+    });
+    const detailRows =
+      selected === undefined ? ["No agent selected"] : this.#detailSections(selected);
+    const leftWidth = clampLeftWidth(agentRows, width);
+
+    return [
+      ...header,
+      ...twoPaneBox({
+        leftTitle,
+        rightTitle: selected?.label ?? "",
+        leftLines: agentRows,
+        rightLines: detailRows,
+        leftWidth,
+        width,
+      }),
+    ];
+  }
+
+  #detailSections(agent: MonitorAgentRow): string[] {
+    const status = `${agent.glyph} ${capitalize(agent.state)}${agent.modelLabel ? ` · ${agent.modelLabel}` : ""}`;
+    const metricsParts: string[] = [];
+    if (agent.tokens !== undefined) metricsParts.push(`${formatTokens(agent.tokens)} tok`);
+    if (agent.toolCalls !== undefined) metricsParts.push(`${agent.toolCalls} tool calls`);
+    if (agent.idleMs !== undefined) metricsParts.push(`idle ${formatIdle(agent.idleMs)}`);
+
+    const promptLines = splitLines(agent.fullPrompt);
+    const previewLines = splitLines(agent.promptPreview);
+    const promptHead = `Prompt · ${promptLines.length} lines · ↵ expand`;
+    const promptBody =
+      promptLines.length <= previewLines.length
+        ? previewLines
+        : [...previewLines, `… ${promptLines.length - previewLines.length} more lines`];
+
+    const activity =
+      agent.lastToolName === undefined
+        ? ["No tool activity recorded"]
+        : [`${agent.lastToolName}${agent.lastToolSummary ? ` ${agent.lastToolSummary}` : ""}`];
+    const activityHead =
+      agent.toolCalls === undefined
+        ? "Activity"
+        : `Activity · last ${activity.length} of ${agent.toolCalls} tool calls`;
+
+    const sections = [status];
+    if (metricsParts.length > 0) sections.push(metricsParts.join(" · "));
+    sections.push("", promptHead, ...promptBody.map((line) => `  ${line}`));
+    sections.push("", activityHead, ...activity.map((line) => `  ${line}`));
+    sections.push("", "Outcome", `  ${outcomeText(agent)}`);
+    return sections;
+  }
+
+  #renderPromptReader(width: number): string[] {
+    const agent = this.#selectedAgentRow();
+    const inner = Math.max(1, width - 4);
+    const wrapped = wordWrap(agent?.fullPrompt ?? "", inner);
+    const pageRows = Math.min(wrapped.length, PROMPT_VISIBLE_ROWS);
+    const maxScroll = Math.max(0, wrapped.length - pageRows);
+    this.#promptScroll = Math.min(this.#promptScroll, maxScroll);
+    const windowLines = wrapped.slice(this.#promptScroll, this.#promptScroll + pageRows);
+
+    this.#promptMaxScroll = maxScroll;
+    const title = `Prompt · ${wrapped.length} lines`;
+    const top = `┌${titleSegment(title, Math.max(0, width - 2))}┐`;
+    const body = windowLines.map((line) => `│ ${padTo(line, inner)} │`);
+    const bottom = `└${"─".repeat(Math.max(0, width - 2))}┘`;
+
+    const first = wrapped.length === 0 ? 0 : this.#promptScroll + 1;
+    const last = Math.min(wrapped.length, this.#promptScroll + pageRows);
+    const indicator = `${first}-${last} of ${wrapped.length} ↓`;
+    const footer = headerSummaryLine(
+      this.#theme.fg("dim", "• x stop · r restart · p pause · esc back · s save"),
+      indicator,
+      width,
+    );
+
+    return [top, ...body, bottom, footer];
+  }
+
+  #renderChooser(width: number): string[] {
+    const view = buildChooserView(this.#runs, { now: this.#now() });
+    const lines = [
+      this.#line(width, this.#theme.fg("dim", "› /workflows")),
+      "",
+      this.#line(width, "─".repeat(width)),
+      "",
+      this.#line(width, `  ${this.#theme.bold("Dynamic workflows")}`),
+      this.#line(
+        width,
+        `  ${this.#theme.fg("dim", `${view.runningCount} running · ${view.completedCount} completed`)}`,
+      ),
+      "",
+    ];
+
+    const range = visibleRange(this.#nav.selectedRunIndex, view.rows.length, 10);
+    for (let index = range.start; index < range.end; index += 1) {
+      const row = view.rows[index];
+      if (row === undefined) continue;
+      const selected = index === this.#nav.selectedRunIndex;
+      const cursor = selected ? "› " : "  ";
+      const tokens = row.tokens === undefined ? "" : ` · ${formatTokens(row.tokens)} tok`;
+      const content = `  ${cursor}${row.glyph} ${row.workflowName}   ${row.agentCount} agents${tokens} · ${row.durationLabel}`;
+      lines.push(this.#line(width, selected ? this.#theme.fg("accent", content) : content));
+    }
+
+    lines.push(
+      "",
+      this.#line(
+        width,
+        `  ${this.#theme.fg("dim", "↑/↓ to select · Enter to view · s to save · Esc to close")}`,
+      ),
+    );
+    return lines;
+  }
+
+  #overviewAgentRow(agent: MonitorAgentRow, innerWidth: number): string {
+    const model = agent.modelLabel === undefined ? "" : ` ${agent.modelLabel}`;
+    const left = `${agent.glyph} ${agent.label}${model}`;
+    const metricParts: string[] = [];
+    if (agent.tokens !== undefined) metricParts.push(`${formatTokens(agent.tokens)} tok`);
+    if (agent.toolCalls !== undefined) metricParts.push(`${agent.toolCalls} tools`);
+    const metric =
+      metricParts.length > 0
+        ? metricParts.join(" · ")
+        : agent.idleMs !== undefined
+          ? `idle ${formatIdle(agent.idleMs)}`
+          : "";
+    if (metric === "") return padTo(left, innerWidth);
+    return headerSummaryLine(left, metric, innerWidth);
+  }
+
+  #footerText(): string {
+    if (this.#nav.screen === "overview") {
+      return "↑↓ select · ← detail · x stop workflow · p pause · esc back · s save";
+    }
+    return "↑↓ agent · ↵ prompt · x stop · r restart · p pause · esc back · s save";
+  }
+
+  #bounds(): MonitorBounds {
+    const run = this.#selectedRun();
+    const view = run === undefined ? undefined : this.#monitorView(run);
+    return {
+      runCount: this.#runs.length,
+      phaseCount: view?.phases.length ?? 0,
+      agentCount: view?.selectedPhaseAgents.length ?? 0,
+    };
+  }
+
   #handleEscape(): void {
-    if (this.#screen === "promptReader") {
-      this.#screen = "agentDetail";
+    const result = escapeMonitor(this.#nav, this.#bounds());
+    if (result.close === true) {
+      this.#onClose?.();
       return;
     }
-    if (this.#screen === "agentDetail") {
-      this.#screen = "overview";
-      return;
+    if (result.state !== undefined) {
+      if (result.state.screen === "agentDetail" && this.#nav.screen === "promptReader") {
+        this.#promptScroll = 0;
+      }
+      this.#nav = result.state;
     }
-    if (this.#screen === "overview" && this.#runs.length > 1) {
-      this.#screen = "chooser";
-      return;
-    }
-    this.#onClose?.();
   }
 
   #handleLeft(): void {
-    if (this.#screen === "overview" && this.#selectedPhaseAgents().length > 0) {
-      this.#selectedAgentIndex = clampIndex(
-        this.#selectedAgentIndex,
-        this.#selectedPhaseAgents().length,
-      );
-      this.#screen = "agentDetail";
-    }
+    this.#nav = focusInMonitor(this.#nav, this.#bounds(), "left");
   }
 
   #handleRight(): void {
-    if (this.#screen === "agentDetail" || this.#screen === "promptReader")
-      this.#screen = "overview";
+    this.#nav = focusInMonitor(this.#nav, this.#bounds(), "right");
   }
 
   #handleEnter(): void {
-    if (this.#screen === "chooser") {
-      this.#screen = "overview";
-      this.#selectedPhaseIndex = 0;
-      this.#selectedAgentIndex = 0;
-      return;
+    const next = enterMonitor(this.#nav, this.#bounds());
+    if (next.screen === "promptReader" && this.#nav.screen !== "promptReader") {
+      this.#promptScroll = 0;
     }
-    if (this.#screen === "overview" && this.#selectedPhaseAgents().length > 0) {
-      this.#screen = "agentDetail";
-      return;
-    }
-    if (this.#screen === "agentDetail" && this.#selectedAgent() !== undefined) {
-      this.#screen = "promptReader";
-    }
-  }
-
-  #handleTab(): void {
-    if (this.#screen === "chooser") {
-      this.#screen = this.#selectedPhaseAgents().length > 0 ? "agentDetail" : "overview";
-    } else if (this.#screen === "overview" && this.#selectedPhaseAgents().length > 0) {
-      this.#screen = "agentDetail";
-    } else if (this.#screen === "agentDetail") {
-      this.#screen = "overview";
-    }
+    this.#nav = next;
   }
 
   #handlePauseResume(): void {
-    const run = this.#selectedRun()?.run;
+    const run = this.#selectedRun();
     if (run === undefined) return;
-
-    if (canPauseRun(run.status)) {
-      this.#onPauseRun?.(run.runId);
-      return;
-    }
-
-    if (canResumeRun(run.status)) {
-      this.#onResumeRun?.(run.runId);
-    }
+    if (canPauseRun(run.status)) this.#onPauseRun?.(run.runId);
+    else if (canResumeRun(run.status)) this.#onResumeRun?.(run.runId);
   }
 
   #moveSelection(direction: -1 | 1): void {
-    if (this.#screen === "chooser") {
-      this.#selectedRunIndex = clampIndex(this.#selectedRunIndex + direction, this.#runs.length);
-      this.#selectedPhaseIndex = 0;
-      this.#selectedAgentIndex = 0;
+    if (this.#nav.screen === "promptReader") {
+      this.#promptScroll = Math.max(
+        0,
+        Math.min(this.#promptScroll + direction, this.#promptMaxScroll),
+      );
       return;
     }
-    if (this.#screen === "overview") {
-      this.#selectedPhaseIndex = clampIndex(
-        this.#selectedPhaseIndex + direction,
-        this.#selectedRun()?.phases.length ?? 0,
-      );
-      this.#selectedAgentIndex = 0;
-      return;
-    }
-    if (this.#screen === "agentDetail") {
-      this.#selectedAgentIndex = clampIndex(
-        this.#selectedAgentIndex + direction,
-        this.#selectedPhaseAgents().length,
-      );
-    }
+    this.#nav = moveMonitorSelection(this.#nav, this.#bounds(), direction);
   }
 
-  #view(): WorkflowRunsViewModel {
-    return projectWorkflowsView(this.#runs, {
-      selectedRunIndex: this.#selectedRunIndex,
-      savedWorkflowCount: this.#savedWorkflowCount,
+  #monitorView(run: WorkflowRunState): MonitorViewModel {
+    return buildMonitorView(run, {
+      selectedPhaseIndex: this.#nav.selectedPhaseIndex,
+      now: this.#now(),
     });
   }
 
-  #selectedRun(): WorkflowRunDetails | undefined {
-    return this.#view().selectedRun;
+  #selectedRun(): WorkflowRunState | undefined {
+    return this.#runs[clampIndex(this.#nav.selectedRunIndex, this.#runs.length)];
   }
 
-  #selectedPhaseAgents(): WorkflowAgentProgress[] {
+  #agents(): MonitorAgentRow[] {
     const run = this.#selectedRun();
-    if (run === undefined) return [];
-    const selectedPhase = run.phases[this.#selectedPhaseIndex];
-    if (selectedPhase === undefined) return run.agents;
-    const phaseAgents = run.agents.filter((agent) => agent.phaseTitle === selectedPhase.title);
-    return phaseAgents.length === 0 ? run.agents : phaseAgents;
+    return run === undefined ? [] : this.#monitorView(run).selectedPhaseAgents;
   }
 
-  #selectedAgent(): WorkflowAgentProgress | undefined {
-    return this.#selectedPhaseAgents()[this.#selectedAgentIndex];
+  #selectedAgentRow(): MonitorAgentRow | undefined {
+    return this.#agents()[this.#nav.selectedAgentIndex];
   }
 
-  #subtitle(view: WorkflowRunsViewModel): string {
-    const runLabel = `${view.runs.length} run${view.runs.length === 1 ? "" : "s"}`;
-    const savedLabel = `${view.savedWorkflowCount} saved workflow${view.savedWorkflowCount === 1 ? "" : "s"}`;
-    return this.#theme.fg("dim", `${runLabel} • ${savedLabel}`);
-  }
-
-  #renderChooser(view: WorkflowRunsViewModel, width: number): string[] {
-    const lines = [
-      this.#line(width, this.#theme.fg("accent", this.#theme.bold("Choose a workflow"))),
-    ];
-    const range = visibleRange(this.#selectedRunIndex, view.runs.length, 10);
-    for (let index = range.start; index < range.end; index += 1) {
-      const row = view.runs[index];
-      if (row === undefined) continue;
-      const selected = index === this.#selectedRunIndex;
-      const prefix = selected ? "› " : "  ";
-      const content = `${prefix}${statusGlyph(row.status)} ${row.runId}  ${row.workflowName}  ${row.status}  ${row.agentCount} agents`;
-      lines.push(this.#line(width, selected ? this.#theme.fg("accent", content) : content));
-    }
-    return lines;
-  }
-
-  #renderOverview(run: WorkflowRunDetails | undefined, width: number): string[] {
-    if (run === undefined) return [this.#line(width, "No run selected")];
-    const doneCount = run.agents.filter((agent) => agent.state === "done").length;
-    const elapsed = run.durationLabel ?? elapsedSince(run.run.startTime);
-    const lines = [
-      this.#line(width, "─".repeat(width)),
-      this.#line(
-        width,
-        `${this.#theme.fg("accent", this.#theme.bold(run.workflowName))}  ${doneCount}/${run.agents.length} agents · ${elapsed}`,
-      ),
-      this.#line(width, this.#theme.fg("dim", `${run.status} · ${run.runId}`)),
-      "",
-    ];
-
-    if (this.#savedWorkflowCount > 0)
-      lines.push(this.#line(width, this.#theme.fg("muted", "Runs")));
-
-    lines.push(
-      this.#line(width, this.#theme.fg("muted", "Progress")),
-      this.#line(width, this.#theme.fg("muted", "Phases")),
-    );
-
-    if (run.phases.length === 0) {
-      lines.push(this.#line(width, "  No phases recorded"));
-    } else {
-      for (const [index, phase] of run.phases.entries()) {
-        const selected = index === this.#selectedPhaseIndex;
-        const prefix = selected ? "› " : "  ";
-        const statusParts = [`${phase.doneAgents}/${phase.totalAgents} done`];
-        if (phase.runningAgents > 0) statusParts.push(`${phase.runningAgents} running`);
-        if (phase.failedAgents > 0) statusParts.push(`${phase.failedAgents} failed`);
-        if (phase.stoppedAgents > 0) statusParts.push(`${phase.stoppedAgents} stopped`);
-        lines.push(this.#line(width, `${prefix}${phase.title}  ${statusParts.join(" · ")}`));
-      }
-    }
-
-    lines.push("");
-    lines.push(this.#line(width, this.#theme.fg("muted", "Agents")));
-    const phaseAgents = this.#selectedPhaseAgents();
-    if (phaseAgents.length === 0) {
-      lines.push(this.#line(width, "  No agents recorded"));
-    } else {
-      for (const agent of phaseAgents.slice(0, 8)) {
-        lines.push(this.#line(width, this.#formatOverviewAgentRow(agent)));
-      }
-    }
-
-    lines.push("");
-    lines.push(this.#line(width, this.#theme.fg("muted", "Details")));
-    lines.push(this.#line(width, `  output: ${run.outputPath ?? "not written yet"}`));
-    lines.push(this.#line(width, `  tokens: ${run.totalTokens} • tools: ${run.totalToolCalls}`));
-    return lines;
-  }
-
-  #renderAgentDetail(run: WorkflowRunDetails | undefined, width: number): string[] {
-    if (run === undefined) return [this.#line(width, "No run selected")];
-    const selectedAgent = this.#selectedAgent();
-    const phaseAgents = this.#selectedPhaseAgents();
-    const lines = [
-      this.#line(width, "─".repeat(width)),
-      this.#line(width, this.#theme.fg("accent", this.#theme.bold(run.workflowName))),
-      this.#line(width, `> ${run.runId}`),
-      "",
-      this.#line(width, this.#theme.fg("muted", "Agents")),
-    ];
-
-    for (const [index, agent] of phaseAgents.entries()) {
-      const selected = index === this.#selectedAgentIndex;
-      lines.push(this.#line(width, this.#formatDetailAgentRow(agent, selected)));
-    }
-
-    if (selectedAgent === undefined) return [...lines, this.#line(width, "  No agent selected")];
-
-    lines.push("");
-    lines.push(this.#line(width, this.#theme.fg("accent", this.#theme.bold(selectedAgent.label))));
-    lines.push(
-      this.#line(
-        width,
-        `  ${statusGlyph(selectedAgent.state)} ${capitalize(selectedAgent.state)} · ${selectedAgent.model}`,
-      ),
-    );
-    lines.push(this.#line(width, `  ${formatMetrics(selectedAgent)}`));
-    lines.push("");
-    lines.push(
-      this.#line(width, `Prompt · ${lineCount(selectedAgent.promptPreview)} lines · ↵ expand`),
-    );
-    for (const line of previewLines(selectedAgent.promptPreview, 2)) {
-      lines.push(this.#line(width, `  ${line}`));
-    }
-    lines.push("");
-    lines.push(
-      this.#line(width, `Activity · last 3 of ${selectedAgent.toolCalls ?? 0} tool calls`),
-    );
-    for (const activityLine of activityLines(selectedAgent)) {
-      lines.push(this.#line(width, `  ${activityLine}`));
-    }
-    lines.push("");
-    lines.push(this.#line(width, "Outcome"));
-    lines.push(this.#line(width, `  ${outcomeText(selectedAgent)}`));
-    return lines;
-  }
-
-  #renderPromptReader(run: WorkflowRunDetails | undefined, width: number): string[] {
-    const selectedAgent = this.#selectedAgent();
-    if (run === undefined || selectedAgent === undefined)
-      return [this.#line(width, "No prompt selected")];
-    const promptLines = splitLines(selectedAgent.promptPreview);
-    return [
-      this.#line(width, `Prompt · ${promptLines.length} lines`),
-      ...promptLines.map((line) => this.#line(width, line)),
-    ];
-  }
-
-  #formatOverviewAgentRow(agent: WorkflowAgentProgress): string {
-    const model = agent.model === undefined ? "" : ` ${agent.model}`;
-    const metrics = formatMetrics(agent);
-    return `  ${statusGlyph(agent.state)} ${agent.label}${model}  ${metrics}`;
-  }
-
-  #formatDetailAgentRow(agent: WorkflowAgentProgress, selected: boolean): string {
-    const prefix = selected ? "> " : "  ";
-    const row = `${prefix}${agent.state.padEnd(7)} ${agent.label}`;
-    return selected ? this.#theme.fg("accent", row) : row;
-  }
-
-  #helpText(): string {
-    if (this.#screen === "chooser")
-      return this.#theme.fg("dim", "↑↓ select · enter open · esc close");
-    if (this.#screen === "overview") {
-      return this.#theme.fg(
-        "dim",
-        `↑↓ phase · ← detail · x stop workflow · ${this.#pauseHelpText()} · esc back · s save`,
-      );
-    }
-    if (this.#screen === "agentDetail") {
-      return this.#theme.fg(
-        "dim",
-        `↑↓ agent · ↵ prompt · x stop · r restart · ${this.#pauseHelpText()} · esc back · s save`,
-      );
-    }
-    return this.#theme.fg("dim", "↑↓ scroll · esc back");
-  }
-
-  #pauseHelpText(): string {
-    const status = this.#selectedRun()?.status;
-    if (status !== undefined && canResumeRun(status)) return "p resume";
-    return "p pause";
+  #snapshot(): string {
+    return `${this.#nav.screen}:${this.#nav.selectedRunIndex}:${this.#nav.selectedPhaseIndex}:${this.#nav.selectedAgentIndex}:${this.#promptScroll}`;
   }
 
   #line(width: number, text: string): string {
@@ -444,6 +438,12 @@ export class WorkflowsTuiComponent implements Component {
     this.#cachedWidth = width;
     return this.#cachedLines;
   }
+}
+
+function clampLeftWidth(rows: string[], width: number): number {
+  const widest = rows.reduce((max, row) => Math.max(max, visibleWidth(row)), 0);
+  const cap = Math.max(12, Math.floor(width * 0.4));
+  return Math.max(12, Math.min(widest + 2, cap));
 }
 
 function visibleRange(
@@ -459,11 +459,6 @@ function visibleRange(
   return { start, end: Math.min(start + maxVisible, length) };
 }
 
-function clampIndex(index: number, length: number): number {
-  if (length === 0) return 0;
-  return Math.max(0, Math.min(index, length - 1));
-}
-
 function canPauseRun(status: WorkflowRunStatus): boolean {
   return status === "running" || status === "resuming";
 }
@@ -472,52 +467,11 @@ function canResumeRun(status: WorkflowRunStatus): boolean {
   return status === "paused" || status === "pausing";
 }
 
-function statusGlyph(status: WorkflowRunStatus | WorkflowAgentProgress["state"]): string {
-  if (status === "running" || status === "starting" || status === "resuming") return "↻";
-  if (status === "completed" || status === "done") return "✓";
-  if (status === "failed" || status === "failing") return "!";
-  if (status === "stopped" || status === "stopping") return "■";
-  return "●";
-}
-
-function elapsedSince(startTime: number): string {
-  if (startTime <= 0) return "0s";
-  const elapsedMs = Math.max(0, Date.now() - startTime);
-  const seconds = Math.floor(elapsedMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  if (minutes === 0) return `${seconds}s`;
-  return `${minutes}m${seconds % 60}s`;
-}
-
-function formatMetrics(agent: WorkflowAgentProgress): string {
-  const parts: string[] = [];
-  if (agent.tokens !== undefined) parts.push(`${agent.tokens} tok`);
-  if (agent.toolCalls !== undefined) parts.push(`${agent.toolCalls} tools`);
-  if (parts.length === 0 && agent.state === "running") return "Still collecting metrics";
-  return parts.join(" · ") || "No metrics yet";
-}
-
 function splitLines(text: string): string[] {
   return text.length === 0 ? [""] : text.split(/\r?\n/);
 }
 
-function lineCount(text: string): number {
-  return splitLines(text).length;
-}
-
-function previewLines(text: string, maxLines: number): string[] {
-  const lines = splitLines(text);
-  if (lines.length <= maxLines) return lines;
-  return [...lines.slice(0, maxLines), `… ${lines.length - maxLines} more lines`];
-}
-
-function activityLines(agent: WorkflowAgentProgress): string[] {
-  if (agent.lastToolName === undefined) return ["No tool activity recorded"];
-  const summary = agent.lastToolSummary === undefined ? "" : ` ${agent.lastToolSummary}`;
-  return [`${agent.lastToolName}${summary}`];
-}
-
-function outcomeText(agent: WorkflowAgentProgress): string {
+function outcomeText(agent: MonitorAgentRow): string {
   if (agent.state === "running" || agent.state === "queued") return "Still running…";
   if (agent.state === "failed") return agent.resultPreview ?? "Failed";
   if (agent.state === "stopped") return agent.resultPreview ?? "Stopped";

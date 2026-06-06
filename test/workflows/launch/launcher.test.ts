@@ -224,6 +224,7 @@ return { result };
       runId: "wf_test",
       taskId: "task_test",
       workflowName: "launch-smoke",
+      description: "Launch a fake one-agent workflow",
       status: "running",
       script,
       scriptPath: launch.scriptPath,

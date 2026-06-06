@@ -6,7 +6,7 @@ import { WorkflowRunController } from "../../workflows/run/controller.ts";
 import type { WorkflowRunState } from "../../workflows/run/model.ts";
 import { WorkflowRunStore } from "../../workflows/run/store.ts";
 import { listSavedWorkflows } from "../../workflows/saved/list.ts";
-import { formatDuration } from "../../workflows/view/projector.ts";
+import { formatDuration } from "../../workflows/view/layout.ts";
 import { personalSavedWorkflowDir } from "../../workflows/saved/resolver.ts";
 import type {
   WorkflowSavedWorkflow,

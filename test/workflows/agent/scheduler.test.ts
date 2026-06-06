@@ -77,6 +77,21 @@ describe("WorkflowAgentScheduler", () => {
     expect(scheduler.progress()).toHaveLength(1);
   });
 
+  it("should expose the full original prompt on the progress entry, not only the truncated preview", async () => {
+    const longPrompt = "L".repeat(500);
+    const scheduler = new WorkflowAgentScheduler({
+      maxConcurrent: 1,
+      runner: async ({ prompt }) => prompt,
+    });
+
+    await scheduler.schedule(longPrompt, { label: "audit" });
+    const [row] = scheduler.progress();
+
+    expect(row?.prompt).toBe(longPrompt);
+    expect(row?.promptPreview).toBe(longPrompt.slice(0, 160));
+    expect(row?.promptPreview).toHaveLength(160);
+  });
+
   it("should expose queued, running, done, and failed progress rows", async () => {
     const first = deferred<string>();
     const scheduler = new WorkflowAgentScheduler({

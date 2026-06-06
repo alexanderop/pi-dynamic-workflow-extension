@@ -18,6 +18,7 @@ export interface WorkflowRunState {
   runId: string;
   taskId: string;
   workflowName: string;
+  description?: string;
   status: WorkflowRunStatus;
   script: string;
   scriptPath: string;
