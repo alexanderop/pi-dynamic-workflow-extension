@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { availableParallelism } from "node:os";
-import { computeWorkflowAgentKey } from "../journal/key.ts";
-import type { WorkflowAgentJournal, WorkflowJournalKey } from "../journal/model.ts";
-import { transitionAgent } from "../run/state-machine.ts";
+import { computeWorkflowAgentKey } from "#src/workflows/journal/key.ts";
+import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
+import { transitionAgent } from "#src/workflows/run/state-machine.ts";
 import type { AgentOptions, WorkflowAgentProgress } from "./model.ts";
 
 export interface WorkflowAgentRunRequest {

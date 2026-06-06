@@ -1,19 +1,22 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { buildWorkflowJournalResultCache, WorkflowJournalStore } from "../journal/store.ts";
-import { tryParseWorkflowScript } from "../script/parser.ts";
-import { tryRunWorkflowScript } from "../script/runtime.ts";
-import { err, ok, type Result } from "../result.ts";
-import { registerWorkflowRunControl } from "../run/control-registry.ts";
-import { WorkflowRunStore } from "../run/store.ts";
-import { transitionRun } from "../run/state-machine.ts";
+import {
+  buildWorkflowJournalResultCache,
+  WorkflowJournalStore,
+} from "#src/workflows/journal/store.ts";
+import { tryParseWorkflowScript } from "#src/workflows/script/parser.ts";
+import { tryRunWorkflowScript } from "#src/workflows/script/runtime.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import { registerWorkflowRunControl } from "#src/workflows/run/control-registry.ts";
+import { WorkflowRunStore } from "#src/workflows/run/store.ts";
+import { transitionRun } from "#src/workflows/run/state-machine.ts";
 import {
   personalSavedWorkflowDir,
   projectSavedWorkflowDir,
   readSavedWorkflowScriptPath,
   resolveSavedWorkflowByName,
-} from "../saved/resolver.ts";
+} from "#src/workflows/saved/resolver.ts";
 import type {
   WorkflowLaunch,
   WorkflowLaunchBackgroundError,
@@ -29,8 +32,12 @@ import type {
   WorkflowTerminalNotifier,
   WorkflowTerminalOutput,
 } from "./model.ts";
-import type { WorkflowFailure, WorkflowProgressEntry, WorkflowRunState } from "../run/model.ts";
-import type { WorkflowRuntimeOptions, WorkflowRuntimeState } from "../script/model.ts";
+import type {
+  WorkflowFailure,
+  WorkflowProgressEntry,
+  WorkflowRunState,
+} from "#src/workflows/run/model.ts";
+import type { WorkflowRuntimeOptions, WorkflowRuntimeState } from "#src/workflows/script/model.ts";
 
 export type {
   WorkflowLaunch,
@@ -54,7 +61,7 @@ export type {
   WorkflowSavedWorkflowLocations,
   WorkflowSavedWorkflowNotFoundError,
   WorkflowSavedWorkflowReadError,
-} from "../saved/resolver.ts";
+} from "#src/workflows/saved/resolver.ts";
 
 export async function launchWorkflow(
   request: WorkflowLaunchRequest,

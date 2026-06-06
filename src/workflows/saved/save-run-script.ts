@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { err, ok, type Result } from "../result.ts";
-import { WorkflowRunStore, type WorkflowRunStoreError } from "../run/store.ts";
-import { tryParseWorkflowScript } from "../script/parser.ts";
-import type { WorkflowParseError } from "../script/parser.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import { WorkflowRunStore, type WorkflowRunStoreError } from "#src/workflows/run/store.ts";
+import { tryParseWorkflowScript } from "#src/workflows/script/parser.ts";
+import type { WorkflowParseError } from "#src/workflows/script/parser.ts";
 import {
   personalSavedWorkflowDir,
   projectSavedWorkflowDir,

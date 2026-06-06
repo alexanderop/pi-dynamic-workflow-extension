@@ -1,11 +1,11 @@
-import type { Result } from "../result.ts";
-import type { WorkflowFailure, WorkflowRunState } from "../run/model.ts";
-import type { WorkflowParseError } from "../script/parser.ts";
-import type { WorkflowRuntimeOptions } from "../script/model.ts";
+import type { Result } from "#src/workflows/result.ts";
+import type { WorkflowFailure, WorkflowRunState } from "#src/workflows/run/model.ts";
+import type { WorkflowParseError } from "#src/workflows/script/parser.ts";
+import type { WorkflowRuntimeOptions } from "#src/workflows/script/model.ts";
 import type {
   WorkflowSavedWorkflowError,
   WorkflowSavedWorkflowLocations,
-} from "../saved/resolver.ts";
+} from "#src/workflows/saved/resolver.ts";
 
 export interface WorkflowLaunchRequest {
   readonly script?: string;

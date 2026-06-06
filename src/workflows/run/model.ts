@@ -1,4 +1,4 @@
-import type { WorkflowAgentProgress } from "../agent/model.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 
 export type WorkflowRunStatus =
   | "created"

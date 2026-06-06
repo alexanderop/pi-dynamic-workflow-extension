@@ -11,15 +11,11 @@ import {
   type WorkflowTaskNotification,
 } from "#src/workflows/launch/launcher.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
-import { projectSavedWorkflowDir, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
+import { projectSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { workflowScript } from "../script/workflow-factory.ts";
+import { workflowScenario } from "./workflow-scenario.ts";
 import { deferred, delay, pathExists, unwrap } from "../../support.ts";
-
-async function writeSavedWorkflow(dir: string, name: string, source: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await writeFile(savedWorkflowPath(dir, name), source, "utf8");
-}
 
 describe("launchWorkflow", () => {
   let tempDir: string;
@@ -111,37 +107,25 @@ return { result };
       meta: { name: "review" },
       body: "return await agent('personal workflow should not run');",
     });
-    const personalDir = join(tempDir, "home", ".pi", "workflows");
-    await writeSavedWorkflow(projectSavedWorkflowDir(rootDir), "review", projectScript);
-    await writeSavedWorkflow(personalDir, "review", personalScript);
-    const agents = setupAgentMock(
-      agent.call({ prompt: "review src", label: "review-agent", phase: "Review" }, () =>
-        AgentResponse.text("project review result"),
-      ),
-    );
+    const scenario = await workflowScenario()
+      .withNow(() => now)
+      .withSavedWorkflow("review", projectScript)
+      .withPersonalWorkflow("review", personalScript)
+      .withAgents(agent.label("review-agent").replyText("project review result"))
+      .launchByName("review", { target: "src" });
 
-    const result = await launchWorkflow(
-      { name: "review", args: { target: "src" } },
-      launchOptions({
-        savedWorkflowDirs: { personalDir },
-        schedulerRunner: agents.schedulerRunner,
-      }),
-    );
-
-    const launch = unwrap(result);
-    expect(launch.scriptPath).toBe(workflowRunScriptPath(rootDir, "wf_test"));
-    await expect(readFile(launch.scriptPath, "utf8")).resolves.toBe(projectScript);
+    await scenario.shouldHaveUsedProjectSavedWorkflow("review");
 
     now = 175;
-    const completed = unwrap(await launch.completion);
-    expect(completed).toMatchObject({
+    await scenario.complete();
+
+    scenario.shouldHaveCompletedWithResult({ result: "project review result" });
+    await scenario.shouldHaveManifest({
       workflowName: "review",
       status: "completed",
-      result: { result: "project review result" },
       phases: [{ title: "Review" }],
     });
-    expect(agents.calls()).toHaveLength(1);
-    agents.expectNoUnhandledAgents();
+    scenario.agents.expectNoUnhandledAgents();
   });
 
   it("should launch a workflow from an explicit script path", async () => {

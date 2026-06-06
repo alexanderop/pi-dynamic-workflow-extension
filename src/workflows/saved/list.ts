@@ -1,8 +1,8 @@
 import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { err, ok, type Result } from "../result.ts";
-import { tryParseWorkflowScript } from "../script/parser.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import { tryParseWorkflowScript } from "#src/workflows/script/parser.ts";
 import { resolveSavedWorkflowByName } from "./resolver.ts";
 import type {
   WorkflowSavedWorkflow,

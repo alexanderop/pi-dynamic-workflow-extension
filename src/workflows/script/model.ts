@@ -1,7 +1,7 @@
-import type { AgentOptions } from "../agent/model.ts";
-import type { WorkflowAgentRunner } from "../agent/scheduler.ts";
-import type { WorkflowAgentJournal, WorkflowJournalKey } from "../journal/model.ts";
-import type { WorkflowPhaseProgress, WorkflowProgressEntry } from "../run/model.ts";
+import type { AgentOptions } from "#src/workflows/agent/model.ts";
+import type { WorkflowAgentRunner } from "#src/workflows/agent/scheduler.ts";
+import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
+import type { WorkflowPhaseProgress, WorkflowProgressEntry } from "#src/workflows/run/model.ts";
 
 export interface WorkflowPhase {
   title: string;

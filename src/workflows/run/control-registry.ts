@@ -1,4 +1,4 @@
-import type { WorkflowRuntimeControl } from "../script/model.ts";
+import type { WorkflowRuntimeControl } from "#src/workflows/script/model.ts";
 
 const controls = new Map<string, WorkflowRuntimeControl>();
 

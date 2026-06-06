@@ -5,8 +5,8 @@ import {
   visibleWidth,
   type Component,
 } from "@earendil-works/pi-tui";
-import type { WorkflowRunState, WorkflowRunStatus } from "../../workflows/run/model.ts";
-import type { MonitorAgentRow, MonitorViewModel } from "../../workflows/view/model.ts";
+import type { WorkflowRunState, WorkflowRunStatus } from "#src/workflows/run/model.ts";
+import type { MonitorAgentRow, MonitorViewModel } from "#src/workflows/view/model.ts";
 import {
   formatIdle,
   formatTokens,
@@ -17,12 +17,12 @@ import {
   truncateEllipsis,
   twoPaneBox,
   wordWrap,
-} from "../../workflows/view/layout.ts";
+} from "#src/workflows/view/layout.ts";
 import {
   buildChooserView,
   buildMonitorView,
   defaultChooserSelection,
-} from "../../workflows/view/projector.ts";
+} from "#src/workflows/view/projector.ts";
 import {
   clampIndex,
   clampMonitorNavigation,
@@ -33,7 +33,7 @@ import {
   moveMonitorSelection,
   type MonitorBounds,
   type MonitorNavigationState,
-} from "../../workflows/view/navigation.ts";
+} from "#src/workflows/view/navigation.ts";
 
 export interface WorkflowsComponentTheme {
   fg(

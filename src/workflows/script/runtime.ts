@@ -1,8 +1,8 @@
 import vm from "node:vm";
 import { parseWorkflowScript } from "./parser.ts";
-import { err, ok, type Result } from "../result.ts";
-import { WorkflowAgentScheduler } from "../agent/scheduler.ts";
-import type { AgentOptions } from "../agent/model.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import { WorkflowAgentScheduler } from "#src/workflows/agent/scheduler.ts";
+import type { AgentOptions } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowBudget,
   WorkflowRuntimeError,

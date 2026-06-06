@@ -120,6 +120,7 @@ test/
   extension/
     tui/
       workflows-screen.ts
+      workflows-command-page.ts
   workflows/
     launch/
       workflow-scenario.ts
@@ -187,6 +188,20 @@ Options should support:
 Defaults should be stable and deterministic. Use constants like `wf_test`,
 `task_test`, and `NOW` only when doing so cannot create confusion in multi-run
 tests.
+
+Builder defaults should make counters coherent:
+
+- `workflowProgress` should include phase rows plus agent rows unless explicitly
+  overridden;
+- `agentCount` should default to the number of agent rows;
+- `totalTokens` and `totalToolCalls` should default to sums from agent rows when
+  present, otherwise zero;
+- terminal fields should only appear for terminal run builders unless explicitly
+  overridden.
+
+The same builders should serve TUI component tests, view projector tests, and
+extension command tests. Do not create one-off `runState(...)` or `agent(...)`
+fixture factories in each test file once the shared builders exist.
 
 ### Workflow Agent Builder
 
@@ -388,6 +403,86 @@ centralized in the helper.
 This should preserve the current golden/snapshot readability convention from
 `docs/testing-reference.md`.
 
+The screen object may also expose a convenience form for width matrices:
+
+```ts
+screen.shouldFitWidth({ widths: [42, 80, 120] });
+```
+
+Golden or snapshot assertions should strip VT controls before comparison and
+should remain narrow: use them for representative layout states, not as a
+replacement for semantic assertions.
+
+## Layer 2b: `/workflows` Command/View Adapter Harness
+
+The screen object tests `WorkflowsTuiComponent` directly. A smaller adapter
+harness should cover the Pi command boundary around `/workflows`, where the
+extension chooses TUI, print, JSON, or RPC behavior and wires callbacks into the
+run controller.
+
+Target file:
+
+```text
+test/extension/tui/workflows-command-page.ts
+```
+
+Target examples:
+
+```ts
+const page = await workflowsCommandPage()
+  .withRun(workflowRun.running("audit"))
+  .openTui();
+
+page.shouldHavePassedRunsToTui(1);
+page.pauseRun("wf_test");
+page.shouldHavePersistedRunStatus("wf_test", "paused");
+```
+
+Print and JSON command modes:
+
+```ts
+const page = await workflowsCommandPage()
+  .withRun(workflowRun.completed("review", { result: "ok" }))
+  .openPrint();
+
+page.shouldPrintText("review");
+page.shouldPrintText("completed");
+
+const json = await workflowsCommandPage()
+  .withRun(workflowRun.running("audit"))
+  .openJson();
+
+json.shouldReturnJson({ runs: expect.any(Array) });
+```
+
+Target API shape:
+
+```ts
+workflowsCommandPage(options?)
+  .withRootDir(path)
+  .withRun(run)
+  .withRuns(...runs)
+  .openTui()
+  .openPrint()
+  .openJson()
+  .openRpc()
+```
+
+Assertions:
+
+```ts
+page.shouldHavePassedRunsToTui(count)
+page.shouldHaveRegisteredCallbacks(...names)
+page.shouldPrintText(textOrPattern)
+page.shouldReturnJson(matcher)
+page.shouldHavePersistedRunStatus(runId, status)
+page.shouldHaveClosed()
+```
+
+This harness should use the same run builders as the pure component tests. It
+should not replace direct extension registration tests that only need to assert
+`registerCommand("workflows", ...)`.
+
 ## Layer 3: Workflow Scenario Harness
 
 The workflow scenario harness wraps filesystem integration tests around the
@@ -499,6 +594,7 @@ scenario.shouldHaveReturnedTask(taskId)
 scenario.shouldHaveReturnedRun(runId)
 scenario.shouldHaveReturnedImmediately()
 scenario.shouldHaveConfirmationText(...fragments)
+scenario.shouldHaveLaunchConfirmation({ taskId, runId, scriptPath, transcriptDir })
 scenario.shouldHaveWrittenScriptCopy(expectedSource?)
 scenario.shouldHaveWrittenInitialManifest(matcher?)
 scenario.shouldHaveManifest(matcher)
@@ -513,6 +609,10 @@ scenario.shouldHaveUsedProjectSavedWorkflow(name)
 scenario.shouldHaveUsedPersonalSavedWorkflow(name)
 scenario.shouldNotHaveCreatedRunStorage()
 ```
+
+`shouldHaveLaunchConfirmation(...)` should check the human-readable launch
+response required by `spec.md`: task id, run id, script file path, transcript
+directory, and the hint to use `/workflows`.
 
 Useful exposed properties:
 
@@ -539,6 +639,71 @@ The harness must never write to the user's real `~/.pi` directory or project
 `.pi/workflows` directory unless a test explicitly passes a temp path that points
 there.
 
+### Launch Error Examples
+
+The scenario harness should make launch failures explicit without creating run
+storage:
+
+```ts
+await workflowScenario()
+  .withScript(workflowScript({ meta: { name: "bad" }, body: "return Date.now();" }))
+  .expectLaunchError("WorkflowLaunchParseError")
+  .shouldNotHaveCreatedRunStorage();
+```
+
+Use this pattern for deterministic-runtime guards such as `Date.now()`,
+`Math.random()`, argument-less `new Date()`, and forbidden workflow globals.
+
+### Child Workflow And Budget Examples
+
+When child workflow support and budget semantics are under test, the scenario
+harness should keep the assertions at the public workflow boundary:
+
+```ts
+const scenario = await workflowScenario()
+  .withSavedWorkflow("child", childScript)
+  .withScript(parentScriptCallingWorkflow)
+  .withAgents(agent.label("child-agent").replyText("ok"))
+  .launch();
+
+await scenario.complete();
+
+scenario.shouldHaveCompletedWithResult({ child: "ok" });
+scenario.shouldHaveSharedSchedulerBudget();
+```
+
+Nested workflow rejection and budget exhaustion should use
+`expectLaunchError(...)` or `shouldHaveFailedWithError(...)`, depending on
+whether the error occurs before or during run execution.
+
+## Layer 3b: Saved Workflow Scenario Harness
+
+Saved workflow listing and resolution tests need less machinery than a launched
+run. If project/personal saved-workflow filesystem setup keeps repeating, add a
+small harness instead of forcing these tests through `workflowScenario`.
+
+Target file:
+
+```text
+test/workflows/saved/saved-workflow-scenario.ts
+```
+
+Target examples:
+
+```ts
+const saved = await savedWorkflowScenario()
+  .withProjectWorkflow("review", projectSource)
+  .withPersonalWorkflow("review", personalSource);
+
+await saved.shouldResolve("review", {
+  scope: "project",
+  source: projectSource,
+});
+```
+
+Assertions should cover exact resolved paths, project-before-personal
+precedence, missing files, invalid files, and list ordering.
+
 ## Layer 4: Journal Assertions
 
 Journal assertions can start inside the workflow scenario harness. If they grow,
@@ -550,6 +715,8 @@ Target examples:
 scenario.journal.shouldHaveEvents(["started", "result"]);
 scenario.journal.shouldHaveAgentResult("review-agent", "ok");
 scenario.journal.shouldNotHaveInvalidEvents();
+scenario.journal.shouldLinkStartedAndResult("review-agent");
+scenario.journal.shouldUseLatestNonInvalidatedResult("review-agent");
 ```
 
 Keep journal assertions grounded in `spec.md` and ADR 0008:
@@ -558,6 +725,38 @@ Keep journal assertions grounded in `spec.md` and ADR 0008:
 - `started` is written before agent execution;
 - `result` is written only after successful validation;
 - replay uses latest non-invalidated result.
+
+Journal helpers must not assume there is only one event pair per key. Resume,
+retry, and invalidation tests should be able to assert duplicate `started` or
+`result` events and then identify the cache-winning result.
+
+If repeated journal-key literals become noisy in journal unit tests, add a small
+builder such as `journalKey("1")` that returns a valid deterministic `v2:` key.
+
+## Layer 5: Terminal Output And Task Notification Assertions
+
+Workflow scenario assertions should cover terminal artifacts required by
+`spec.md`:
+
+```ts
+scenario.shouldHaveOutputFile({
+  status: "completed",
+  result: { summary: "ok" },
+  usage: { agentCount: 1, durationMs: 75 },
+});
+
+scenario.shouldHaveTaskNotification({
+  status: "completed",
+  outputPath: scenario.outputPath,
+  summary: expect.stringContaining("completed"),
+  usage: { agentCount: 1 },
+});
+```
+
+Terminal output assertions should check status, result or error, output-file
+path, usage counters, and duration when relevant. Notification assertions should
+check the user-visible summary and output-file pointer, while still allowing
+tests that protect exact notification rendering to assert raw text fragments.
 
 ## Relationship To Existing Agent Mock DSL
 
@@ -604,7 +803,20 @@ Acceptance criteria:
 - width failures print useful offending-line context;
 - no production code changes are required.
 
-### Slice 3: Launcher Scenario Harness
+### Slice 3: `/workflows` Command Adapter Harness
+
+Add `test/extension/tui/workflows-command-page.ts` only after the component
+screen object exists. Refactor command/view adapter tests that currently repeat
+mocked Pi contexts, temp manifests, and callback wiring.
+
+Acceptance criteria:
+
+- TUI, print, JSON, and RPC command branches remain covered;
+- callback wiring can still be asserted directly;
+- command tests reuse the shared run builders;
+- pure component tests remain in the screen object layer.
+
+### Slice 4: Launcher Scenario Harness
 
 Add `test/workflows/launch/workflow-scenario.ts` and refactor a small cluster of
 launcher tests.
@@ -617,7 +829,19 @@ Acceptance criteria:
   files, and notifications explicitly;
 - pending-agent timing tests remain precise.
 
-### Slice 4: Broader Refactor
+### Slice 5: Saved Workflow Scenario Harness
+
+Add `test/workflows/saved/saved-workflow-scenario.ts` only if saved workflow
+tests keep repeating project/personal directory setup after the builders and
+launch scenario exist.
+
+Acceptance criteria:
+
+- project-before-personal precedence remains explicit;
+- invalid and missing workflow cases still assert exact error tags and paths;
+- the harness does not create run storage.
+
+### Slice 6: Broader Refactor
 
 Refactor the rest of the noisy tests opportunistically. Do not churn direct unit
 or property tests where the DSL does not improve clarity.

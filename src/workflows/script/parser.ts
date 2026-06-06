@@ -1,5 +1,5 @@
 import { parse } from "acorn";
-import { err, ok, type Result } from "../result.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowMeta, WorkflowPhase } from "./model.ts";
 
 export interface ParsedWorkflowScript {

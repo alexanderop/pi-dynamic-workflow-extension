@@ -1,8 +1,8 @@
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { err, ok, type Result } from "../result.ts";
-import type { WorkflowAgentProgress } from "../agent/model.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowFailure,
   WorkflowPhaseProgress,

@@ -2,9 +2,9 @@ import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { err, ok, type Result } from "../result.ts";
-import { tryParseWorkflowScript, WorkflowParseError } from "../script/parser.ts";
-import type { WorkflowMeta } from "../script/model.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import { tryParseWorkflowScript, WorkflowParseError } from "#src/workflows/script/parser.ts";
+import type { WorkflowMeta } from "#src/workflows/script/model.ts";
 
 export interface WorkflowSavedWorkflowLocations {
   readonly projectDir?: string;

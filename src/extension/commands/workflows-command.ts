@@ -1,21 +1,21 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
-import { showWorkflowsTui } from "../tui/workflows-view.ts";
-import { getWorkflowRunControl } from "../../workflows/run/control-registry.ts";
+import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
+import { getWorkflowRunControl } from "#src/workflows/run/control-registry.ts";
 import {
   WorkflowRunController,
   type WorkflowRunControllerError,
-} from "../../workflows/run/controller.ts";
-import type { WorkflowRunState } from "../../workflows/run/model.ts";
-import type { Result } from "../../workflows/result.ts";
-import { WorkflowRunStore } from "../../workflows/run/store.ts";
-import { listSavedWorkflows } from "../../workflows/saved/list.ts";
-import { formatDuration } from "../../workflows/view/layout.ts";
-import { personalSavedWorkflowDir } from "../../workflows/saved/resolver.ts";
+} from "#src/workflows/run/controller.ts";
+import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import type { Result } from "#src/workflows/result.ts";
+import { WorkflowRunStore } from "#src/workflows/run/store.ts";
+import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
+import { formatDuration } from "#src/workflows/view/layout.ts";
+import { personalSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import type {
   WorkflowSavedWorkflow,
   WorkflowSavedWorkflowLocations,
-} from "../../workflows/saved/resolver.ts";
+} from "#src/workflows/saved/resolver.ts";
 
 type WorkflowCommandOutputType = "info" | "error";
 type WorkflowCommandMode = "tui" | "rpc" | "json" | "print";

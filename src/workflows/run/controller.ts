@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "../result.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
 import { transitionAgent, transitionRun, type WorkflowTransitionError } from "./state-machine.ts";
 import type { WorkflowProgressEntry, WorkflowRunState } from "./model.ts";
 import { WorkflowRunStore, type WorkflowRunStoreError } from "./store.ts";
