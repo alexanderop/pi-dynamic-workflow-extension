@@ -66,6 +66,7 @@ export interface TwoPaneBoxOptions {
   readonly rightLines: string[];
   readonly leftWidth: number;
   readonly width: number;
+  readonly styleBorder?: (text: string) => string;
 }
 
 /** Inner content widths of the two panes for a given total `width`. */
@@ -85,26 +86,31 @@ export function paneInnerWidths(
 export function twoPaneBox(options: TwoPaneBoxOptions): string[] {
   const { leftTitle, rightTitle, leftLines, rightLines, width } = options;
   const { leftWidth, rightWidth } = paneInnerWidths(width, options.leftWidth);
+  const border = options.styleBorder ?? ((text: string): string => text);
 
-  const top = `┌${titleSegment(leftTitle, leftWidth + 2)}┬${titleSegment(rightTitle, rightWidth + 2)}┐`;
-  const bottom = `└${"─".repeat(leftWidth + 2)}┴${"─".repeat(rightWidth + 2)}┘`;
+  const top = `${border("┌")}${titleSegment(leftTitle, leftWidth + 2, border)}${border("┬")}${titleSegment(rightTitle, rightWidth + 2, border)}${border("┐")}`;
+  const bottom = `${border("└")}${border("─".repeat(leftWidth + 2))}${border("┴")}${border("─".repeat(rightWidth + 2))}${border("┘")}`;
 
   const rowCount = Math.max(leftLines.length, rightLines.length);
   const body: string[] = [];
   for (let index = 0; index < rowCount; index += 1) {
     const left = padTo(leftLines[index] ?? "", leftWidth);
     const right = padTo(rightLines[index] ?? "", rightWidth);
-    body.push(`│ ${left} │ ${right} │`);
+    body.push(`${border("│")} ${left} ${border("│")} ${right} ${border("│")}`);
   }
 
   return [top, ...body, bottom];
 }
 
 /** A `┌`/`┬`-adjacent border segment: ` title ` then `─` fill to `segmentWidth`. */
-export function titleSegment(title: string, segmentWidth: number): string {
+export function titleSegment(
+  title: string,
+  segmentWidth: number,
+  styleFill: (text: string) => string = (text) => text,
+): string {
   const label = ` ${title} `;
   if (visibleWidth(label) >= segmentWidth) return truncateToWidth(label, segmentWidth, "");
-  return label + "─".repeat(segmentWidth - visibleWidth(label));
+  return label + styleFill("─".repeat(segmentWidth - visibleWidth(label)));
 }
 
 /** Compact token count, e.g. `900`, `41.1k`, `266.1k`. */

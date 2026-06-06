@@ -37,7 +37,17 @@ import {
 
 export interface WorkflowsComponentTheme {
   fg(
-    color: "text" | "accent" | "muted" | "dim" | "success" | "error" | "warning",
+    color:
+      | "text"
+      | "accent"
+      | "muted"
+      | "dim"
+      | "success"
+      | "error"
+      | "warning"
+      | "border"
+      | "borderAccent"
+      | "borderMuted",
     text: string,
   ): string;
   bold(text: string): string;
@@ -176,9 +186,15 @@ export class WorkflowsTuiComponent implements Component {
   }
 
   #renderHeader(view: MonitorViewModel, width: number): string[] {
-    const summary = `${view.header.doneAgents}/${view.header.totalAgents} agents · ${view.header.elapsedLabel}`;
+    const summary = this.#theme.fg(
+      "muted",
+      `${view.header.doneAgents}/${view.header.totalAgents} agents · ${view.header.elapsedLabel}`,
+    );
     const name = this.#theme.bold(this.#theme.fg("accent", view.header.workflowName));
-    const lines = [this.#line(width, "─".repeat(width)), headerSummaryLine(name, summary, width)];
+    const lines = [
+      this.#line(width, this.#theme.fg("borderAccent", "─".repeat(width))),
+      headerSummaryLine(name, summary, width),
+    ];
     if (view.header.description !== undefined && view.header.description.length > 0) {
       lines.push(
         this.#line(
@@ -198,12 +214,25 @@ export class WorkflowsTuiComponent implements Component {
     const header = this.#renderHeader(view, width);
 
     const phaseRows = view.phases.map((phase, index) => {
-      const cursor = index === this.#nav.selectedPhaseIndex ? "› " : "  ";
+      const selected = index === this.#nav.selectedPhaseIndex;
+      const cursor = selected ? this.#theme.fg("accent", "› ") : "  ";
       const complete = phase.totalAgents > 0 && phase.doneAgents === phase.totalAgents;
-      const marker = complete ? "✓" : String(index + 1);
-      return `${cursor}${marker} ${phase.title}  ${phase.doneAgents}/${phase.totalAgents}`;
+      const marker = complete
+        ? this.#theme.fg("success", "✓")
+        : this.#theme.fg(selected ? "accent" : "dim", String(index + 1));
+      const title = selected
+        ? this.#theme.fg("accent", phase.title)
+        : complete
+          ? this.#theme.fg("success", phase.title)
+          : phase.title;
+      const progress = this.#theme.fg(
+        complete ? "success" : "muted",
+        `${phase.doneAgents}/${phase.totalAgents}`,
+      );
+      return `${cursor}${marker} ${title}  ${progress}`;
     });
-    const rightTitle = `${view.phases[this.#nav.selectedPhaseIndex]?.title ?? ""} · ${view.selectedPhaseAgents.length} agents`;
+    const selectedPhaseTitle = view.phases[this.#nav.selectedPhaseIndex]?.title ?? "";
+    const rightTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${view.selectedPhaseAgents.length} agents`)}`;
     const leftWidth = clampLeftWidth(phaseRows, width);
     const { rightWidth } = paneInnerWidths(width, leftWidth);
     const agentRows = view.selectedPhaseAgents.map((agent) =>
@@ -213,12 +242,13 @@ export class WorkflowsTuiComponent implements Component {
     return [
       ...header,
       ...twoPaneBox({
-        leftTitle: "Phases",
+        leftTitle: this.#theme.fg("accent", "Phases"),
         rightTitle,
         leftLines: phaseRows,
         rightLines: agentRows,
         leftWidth,
         width,
+        styleBorder: (text) => this.#theme.fg("borderMuted", text),
       }),
     ];
   }
@@ -231,10 +261,11 @@ export class WorkflowsTuiComponent implements Component {
     const agents = view.selectedPhaseAgents;
     const selected = agents[this.#nav.selectedAgentIndex];
 
-    const leftTitle = `${view.phases[this.#nav.selectedPhaseIndex]?.title ?? ""} · ${agents.length} agents`;
+    const selectedPhaseTitle = view.phases[this.#nav.selectedPhaseIndex]?.title ?? "";
+    const leftTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${agents.length} agents`)}`;
     const agentRows = agents.map((agent, index) => {
-      const cursor = index === this.#nav.selectedAgentIndex ? "› " : "  ";
-      return `${cursor}${agent.glyph} ${agent.label}`;
+      const cursor = index === this.#nav.selectedAgentIndex ? this.#theme.fg("accent", "› ") : "  ";
+      return `${cursor}${this.#agentGlyph(agent)} ${agent.label}`;
     });
     const detailRows =
       selected === undefined ? ["No agent selected"] : this.#detailSections(selected);
@@ -244,17 +275,18 @@ export class WorkflowsTuiComponent implements Component {
       ...header,
       ...twoPaneBox({
         leftTitle,
-        rightTitle: selected?.label ?? "",
+        rightTitle: this.#theme.fg("accent", selected?.label ?? ""),
         leftLines: agentRows,
         rightLines: detailRows,
         leftWidth,
         width,
+        styleBorder: (text) => this.#theme.fg("borderMuted", text),
       }),
     ];
   }
 
   #detailSections(agent: MonitorAgentRow): string[] {
-    const status = `${agent.glyph} ${capitalize(agent.state)}${agent.modelLabel ? ` · ${agent.modelLabel}` : ""}`;
+    const status = `${this.#agentGlyph(agent)} ${this.#stateLabel(agent)}${agent.modelLabel ? ` · ${this.#theme.fg("muted", agent.modelLabel)}` : ""}`;
     const metricsParts: string[] = [];
     if (agent.tokens !== undefined) metricsParts.push(`${formatTokens(agent.tokens)} tok`);
     if (agent.toolCalls !== undefined) metricsParts.push(`${agent.toolCalls} tool calls`);
@@ -262,7 +294,7 @@ export class WorkflowsTuiComponent implements Component {
 
     const promptLines = splitLines(agent.fullPrompt);
     const previewLines = splitLines(agent.promptPreview);
-    const promptHead = `Prompt · ${promptLines.length} lines · ↵ expand`;
+    const promptHead = this.#theme.fg("accent", `Prompt · ${promptLines.length} lines · ↵ expand`);
     const promptBody =
       promptLines.length <= previewLines.length
         ? previewLines
@@ -278,10 +310,22 @@ export class WorkflowsTuiComponent implements Component {
         : `Activity · last ${activity.length} of ${agent.toolCalls} tool calls`;
 
     const sections = [status];
-    if (metricsParts.length > 0) sections.push(metricsParts.join(" · "));
-    sections.push("", promptHead, ...promptBody.map((line) => `  ${line}`));
-    sections.push("", activityHead, ...activity.map((line) => `  ${line}`));
-    sections.push("", "Outcome", `  ${outcomeText(agent)}`);
+    if (metricsParts.length > 0) sections.push(this.#theme.fg("dim", metricsParts.join(" · ")));
+    sections.push(
+      "",
+      promptHead,
+      ...promptBody.map((line) => this.#theme.fg("muted", `  ${line}`)),
+    );
+    sections.push(
+      "",
+      this.#theme.fg("accent", activityHead),
+      ...activity.map((line) => this.#theme.fg("muted", `  ${line}`)),
+    );
+    sections.push(
+      "",
+      this.#theme.fg("accent", "Outcome"),
+      this.#theme.fg(outcomeColor(agent), `  ${outcomeText(agent)}`),
+    );
     return sections;
   }
 
@@ -295,10 +339,11 @@ export class WorkflowsTuiComponent implements Component {
     const windowLines = wrapped.slice(this.#promptScroll, this.#promptScroll + pageRows);
 
     this.#promptMaxScroll = maxScroll;
-    const title = `Prompt · ${wrapped.length} lines`;
-    const top = `┌${titleSegment(title, Math.max(0, width - 2))}┐`;
-    const body = windowLines.map((line) => `│ ${padTo(line, inner)} │`);
-    const bottom = `└${"─".repeat(Math.max(0, width - 2))}┘`;
+    const title = this.#theme.fg("accent", `Prompt · ${wrapped.length} lines`);
+    const border = (text: string): string => this.#theme.fg("borderMuted", text);
+    const top = `${border("┌")}${titleSegment(title, Math.max(0, width - 2), border)}${border("┐")}`;
+    const body = windowLines.map((line) => `${border("│")} ${padTo(line, inner)} ${border("│")}`);
+    const bottom = `${border("└")}${border("─".repeat(Math.max(0, width - 2)))}${border("┘")}`;
 
     const first = wrapped.length === 0 ? 0 : this.#promptScroll + 1;
     const last = Math.min(wrapped.length, this.#promptScroll + pageRows);
@@ -317,9 +362,9 @@ export class WorkflowsTuiComponent implements Component {
     const lines = [
       this.#line(width, this.#theme.fg("dim", "› /workflows")),
       "",
-      this.#line(width, "─".repeat(width)),
+      this.#line(width, this.#theme.fg("borderAccent", "─".repeat(width))),
       "",
-      this.#line(width, `  ${this.#theme.bold("Dynamic workflows")}`),
+      this.#line(width, `  ${this.#theme.bold(this.#theme.fg("accent", "Dynamic workflows"))}`),
       this.#line(
         width,
         `  ${this.#theme.fg("dim", `${view.runningCount} running · ${view.completedCount} completed`)}`,
@@ -332,10 +377,14 @@ export class WorkflowsTuiComponent implements Component {
       const row = view.rows[index];
       if (row === undefined) continue;
       const selected = index === this.#nav.selectedRunIndex;
-      const cursor = selected ? "› " : "  ";
+      const cursor = selected ? this.#theme.fg("accent", "› ") : "  ";
       const tokens = row.tokens === undefined ? "" : ` · ${formatTokens(row.tokens)} tok`;
-      const content = `  ${cursor}${row.glyph} ${row.workflowName}   ${row.agentCount} agents${tokens} · ${row.durationLabel}`;
-      lines.push(this.#line(width, selected ? this.#theme.fg("accent", content) : content));
+      const metrics = this.#theme.fg(
+        "dim",
+        `${row.agentCount} agents${tokens} · ${row.durationLabel}`,
+      );
+      const content = `  ${cursor}${this.#runGlyph(row)} ${selected ? this.#theme.fg("accent", row.workflowName) : row.workflowName}   ${metrics}`;
+      lines.push(this.#line(width, content));
     }
 
     lines.push(
@@ -349,19 +398,33 @@ export class WorkflowsTuiComponent implements Component {
   }
 
   #overviewAgentRow(agent: MonitorAgentRow, innerWidth: number): string {
-    const model = agent.modelLabel === undefined ? "" : ` ${agent.modelLabel}`;
-    const left = `${agent.glyph} ${agent.label}${model}`;
+    const model =
+      agent.modelLabel === undefined ? "" : ` ${this.#theme.fg("muted", agent.modelLabel)}`;
+    const label = agent.state === "done" ? this.#theme.fg("muted", agent.label) : agent.label;
+    const left = `${this.#agentGlyph(agent)} ${label}${model}`;
     const metricParts: string[] = [];
     if (agent.tokens !== undefined) metricParts.push(`${formatTokens(agent.tokens)} tok`);
     if (agent.toolCalls !== undefined) metricParts.push(`${agent.toolCalls} tools`);
     const metric =
       metricParts.length > 0
-        ? metricParts.join(" · ")
+        ? this.#theme.fg("dim", metricParts.join(" · "))
         : agent.idleMs !== undefined
-          ? `idle ${formatIdle(agent.idleMs)}`
+          ? this.#theme.fg("warning", `idle ${formatIdle(agent.idleMs)}`)
           : "";
     if (metric === "") return padTo(left, innerWidth);
     return headerSummaryLine(left, metric, innerWidth);
+  }
+
+  #agentGlyph(agent: MonitorAgentRow): string {
+    return this.#theme.fg(agentColor(agent.state), agent.glyph);
+  }
+
+  #stateLabel(agent: MonitorAgentRow): string {
+    return this.#theme.fg(agentColor(agent.state), capitalize(agent.state));
+  }
+
+  #runGlyph(row: { readonly glyph: string; readonly status: WorkflowRunStatus }): string {
+    return this.#theme.fg(runColor(row.status), row.glyph);
   }
 
   #footerText(): string {
@@ -547,6 +610,40 @@ function canResumeRun(status: WorkflowRunStatus): boolean {
 
 function splitLines(text: string): string[] {
   return text.length === 0 ? [""] : text.split(/\r?\n/);
+}
+
+type ThemeColor = Parameters<WorkflowsComponentTheme["fg"]>[0];
+
+type AgentState = MonitorAgentRow["state"];
+
+function outcomeColor(agent: MonitorAgentRow): ThemeColor {
+  if (agent.state === "failed") return "error";
+  if (agent.state === "stopped") return "warning";
+  if (agent.state === "done") return "success";
+  return "muted";
+}
+
+function agentColor(state: AgentState): ThemeColor {
+  if (state === "done") return "success";
+  if (state === "failed") return "error";
+  if (state === "stopped") return "warning";
+  if (state === "running") return "accent";
+  return "dim";
+}
+
+function runColor(status: WorkflowRunStatus): ThemeColor {
+  if (status === "completed") return "success";
+  if (status === "failed" || status === "failing") return "error";
+  if (status === "stopped" || status === "stopping") return "warning";
+  if (
+    canPauseRun(status) ||
+    canResumeRun(status) ||
+    status === "starting" ||
+    status === "completing"
+  ) {
+    return "accent";
+  }
+  return "dim";
 }
 
 function outcomeText(agent: MonitorAgentRow): string {

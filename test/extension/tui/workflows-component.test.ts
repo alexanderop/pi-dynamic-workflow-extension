@@ -16,6 +16,26 @@ const theme: WorkflowsComponentTheme = {
   bold: (text) => text,
 };
 
+const ansiTheme: WorkflowsComponentTheme = {
+  fg: (color, text) => {
+    const code =
+      {
+        text: 37,
+        accent: 35,
+        muted: 90,
+        dim: 2,
+        success: 32,
+        error: 31,
+        warning: 33,
+        border: 37,
+        borderAccent: 35,
+        borderMuted: 90,
+      }[color] ?? 37;
+    return `\u001b[${code}m${text}\u001b[39m`;
+  },
+  bold: (text) => `\u001b[1m${text}\u001b[22m`,
+};
+
 const agent = (overrides: Partial<WorkflowAgentProgress> = {}): WorkflowAgentProgress => ({
   type: "workflow_agent",
   index: 0,
@@ -134,6 +154,23 @@ describe("WorkflowsTuiComponent State A overview", () => {
     );
     expect(screen).not.toContain("Progress");
     expect(screen).not.toContain("Details");
+  });
+
+  it("should color key monitor affordances with semantic Pi theme slots", () => {
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme: ansiTheme,
+      now: () => NOW,
+    });
+
+    const lines = component.render(120);
+    const screen = lines.join("\n");
+
+    expect(lines.every((line) => visibleWidth(line) <= 120)).toBe(true);
+    expect(screen).toContain("\u001b[35m─");
+    expect(screen).toContain("\u001b[35m› ");
+    expect(screen).toContain("\u001b[32m✓");
+    expect(screen).toContain("\u001b[33midle 1m 12s");
   });
 
   it("should show the workflow description in the overview header", () => {
