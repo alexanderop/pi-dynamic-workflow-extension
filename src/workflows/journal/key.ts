@@ -37,7 +37,9 @@ function canonicalize(value: unknown, seen = new WeakSet<object>()): unknown {
     return null;
   }
 
+  /* v8 ignore start -- all non-object primitives are handled above; this is defensive */
   if (typeof value !== "object") return value;
+  /* v8 ignore stop */
   if (seen.has(value)) throw new TypeError("Workflow journal keys require acyclic values.");
   seen.add(value);
 

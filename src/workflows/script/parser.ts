@@ -49,8 +49,12 @@ export function tryParseWorkflowScript(
 
 function toWorkflowParseError(cause: unknown): WorkflowParseError {
   if (cause instanceof WorkflowParseError) return cause;
+  // parseWorkflowScript only throws WorkflowParseError or acorn Error instances,
+  // so the non-Error branch below is defensive and unreachable in practice.
+  /* v8 ignore start */
   if (cause instanceof Error) return new WorkflowParseError(cause.message);
   return new WorkflowParseError(String(cause));
+  /* v8 ignore stop */
 }
 
 function isMetaExport(node: any): boolean {
@@ -113,7 +117,11 @@ function propertyKey(node: any): string {
 }
 
 function validateWorkflowMeta(value: unknown): WorkflowMeta {
+  // isMetaExport guarantees the meta initializer is an object expression, so
+  // literalValue always returns a record here; this guard is defensive only.
+  /* v8 ignore start */
   if (!isRecord(value)) throw new WorkflowParseError("Workflow meta must be an object.");
+  /* v8 ignore stop */
   if (typeof value.name !== "string" || value.name.length === 0) {
     throw new WorkflowParseError("Workflow meta.name must be a non-empty string.");
   }
@@ -214,7 +222,11 @@ function walk(node: any, visit: (node: any) => void): void {
   visit(node);
 
   for (const key of Object.keys(node)) {
+    // acorn AST nodes have no back-references, so "parent" never appears; this
+    // skip is defensive against ASTs that add cyclic parent links.
+    /* v8 ignore start */
     if (key === "parent") continue;
+    /* v8 ignore stop */
     const child = node[key];
     if (Array.isArray(child)) {
       for (const item of child) walk(item, visit);

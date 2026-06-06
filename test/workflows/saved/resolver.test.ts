@@ -184,4 +184,49 @@ describe("saved workflow resolver", () => {
       },
     });
   });
+
+  it("should surface a non-missing error when the exact saved workflow path is a directory", async () => {
+    await mkdir(savedWorkflowPath(projectDir, "review"), { recursive: true });
+
+    const result = await resolveSavedWorkflowByName("review", { projectDir });
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: {
+        _tag: "WorkflowSavedWorkflowReadError",
+        path: savedWorkflowPath(projectDir, "review"),
+        cause: { code: "EISDIR" },
+      },
+    });
+  });
+
+  it("should skip a scanned fallback file whose script is invalid", async () => {
+    await writeSavedWorkflowFile(
+      personalDir,
+      "notes.js",
+      invalidWorkflowScript({ metaSource: "{ name: buildName() }", body: "return null;" }),
+    );
+
+    const result = await resolveSavedWorkflowByName("deep-research", { personalDir });
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowSavedWorkflowNotFoundError", name: "deep-research" },
+    });
+  });
+
+  it("should skip a scanned fallback file whose meta name does not match", async () => {
+    await writeSavedWorkflowFile(
+      personalDir,
+      "unrelated.js",
+      workflowScript({ meta: { name: "other" }, body: "return 'other';" }),
+    );
+
+    const result = await resolveSavedWorkflowByName("deep-research", { personalDir });
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowSavedWorkflowNotFoundError", name: "deep-research" },
+    });
+  });
 });

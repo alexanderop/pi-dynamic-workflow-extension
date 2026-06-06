@@ -43,6 +43,39 @@ describe("transitionUltracodeMode", () => {
     ).toEqual({ state: "off" });
   });
 
+  it("should disable the mode with a reason", () => {
+    expect(
+      transitionUltracodeMode(
+        { state: "on", activatedBy: "session_1", goal: "audit repo" },
+        { type: "disable", reason: "too expensive" },
+      ),
+    ).toEqual({ state: "disabled", reason: "too expensive" });
+  });
+
+  it("should disable the mode without a reason", () => {
+    expect(transitionUltracodeMode({ state: "off" }, { type: "disable" })).toEqual({
+      state: "disabled",
+      reason: undefined,
+    });
+  });
+
+  it("should restore an arbitrary state directly", () => {
+    const restored: UltracodeModeState = {
+      state: "on",
+      activatedBy: "session_2",
+      goal: "ship it",
+    };
+
+    expect(transitionUltracodeMode({ state: "off" }, { type: "restore", state: restored })).toBe(
+      restored,
+    );
+  });
+
+  it("should ignore policy injection when not arming", () => {
+    const off: UltracodeModeState = { state: "off" };
+    expect(transitionUltracodeMode(off, { type: "policy_injected" })).toBe(off);
+  });
+
   it("should block valid triggers while disabled", () => {
     const disabled: UltracodeModeState = { state: "disabled", reason: "test" };
 

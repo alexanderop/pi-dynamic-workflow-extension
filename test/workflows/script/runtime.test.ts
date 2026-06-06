@@ -400,7 +400,249 @@ return await parallel([
   });
 });
 
+describe("runWorkflowScript runtime internals", () => {
+  it("should route agent calls through the default agent runner when no scheduler runner is set", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "default-runner", description: "Echo prompt by default" },
+        body: 'return await agent("echo me", { label: "echo" });',
+      }),
+    );
+
+    expect(state.result).toBe("echo me");
+  });
+
+  it("should route agent calls through a custom agentRunner option", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "custom-runner", description: "Use custom agent runner" },
+        body: 'return await agent("hello");',
+      }),
+      {
+        agentRunner: async (prompt) => `custom:${prompt}`,
+      },
+    );
+
+    expect(state.result).toBe("custom:hello");
+  });
+
+  it("should estimate tokens as prompt-only when the agent result serializes to undefined", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "undef-result", description: "Result that serializes to undefined" },
+        body: `
+const value = await agent("a prompt");
+return budget.spent();
+`,
+      }),
+      {
+        budgetTotal: 1000,
+        agentRunner: async () => undefined,
+      },
+    );
+
+    // prompt length 8 => ceil(8/4) = 2, result contributes 0.
+    expect(state.result).toBe(2);
+  });
+
+  it("should expose budget spent and remaining helpers to the workflow script", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "budget-helpers", description: "Read budget" },
+        body: `
+const before = budget.remaining();
+await agent("spend some tokens");
+return { before, spent: budget.spent(), after: budget.remaining() };
+`,
+      }),
+      { budgetTotal: 1000 },
+    );
+
+    const result = state.result as { before: number; spent: number; after: number };
+    expect(result.before).toBe(1000);
+    expect(result.spent).toBeGreaterThan(0);
+    expect(result.after).toBe(1000 - result.spent);
+  });
+
+  it("should report infinite remaining budget when no budget total is configured", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "no-budget", description: "Unbounded budget" },
+        body: "return budget.remaining();",
+      }),
+    );
+
+    expect(state.result).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("should reject non-string prompts passed to agent()", async () => {
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "bad-prompt", description: "Reject non-string prompt" },
+          body: "return await agent(123);",
+        }),
+      ),
+    ).rejects.toThrow(/requires a string prompt/);
+  });
+
+  it("should reject phase titles that are not non-empty strings", async () => {
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "bad-phase", description: "Reject empty phase" },
+          body: 'phase("");\nreturn null;',
+        }),
+      ),
+    ).rejects.toThrow(/non-empty string/);
+  });
+
+  it("should rethrow a schema agent failure rather than swallowing it to null", async () => {
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "schema-fail", description: "Schema failures must surface" },
+          body: 'return await agent("structured", { label: "s", schema: { type: "object" } });',
+        }),
+        {
+          schedulerRunner: async () => {
+            throw new Error("agent died on schema task");
+          },
+        },
+      ),
+    ).rejects.toThrow(/agent died on schema task/);
+  });
+
+  it("should rethrow a non-schema failure tagged as a schema variant", async () => {
+    class SchemaTagged extends Error {
+      readonly variant = "schema";
+    }
+
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "schema-variant", description: "Schema-variant failures must surface" },
+          body: 'return await agent("task", { label: "v" });',
+        }),
+        {
+          schedulerRunner: async () => {
+            throw new SchemaTagged("schema variant failure");
+          },
+        },
+      ),
+    ).rejects.toThrow(/schema variant failure/);
+  });
+
+  it("should report a string error message when a workflow rejects with a non-Error value", async () => {
+    const result = await tryRunWorkflowScript(
+      workflowScript({
+        meta: { name: "string-throw", description: "Throw a string" },
+        body: 'throw "plain string failure";',
+      }),
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowRuntimeError", message: "plain string failure" },
+    });
+  });
+
+  it("should report a message from a thrown object that carries a message property", async () => {
+    const result = await tryRunWorkflowScript(
+      workflowScript({
+        meta: { name: "object-throw", description: "Throw an object" },
+        body: 'throw { message: "object message failure" };',
+      }),
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { message: "object message failure" },
+    });
+  });
+
+  it("should report a stringified message for a thrown object without a message", async () => {
+    const result = await tryRunWorkflowScript(
+      workflowScript({
+        meta: { name: "weird-throw", description: "Throw a number" },
+        body: "throw 42;",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { message: "42" },
+    });
+  });
+
+  it("should surface parse failures through tryRunWorkflowScript without partial state", async () => {
+    const result = await tryRunWorkflowScript("return null;");
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowRuntimeError" },
+    });
+    expect((result as { error: { partialState?: unknown } }).error.partialState).toBeUndefined();
+  });
+
+  it("should allow new Date with arguments through an aliased constructor", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "aliased-date-ok", description: "Aliased Date with args is allowed" },
+        body: "const D = Date;\nreturn new D(1700000000000).getTime();",
+      }),
+    );
+
+    expect(state.result).toBe(1700000000000);
+  });
+
+  it("should construct a real date when the aliased Date is called without new", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "aliased-date-call", description: "Aliased Date called as a function" },
+        body: "const D = Date;\nreturn D(1700000000000).getTime();",
+      }),
+    );
+
+    expect(state.result).toBe(1700000000000);
+  });
+
+  it("should block an aliased argument-less Date constructor at runtime", async () => {
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "aliased-date-bad", description: "Aliased argument-less Date is blocked" },
+          body: "const D = Date;\nreturn new D().getTime();",
+        }),
+      ),
+    ).rejects.toThrow(/argument-less new Date/);
+  });
+
+  it("should expose stopAgent and isStopped on the runtime control", async () => {
+    let control: (WorkflowRuntimeControl & { stopAgent(id: string): void }) | undefined;
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "control-surface", description: "Exercise control surface" },
+        body: 'return await agent("x");',
+      }),
+      {
+        onControlReady: (runtimeControl) => {
+          control = runtimeControl as WorkflowRuntimeControl & { stopAgent(id: string): void };
+          control.stopAgent("nonexistent-agent");
+        },
+      },
+    );
+
+    expect(control?.isStopped()).toBe(false);
+    expect(state.result).toBe("x");
+  });
+});
+
 describe("parallel", () => {
+  it("should reject a non-array thunks argument", async () => {
+    await expect(parallel("not-an-array" as never)).rejects.toThrow(/requires an array of thunks/);
+  });
+
   it("should preserve result order and resolve throwing thunks to null when tasks run in parallel", async () => {
     const result = await parallel([
       async () => {
@@ -431,6 +673,16 @@ describe("parallel", () => {
 });
 
 describe("pipeline", () => {
+  it("should reject a non-array items argument", async () => {
+    await expect(pipeline("nope" as never)).rejects.toThrow(/requires an array of items/);
+  });
+
+  it("should reject non-function pipeline stages", async () => {
+    await expect(pipeline([1, 2], "not-a-stage" as never)).rejects.toThrow(
+      /stages must be functions/,
+    );
+  });
+
   it("should seed the first stage previous value with the original item", async () => {
     const item = { name: "x" };
     const result = await pipeline([item], async (previous, originalItem) => [

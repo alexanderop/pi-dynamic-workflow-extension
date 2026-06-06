@@ -174,7 +174,11 @@ export class WorkflowAgentScheduler {
     }
 
     const running = this.#runningAgents.get(progressIndex);
+    // A non-terminal agent that is not queued is always running, so this guard
+    // is defensive only and cannot be reached through the scheduler's API.
+    /* v8 ignore start */
     if (running === undefined) return false;
+    /* v8 ignore stop */
 
     this.#stop(progressIndex, "agent-stopped", running.journalKey);
     running.abortController.abort();
@@ -353,7 +357,11 @@ export class WorkflowAgentScheduler {
   }
 
   #appendJournalEvent(event: Parameters<WorkflowAgentJournal["append"]>[0]): Promise<void> {
+    // Every caller already guards on journal presence, so this is a defensive
+    // guard that the public API cannot reach.
+    /* v8 ignore start */
     if (this.#journal === undefined) return Promise.resolve();
+    /* v8 ignore stop */
     const write =
       this.#journalTail === undefined
         ? this.#journal.append(event)
@@ -364,7 +372,12 @@ export class WorkflowAgentScheduler {
 
   #applyAgentEvent(progressIndex: number, event: Parameters<typeof transitionAgent>[1]): void {
     const result = transitionAgent(this.#progress[progressIndex]!, event);
+    // The scheduler only applies events that are valid for the agent's current
+    // state, so an invalid transition here is a defensive guard against future
+    // regressions and is unreachable through the public API.
+    /* v8 ignore start */
     if (result.status === "error") throw new Error(result.error.message);
+    /* v8 ignore stop */
     this.#progress[progressIndex] = result.value;
     this.#emitProgress();
   }

@@ -11,6 +11,12 @@ describe("Result", () => {
     expect(match(success, { ok: (value) => value + 1, err: () => 0 })).toBe(43);
   });
 
+  it("should route to the err handler when matching an error Result", () => {
+    const failure = err(new Error("boom"));
+
+    expect(match(failure, { ok: () => "ok", err: (error) => error.message })).toBe("boom");
+  });
+
   it("should capture thrown sync and async failures when callers provide error mappers", async () => {
     const parsed = tryResult(
       () => JSON.parse("{"),

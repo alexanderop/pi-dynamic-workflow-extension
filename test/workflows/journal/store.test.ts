@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -48,6 +48,52 @@ describe("WorkflowJournalStore", () => {
   it("should read a missing journal as an empty event list", async () => {
     await expect(new WorkflowJournalStore({ journalPath }).readEvents()).resolves.toEqual([]);
   });
+
+  it("should expose the configured journal path", () => {
+    expect(new WorkflowJournalStore({ journalPath }).journalPath).toBe(journalPath);
+  });
+
+  it("should rethrow non-not-found read errors", async () => {
+    const store = new WorkflowJournalStore({ journalPath: tempDir });
+    await expect(store.readEvents()).rejects.toMatchObject({ code: "EISDIR" });
+  });
+
+  it("should read stopped and failed events and skip blank lines", async () => {
+    const key = journalKey("5".repeat(64));
+    const store = new WorkflowJournalStore({ journalPath });
+
+    await store.append({ type: "stopped", key, agentId: "a0000000000000000", reason: "user" });
+    await store.append({
+      type: "failed",
+      key,
+      agentId: "a0000000000000000",
+      error: { message: "boom" },
+    });
+
+    await expect(store.readEvents()).resolves.toEqual([
+      { type: "stopped", key, agentId: "a0000000000000000", reason: "user" },
+      { type: "failed", key, agentId: "a0000000000000000", error: { message: "boom" } },
+    ]);
+  });
+
+  it("should throw on a journal line that is not a valid event", async () => {
+    await mkdir(join(tempDir, "wf_test"), { recursive: true });
+    await writeFile(journalPath, `${JSON.stringify({ type: "started", key: "not-a-key" })}\n`);
+
+    await expect(new WorkflowJournalStore({ journalPath }).readEvents()).rejects.toThrow(
+      /Invalid workflow journal event at line 1/,
+    );
+  });
+
+  it("should reject events with an unknown type", async () => {
+    await mkdir(join(tempDir, "wf_test"), { recursive: true });
+    const key = journalKey("6".repeat(64));
+    await writeFile(journalPath, `${JSON.stringify({ type: "mystery", key })}\n`);
+
+    await expect(new WorkflowJournalStore({ journalPath }).readEvents()).rejects.toThrow(
+      /Invalid workflow journal event/,
+    );
+  });
 });
 
 describe("buildWorkflowJournalResultCache", () => {
@@ -86,6 +132,24 @@ describe("buildWorkflowJournalResultCache", () => {
     const result = cache.get(key) as { nested: { ok: boolean } };
     result.nested.ok = false;
 
+    expect(cache.get(key)).toEqual({ nested: { ok: true } });
+  });
+
+  it("should return undefined when getting a key that is not cached", () => {
+    const cache = buildWorkflowJournalResultCache([]);
+    expect(cache.get(journalKey("7".repeat(64)))).toBeUndefined();
+  });
+
+  it("should expose cloned entries for all cached results", () => {
+    const key = journalKey("8".repeat(64));
+    const cache = buildWorkflowJournalResultCache([
+      { type: "result", key, agentId: "a0000000000000000", result: { nested: { ok: true } } },
+    ]);
+
+    const entries = cache.entries();
+    expect(entries).toEqual([[key, { nested: { ok: true } }]]);
+
+    (entries[0]![1] as { nested: { ok: boolean } }).nested.ok = false;
     expect(cache.get(key)).toEqual({ nested: { ok: true } });
   });
 });

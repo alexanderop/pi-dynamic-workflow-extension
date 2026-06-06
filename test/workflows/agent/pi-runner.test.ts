@@ -160,6 +160,223 @@ describe("createPiWorkflowAgentRunner", () => {
   });
 });
 
+describe("createPiWorkflowAgentRunner model resolution", () => {
+  it("should reuse the context model when the requested model matches its bare id", async () => {
+    const session = new FakePiSession();
+    const contextModel = modelForTest("anthropic", "claude-opus-4-8");
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      model: contextModel,
+      sessionFactory,
+    });
+
+    await runner(
+      requestForTest({ options: { label: "a", model: "claude-opus-4-8", agentType: "explorer" } }),
+    );
+
+    expect(sessionFactory).toHaveBeenCalledWith(expect.objectContaining({ model: contextModel }));
+    expect(session.promptText).toContain("Agent type: explorer");
+  });
+
+  it("should throw when a model is requested but no registry is available to resolve it", async () => {
+    const session = new FakePiSession();
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+
+    await expect(
+      runner(requestForTest({ options: { label: "a", model: "anthropic/some-model" } })),
+    ).rejects.toThrow(/no Pi model registry is available/);
+  });
+
+  it("should resolve a requested model by its unique bare id through the registry", async () => {
+    const session = new FakePiSession();
+    const wanted = modelForTest("anthropic", "claude-haiku");
+    const modelRegistry = {
+      getAll: () => [modelForTest("openai", "gpt"), wanted],
+    } as unknown as NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", modelRegistry, sessionFactory });
+
+    await runner(requestForTest({ options: { label: "a", model: "claude-haiku" } }));
+
+    expect(sessionFactory).toHaveBeenCalledWith(expect.objectContaining({ model: wanted }));
+  });
+
+  it("should throw when a requested bare id is ambiguous across providers", async () => {
+    const session = new FakePiSession();
+    const modelRegistry = {
+      getAll: () => [modelForTest("anthropic", "shared"), modelForTest("openai", "shared")],
+    } as unknown as NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", modelRegistry, sessionFactory });
+
+    await expect(
+      runner(requestForTest({ options: { label: "a", model: "shared" } })),
+    ).rejects.toThrow(/ambiguous model/);
+  });
+
+  it("should throw when a requested model matches nothing in the registry", async () => {
+    const session = new FakePiSession();
+    const modelRegistry = {
+      getAll: () => [modelForTest("anthropic", "known")],
+    } as unknown as NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", modelRegistry, sessionFactory });
+
+    await expect(
+      runner(requestForTest({ options: { label: "a", model: "anthropic/unknown" } })),
+    ).rejects.toThrow(/unknown model/);
+  });
+});
+
+describe("createPiWorkflowAgentRunner final-text extraction", () => {
+  function sessionWith(messages: unknown[]): PiWorkflowAgentSession {
+    return {
+      messages,
+      prompt: vi.fn<(...args: any[]) => any>(async () => undefined),
+      abort: vi.fn<(...args: any[]) => any>(),
+      dispose: vi.fn<(...args: any[]) => any>(),
+    };
+  }
+
+  it("should join multiple text parts and skip non-text parts in the final message", async () => {
+    const session = sessionWith([
+      { role: "user", content: "ignored" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "line one" },
+          { type: "image", url: "x" },
+          { type: "text", text: "line two" },
+        ],
+      },
+    ]);
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    const result = await runner(requestForTest());
+
+    expect(result).toBe("line one\nline two");
+  });
+
+  it("should accept plain string assistant content as the final text", async () => {
+    const session = sessionWith([{ role: "assistant", content: "string content" }]);
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    expect(await runner(requestForTest())).toBe("string content");
+  });
+
+  it("should fall back to agent state messages when the session has none", async () => {
+    const session: PiWorkflowAgentSession = {
+      agent: { state: { messages: [{ role: "assistant", content: "from agent state" }] } },
+      prompt: vi.fn<(...args: any[]) => any>(async () => undefined),
+      abort: vi.fn<(...args: any[]) => any>(),
+      dispose: vi.fn<(...args: any[]) => any>(),
+    };
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    expect(await runner(requestForTest())).toBe("from agent state");
+  });
+
+  it("should default to an empty message list when neither messages nor agent state exist", async () => {
+    const session: PiWorkflowAgentSession = {
+      prompt: vi.fn<(...args: any[]) => any>(async () => undefined),
+      abort: vi.fn<(...args: any[]) => any>(),
+      dispose: vi.fn<(...args: any[]) => any>(),
+    };
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    await expect(runner(requestForTest())).rejects.toThrow(/without a final assistant text/);
+  });
+
+  it("should treat non-array, non-string assistant content as empty and fail extraction", async () => {
+    const session = sessionWith([{ role: "assistant", content: { unexpected: true } }]);
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    await expect(runner(requestForTest())).rejects.toThrow(/without a final assistant text/);
+  });
+
+  it("should ignore non-assistant trailing messages when extracting final text", async () => {
+    const session = sessionWith([
+      { role: "assistant", content: "earlier" },
+      { role: "tool", content: "tool output" },
+    ]);
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    expect(await runner(requestForTest())).toBe("earlier");
+  });
+});
+
+describe("createPiWorkflowAgentRunner abort handling", () => {
+  it("should reject before starting when the signal is already aborted", async () => {
+    const session = new FakePiSession();
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(runner(requestForTest({ signal: controller.signal }))).rejects.toThrow(
+      /aborted before it started/,
+    );
+    expect(session.abort).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("should reject after the prompt resolves when the signal aborted mid-run", async () => {
+    const controller = new AbortController();
+    const session = new FakePiSession(() => {
+      controller.abort();
+    });
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    await expect(runner(requestForTest({ signal: controller.signal }))).rejects.toThrow(
+      /'agent_1' was aborted\.$/,
+    );
+  });
+
+  it("should omit phase and agent-type lines from the prompt when they are unset", async () => {
+    const session = new FakePiSession();
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      sessionFactory: async () => ({ session }),
+    });
+
+    await runner({
+      agentId: "agent_1",
+      prompt: "bare task",
+      options: {},
+      signal: new AbortController().signal,
+    });
+
+    expect(session.promptText).not.toContain("Phase:");
+    expect(session.promptText).not.toContain("Agent type:");
+    expect(session.promptText).toContain("Label: agent");
+  });
+});
+
 function requestForTest(overrides: Partial<WorkflowAgentRunRequest> = {}): WorkflowAgentRunRequest {
   return {
     agentId: "agent_1",

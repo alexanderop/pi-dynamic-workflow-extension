@@ -390,6 +390,221 @@ describe("WorkflowAgentScheduler", () => {
   });
 });
 
+describe("WorkflowAgentScheduler construction and control", () => {
+  it("should reject a non-positive-integer maxConcurrent", () => {
+    expect(
+      () => new WorkflowAgentScheduler({ maxConcurrent: 0, runner: async ({ prompt }) => prompt }),
+    ).toThrow(/maxConcurrent must be a positive integer/);
+    expect(
+      () =>
+        new WorkflowAgentScheduler({ maxConcurrent: 1.5, runner: async ({ prompt }) => prompt }),
+    ).toThrow(/maxConcurrent must be a positive integer/);
+  });
+
+  it("should reject a non-positive-integer maxTotalAgents", () => {
+    expect(
+      () => new WorkflowAgentScheduler({ maxTotalAgents: 0, runner: async ({ prompt }) => prompt }),
+    ).toThrow(/maxTotalAgents must be a positive integer/);
+  });
+
+  it("should report run-stopped state through isStopped", async () => {
+    const scheduler = new WorkflowAgentScheduler({ runner: async ({ prompt }) => prompt });
+    expect(scheduler.isStopped()).toBe(false);
+    scheduler.stopRun();
+    expect(scheduler.isStopped()).toBe(true);
+  });
+
+  it("should ignore a redundant pause and a redundant resume", () => {
+    const scheduler = new WorkflowAgentScheduler({ runner: async ({ prompt }) => prompt });
+    expect(scheduler.pause()).toBe(true);
+    expect(scheduler.pause()).toBe(false);
+    expect(scheduler.resume()).toBe(true);
+    expect(scheduler.resume()).toBe(false);
+  });
+
+  it("should return false when stopAgent targets an unknown or terminal agent", async () => {
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      runner: async ({ prompt }) => prompt,
+    });
+
+    expect(scheduler.stopAgent("missing")).toBe(false);
+    await scheduler.schedule("done-agent");
+    expect(scheduler.stopAgent("agent_0")).toBe(false);
+  });
+
+  it("should return false when stopRun is called again after everything is already stopped", () => {
+    const scheduler = new WorkflowAgentScheduler({ runner: async ({ prompt }) => prompt });
+    expect(scheduler.stopRun()).toBe(false);
+    expect(scheduler.stopRun()).toBe(false);
+  });
+
+  it("should resolve agents scheduled after a run stop to null", async () => {
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      runner: async ({ prompt }) => prompt,
+    });
+    scheduler.stopRun();
+
+    await expect(scheduler.schedule("after-stop", { label: "late" })).resolves.toBeNull();
+    expect(scheduler.progress()[0]).toMatchObject({ state: "stopped" });
+  });
+});
+
+describe("WorkflowAgentScheduler replay and journal edge cases", () => {
+  it("should resolve to a cached replay result without invoking the runner", async () => {
+    let runnerCalls = 0;
+    const cache = new Map<string, unknown>();
+    const replayCache = {
+      has: () => true,
+      get: () => "cached value",
+    };
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      replayCache,
+      runner: async ({ prompt }) => {
+        runnerCalls += 1;
+        return prompt;
+      },
+    });
+    void cache;
+
+    await expect(scheduler.schedule("replayed", { label: "replay" })).resolves.toBe("cached value");
+    expect(runnerCalls).toBe(0);
+    expect(scheduler.progress()[0]).toMatchObject({
+      state: "done",
+      resultPreview: "cached value",
+    });
+  });
+
+  it("should skip journal writes when no journal key is computed", async () => {
+    const events: unknown[] = [];
+    const scheduler = new WorkflowAgentScheduler({
+      // No journal and no replayCache => journalKey stays undefined.
+      runner: async ({ prompt }) => prompt,
+    });
+    void events;
+
+    await expect(scheduler.schedule("no-journal")).resolves.toBe("no-journal");
+  });
+
+  it("should preview an undefined runner result as an empty string", async () => {
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      runner: async () => undefined,
+    });
+
+    await expect(scheduler.schedule("void-result")).resolves.toBeUndefined();
+    expect(scheduler.progress()[0]).toMatchObject({ state: "done", resultPreview: "" });
+  });
+
+  it("should serialize a non-Error rejection in journal and progress", async () => {
+    const events: WorkflowJournalEvent[] = [];
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      journal: {
+        append: async (event) => {
+          events.push(event);
+        },
+      },
+      runner: async () => Promise.reject("string failure"),
+    });
+
+    await expect(scheduler.schedule("string-fail")).rejects.toBe("string failure");
+    expect(scheduler.progress()[0]).toMatchObject({
+      state: "failed",
+      resultPreview: "string failure",
+    });
+    expect(events).toMatchObject([
+      { type: "started" },
+      { type: "failed", error: { message: "string failure" } },
+    ]);
+  });
+
+  it("should swallow a failing-event journal write without masking the runner failure", async () => {
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      journal: {
+        append: async (event) => {
+          if (event.type === "failed") throw new Error("journal down");
+        },
+      },
+      runner: async () => {
+        throw new Error("runner exploded");
+      },
+    });
+
+    await expect(scheduler.schedule("journaled")).rejects.toThrow("runner exploded");
+  });
+
+  it("should compute a replay key yet skip all journal writes when only a replay cache is set", async () => {
+    const replayCache = { has: () => false, get: () => undefined };
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      replayCache,
+      runner: async ({ prompt }) => prompt,
+    });
+
+    await expect(scheduler.schedule("cache-only")).resolves.toBe("cache-only");
+  });
+
+  it("should skip the failed journal write when only a replay cache is set and the runner fails", async () => {
+    const replayCache = { has: () => false, get: () => undefined };
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      replayCache,
+      runner: async () => {
+        throw new Error("boom");
+      },
+    });
+
+    await expect(scheduler.schedule("cache-only-fail")).rejects.toThrow("boom");
+  });
+
+  it("should treat a second stop of the same agent as a no-op", async () => {
+    const exit = deferred<string>();
+    const scheduler = new WorkflowAgentScheduler({
+      maxConcurrent: 1,
+      createAgentId: sequenceIds("agent"),
+      runner: async () => exit.promise,
+    });
+
+    const result = scheduler.schedule("running", { label: "run" });
+    await delay(0);
+    expect(scheduler.stopAgent("agent_0")).toBe(true);
+    // Agent is stopped but still settling in runningAgents; stopRun loops over it
+    // again and the second #stop call must be ignored. Because the only agent is
+    // already stopped, no work is pending and stopRun reports false.
+    expect(scheduler.stopRun()).toBe(false);
+
+    exit.resolve("late");
+    await expect(result).resolves.toBeNull();
+    expect(scheduler.progress()[0]).toMatchObject({ state: "stopped" });
+  });
+
+  it("should serialize the stopped journal event when stopping a running journaled agent", async () => {
+    const events: WorkflowJournalEvent[] = [];
+    const exit = deferred<string>();
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      journal: {
+        append: async (event) => {
+          events.push(event);
+        },
+      },
+      runner: async () => exit.promise,
+    });
+
+    const result = scheduler.schedule("running", { label: "run" });
+    await delay(0);
+    expect(scheduler.stopAgent("agent_0")).toBe(true);
+    exit.resolve("late");
+    await expect(result).resolves.toBeNull();
+
+    expect(events.map((event) => event.type)).toContain("stopped");
+  });
+});
+
 interface Deferred<T> {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;

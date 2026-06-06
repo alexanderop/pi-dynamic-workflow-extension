@@ -53,4 +53,54 @@ describe("canonicalJson", () => {
 
     expect(() => canonicalJson(cyclic)).toThrow(/acyclic/);
   });
+
+  it("should reject non-finite numbers", () => {
+    expect(() => canonicalJson({ value: Number.POSITIVE_INFINITY })).toThrow(/finite/);
+    expect(() => canonicalJson({ value: Number.NaN })).toThrow(/finite/);
+  });
+
+  it("should accept finite numbers and primitive scalars", () => {
+    expect(canonicalJson({ n: 1, s: "x", b: true, z: null })).toBe(
+      JSON.stringify({ b: true, n: 1, s: "x", z: null }),
+    );
+  });
+
+  it("should reject bigint values that are not JSON serializable", () => {
+    expect(() => canonicalJson({ count: 1n })).toThrow(/bigint/);
+  });
+
+  it("should normalize function and symbol object values to null", () => {
+    expect(
+      canonicalJson({
+        b: () => undefined,
+        c: Symbol("s"),
+        d: "keep",
+      }),
+    ).toBe(JSON.stringify({ b: null, c: null, d: "keep" }));
+  });
+
+  it("should normalize undefined, function, and symbol array items to null", () => {
+    expect(canonicalJson([undefined, () => undefined, Symbol("s"), "keep"])).toBe(
+      JSON.stringify([null, null, null, "keep"]),
+    );
+  });
+
+  it("should canonicalize nested array and object values", () => {
+    expect(canonicalJson([{ b: 2, a: 1 }, true, null])).toBe(
+      JSON.stringify([{ a: 1, b: 2 }, true, null]),
+    );
+  });
+});
+
+describe("computeWorkflowAgentKey optional fields", () => {
+  it("should default missing optional fields to null in the preimage", () => {
+    expect(
+      computeWorkflowAgentKey({
+        prompt: "p",
+        agentType: "general-purpose",
+        model: "m",
+        cwd: "/repo",
+      }),
+    ).toMatch(/^v2:[0-9a-f]{64}$/);
+  });
 });

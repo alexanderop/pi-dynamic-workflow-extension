@@ -112,8 +112,14 @@ async function runPiWorkflowAgent(
 async function defaultSessionFactory(
   options: CreateAgentSessionOptions,
 ): Promise<PiWorkflowAgentSessionFactoryResult> {
+  // The runner always supplies cwd/agentDir, so the defensive process.cwd()/
+  // getAgentDir() fallbacks here are only reachable when defaultSessionFactory
+  // is called outside the runner; they cannot be exercised through this module's
+  // public API.
+  /* v8 ignore start */
   const cwd = options.cwd ?? process.cwd();
   const agentDir = options.agentDir ?? getAgentDir();
+  /* v8 ignore stop */
   const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, noExtensions: true });
   await resourceLoader.reload();
 

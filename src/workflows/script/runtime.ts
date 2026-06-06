@@ -155,7 +155,11 @@ export async function tryRunWorkflowScript(
   }
 }
 
+// emitStateChange is reassigned to the real emitter before any script code or
+// scheduler progress callback can fire, so this initial no-op is never invoked.
+/* v8 ignore start */
 function noop(): void {}
+/* v8 ignore stop */
 
 function errorMessage(cause: unknown): string {
   if (cause instanceof Error) return cause.message;

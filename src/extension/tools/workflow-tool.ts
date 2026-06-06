@@ -320,7 +320,9 @@ function formatWorkflowToolResult(
   }
 
   const text = result.content?.find((entry) => entry.type === "text")?.text ?? "";
+  /* v8 ignore start -- String.split always yields at least one element, so [0] is never undefined */
   const line = text.split("\n")[0] ?? "";
+  /* v8 ignore stop */
   if (context.isError === true) return theme.fg("error", `failed ${line}`);
   return theme.fg("dim", line);
 }

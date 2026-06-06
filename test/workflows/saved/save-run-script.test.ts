@@ -1,12 +1,14 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { launchWorkflow } from "#src/workflows/launch/launcher.ts";
 import { saveRunScript } from "#src/workflows/saved/save-run-script.ts";
 import { projectSavedWorkflowDir, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
+import { WorkflowRunStore } from "#src/workflows/run/store.ts";
+import { workflowRun } from "../../builders/workflow-run.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
-import { workflowScript } from "../script/workflow-factory.ts";
+import { invalidWorkflowScript, workflowScript } from "../script/workflow-factory.ts";
 import { pathExists, unwrap } from "../../support.ts";
 
 describe("saveRunScript", () => {
@@ -152,6 +154,180 @@ return { result };
       false,
     );
     agents.expectNoUnhandledAgents();
+  });
+
+  async function writeRunWithScript(
+    runId: string,
+    status: "running" | "completed",
+    scriptOptions: { name?: string; source?: string; scriptPath?: string } = {},
+  ): Promise<string> {
+    const scriptPath = scriptOptions.scriptPath ?? join(tempDir, "runs", runId, "script.js");
+    if (scriptOptions.source !== undefined) {
+      await mkdir(dirname(scriptPath), { recursive: true });
+      await writeFile(scriptPath, scriptOptions.source, "utf8");
+    }
+    const builder = status === "completed" ? workflowRun.completed : workflowRun.running;
+    const state = builder(scriptOptions.name ?? "review", {
+      runId,
+      script: scriptOptions.source ?? "return null;",
+      scriptPath,
+    });
+    unwrap(await new WorkflowRunStore({ rootDir }).writeRun(state));
+    return scriptPath;
+  }
+
+  it("should reject saving a run with an invalid workflow name", async () => {
+    const result = await saveRunScript(
+      { runId: "wf_x", name: "../escape", scope: "project" },
+      { rootDir },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowSavedWorkflowInvalidNameError", name: "../escape" },
+    });
+  });
+
+  it("should reject saving a run with an unknown scope", async () => {
+    const result = await saveRunScript(
+      { runId: "wf_x", name: "review", scope: "team" as "project" },
+      { rootDir },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowSaveRunScriptInvalidScopeError", scope: "team" },
+    });
+  });
+
+  it("should reject saving a run that has not completed", async () => {
+    await writeRunWithScript("wf_running", "running");
+
+    const result = await saveRunScript(
+      { runId: "wf_running", name: "review", scope: "project" },
+      { rootDir },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: {
+        _tag: "WorkflowSaveRunScriptInvalidRunStatusError",
+        runId: "wf_running",
+        status: "running",
+      },
+    });
+  });
+
+  it("should reject saving when the run script file cannot be read", async () => {
+    await writeRunWithScript("wf_no_script", "completed", {
+      scriptPath: join(tempDir, "runs", "wf_no_script", "missing.js"),
+    });
+
+    const result = await saveRunScript(
+      { runId: "wf_no_script", name: "review", scope: "project" },
+      { rootDir },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: {
+        _tag: "WorkflowSaveRunScriptReadError",
+        path: join(tempDir, "runs", "wf_no_script", "missing.js"),
+      },
+    });
+  });
+
+  it("should reject saving when the run script is not a valid workflow", async () => {
+    const scriptPath = await writeRunWithScript("wf_bad_script", "completed", {
+      source: invalidWorkflowScript({ metaSource: "{ name: buildName() }", body: "return null;" }),
+    });
+
+    const result = await saveRunScript(
+      { runId: "wf_bad_script", name: "review", scope: "project" },
+      { rootDir },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowSaveRunScriptInvalidWorkflowError", path: scriptPath },
+    });
+  });
+
+  it("should save a completed run as a personal workflow", async () => {
+    const personalDir = join(tempDir, "home", ".pi", "workflows");
+    await writeRunWithScript("wf_personal", "completed", {
+      name: "review",
+      source: workflowScript({ meta: { name: "review" }, body: "return 'personal';" }),
+    });
+
+    const saved = unwrap(
+      await saveRunScript(
+        { runId: "wf_personal", name: "review", scope: "personal" },
+        { rootDir, savedWorkflowDirs: { personalDir } },
+      ),
+    );
+
+    expect(saved).toMatchObject({
+      runId: "wf_personal",
+      name: "review",
+      scope: "personal",
+      path: savedWorkflowPath(personalDir, "review"),
+    });
+    expect(await pathExists(saved.path)).toBe(true);
+  });
+
+  it("should default the personal scope target to the home saved workflow directory", async () => {
+    const home = join(tempDir, "fake-home");
+    await writeRunWithScript("wf_personal_home", "completed", {
+      name: "review",
+      source: workflowScript({ meta: { name: "review" }, body: "return 'personal';" }),
+    });
+
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    try {
+      const saved = unwrap(
+        await saveRunScript(
+          { runId: "wf_personal_home", name: "review", scope: "personal" },
+          { rootDir },
+        ),
+      );
+
+      expect(saved.scope).toBe("personal");
+      expect(saved.path).toBe(join(home, ".pi", "workflows", "review.js"));
+      expect(await pathExists(saved.path)).toBe(true);
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = originalUserProfile;
+    }
+  });
+
+  it("should reject saving when the saved workflow script cannot be written", async () => {
+    const blockingFile = join(tempDir, "blocking-file");
+    await writeFile(blockingFile, "not a directory", "utf8");
+    const projectDir = join(blockingFile, "workflows");
+    await writeRunWithScript("wf_write_fail", "completed", {
+      name: "review",
+      source: workflowScript({ meta: { name: "review" }, body: "return 'review';" }),
+    });
+
+    const result = await saveRunScript(
+      { runId: "wf_write_fail", name: "review", scope: "project" },
+      { rootDir, savedWorkflowDirs: { projectDir } },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: {
+        _tag: "WorkflowSaveRunScriptWriteError",
+        path: savedWorkflowPath(projectDir, "review"),
+        cause: { code: "ENOTDIR" },
+      },
+    });
   });
 
   function launchOptions(

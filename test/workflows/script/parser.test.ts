@@ -156,4 +156,154 @@ return await agent("Audit code that mentions Date.now in docs");
       error: { name: "WorkflowParseError" },
     });
   });
+
+  it("should wrap a non-workflow parse Error from acorn as a WorkflowParseError", () => {
+    const result = tryParseWorkflowScript("export const meta = {");
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { name: "WorkflowParseError" },
+    });
+  });
+
+  it("should reject a non-const meta export and a multi-declarator meta export", () => {
+    expect(() =>
+      parseWorkflowScript('export let meta = { name: "x", description: "d" };\nreturn null;'),
+    ).toThrow(/start with/);
+
+    expect(() =>
+      parseWorkflowScript(
+        'export const meta = { name: "x", description: "d" }, other = 1;\nreturn null;',
+      ),
+    ).toThrow(/start with/);
+  });
+
+  it("should reject sparse array holes inside meta literals", () => {
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource: '{ name: "holes", description: "d", phases: [,] }',
+        }),
+      ),
+    ).toThrow(/must not be empty/);
+  });
+
+  it("should reject getters, methods, and numeric keys in meta objects", () => {
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({ metaSource: '{ name: "m", get description() { return "d"; } }' }),
+      ),
+    ).toThrow(/plain data properties/);
+
+    expect(() =>
+      parseWorkflowScript(invalidWorkflowScript({ metaSource: '{ name: "m", describe() {} }' })),
+    ).toThrow(/plain data properties/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({ metaSource: '{ name: "m", description: "d", 1: "x" }' }),
+      ),
+    ).toThrow(/identifiers or string literals/);
+  });
+
+  it("should reject meta.name that is missing or empty", () => {
+    expect(() =>
+      parseWorkflowScript(invalidWorkflowScript({ metaSource: '{ description: "d" }' })),
+    ).toThrow(/meta\.name must be a non-empty string/);
+
+    expect(() =>
+      parseWorkflowScript(invalidWorkflowScript({ metaSource: '{ name: "", description: "d" }' })),
+    ).toThrow(/meta\.name must be a non-empty string/);
+  });
+
+  it("should accept and validate optional meta fields when present", () => {
+    const parsed = parseWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "opt",
+          description: "d",
+          whenToUse: "sometimes",
+          model: "opus",
+          phases: [{ title: "Scan", detail: "look", model: "fast" }],
+        },
+      }),
+    );
+
+    expect(parsed.meta).toEqual({
+      name: "opt",
+      description: "d",
+      whenToUse: "sometimes",
+      model: "opus",
+      phases: [{ title: "Scan", detail: "look", model: "fast" }],
+    });
+  });
+
+  it("should reject non-string optional meta fields and malformed phases", () => {
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({ metaSource: '{ name: "m", description: "d", whenToUse: 1 }' }),
+      ),
+    ).toThrow(/meta\.whenToUse must be a string/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({ metaSource: '{ name: "m", description: "d", phases: "nope" }' }),
+      ),
+    ).toThrow(/meta\.phases must be an array/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({ metaSource: '{ name: "m", description: "d", phases: ["nope"] }' }),
+      ),
+    ).toThrow(/meta\.phases\[0\] must be an object/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource: '{ name: "m", description: "d", phases: [{ title: "t", detail: 2 }] }',
+        }),
+      ),
+    ).toThrow(/meta\.phases\[0\]\.detail must be a string/);
+  });
+
+  it("should accept phases that omit the optional detail and model fields", () => {
+    const parsed = parseWorkflowScript(
+      workflowScript({
+        meta: { name: "bare-phase", description: "d", phases: [{ title: "Only title" }] },
+      }),
+    );
+
+    expect(parsed.meta.phases).toEqual([{ title: "Only title" }]);
+  });
+
+  it("should reject aliased nondeterminism that evades the substring guard via AST analysis", () => {
+    expect(() =>
+      parseWorkflowScript(
+        workflowScript({ meta: { name: "spaced-now" }, body: "return Date . now();" }),
+      ),
+    ).toThrow(/Date\.now/);
+
+    expect(() =>
+      parseWorkflowScript(
+        workflowScript({ meta: { name: "spaced-random" }, body: "return Math . random();" }),
+      ),
+    ).toThrow(/Math\.random/);
+
+    expect(() =>
+      parseWorkflowScript(
+        workflowScript({ meta: { name: "spaced-date" }, body: "return new Date ();" }),
+      ),
+    ).toThrow(/argument-less new Date/);
+  });
+
+  it("should allow new Date with arguments and unrelated member calls", () => {
+    const parsed = parseWorkflowScript(
+      workflowScript({
+        meta: { name: "allowed" },
+        body: 'const at = new Date (args.ts);\nreturn at.toISOString() + console.log("ok");',
+      }),
+    );
+
+    expect(parsed.meta.name).toBe("allowed");
+  });
 });

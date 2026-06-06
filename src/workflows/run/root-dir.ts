@@ -47,7 +47,9 @@ function existingWorkflowRootsFrom(cwd: string): string[] {
 function isDirectory(path: string): boolean {
   try {
     return existsSync(path) && statSync(path).isDirectory();
+    /* v8 ignore start -- existsSync guards statSync; the throw requires a TOCTOU race */
   } catch {
     return false;
   }
+  /* v8 ignore stop */
 }

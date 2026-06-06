@@ -170,4 +170,46 @@ describe("saved workflow listing", () => {
 
     expect(workflows).toMatchObject([{ name: "review", scope: "project" }]);
   });
+
+  it("should treat a missing personal directory as having no saved workflows", async () => {
+    await writeSavedWorkflow(
+      personalDir,
+      "deep-research",
+      workflowScript({ meta: { name: "deep-research" }, body: "return 'personal';" }),
+    );
+
+    const workflows = unwrap(await listSavedWorkflows({ personalDir }));
+
+    expect(workflows.map((workflow) => workflow.name)).toEqual(["deep-research"]);
+  });
+
+  it("should return a read error when the saved workflow directory cannot be listed", async () => {
+    const filePath = join(tempDir, "not-a-directory");
+    await writeFile(filePath, "i am a file", "utf8");
+
+    const result = await listSavedWorkflows({ projectDir: filePath });
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: {
+        _tag: "WorkflowSavedWorkflowListReadError",
+        path: filePath,
+        cause: { code: "ENOTDIR" },
+      },
+    });
+  });
+
+  it("should fall back to scope ordering when two saved workflow names collate equally", async () => {
+    const nfc = "café";
+    const nfd = "café";
+    expect(nfc).not.toBe(nfd);
+    expect(nfc.localeCompare(nfd)).toBe(0);
+    await writeSavedWorkflow(projectDir, nfc, workflowScript({ meta: { name: nfc } }));
+    await writeSavedWorkflow(personalDir, nfd, workflowScript({ meta: { name: nfd } }));
+
+    const collated = unwrap(await listSavedWorkflows({ projectDir, personalDir }));
+
+    expect(collated).toHaveLength(2);
+    expect(collated.map((workflow) => workflow.scope)).toEqual(["personal", "project"]);
+  });
 });

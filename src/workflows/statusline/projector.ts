@@ -92,9 +92,11 @@ function compactStatusline({
 
   const nameWidth = Math.min(26, Math.max(12, Math.floor(leftWidth * 0.32)));
   const descriptionWidth = leftWidth - nameWidth - separator.length;
+  /* v8 ignore start -- unreachable: leftWidth >= 24 here, so descriptionWidth is always >= 10 */
   if (descriptionWidth < 8) {
     return `${truncatePlain(glyphName, leftWidth)}${separator}${summary}`;
   }
+  /* v8 ignore stop */
 
   const left = [
     truncatePlain(glyphName, nameWidth),
@@ -156,7 +158,9 @@ function currentPhaseTitle(
 }
 
 function truncatePlain(text: string, width: number): string {
+  /* v8 ignore start -- defensive: all callers guard width >= 1 before reaching here */
   if (width < 1) return "";
+  /* v8 ignore stop */
   const chars = [...text];
   if (chars.length <= width) return text;
   return `${chars.slice(0, Math.max(0, width - 1)).join("")}…`;

@@ -602,4 +602,227 @@ describe("WorkflowsTuiComponent lifecycle", () => {
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("should call onClose when ctrl-c is pressed", () => {
+    const onClose = vi.fn<() => void>();
+    const component = make([hardeningRun()], { onClose });
+
+    component.handleInput("\x03");
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("should drop from the chooser to the overview when runs collapse to one", () => {
+    const component = make([
+      runState({ runId: "wf_a", workflowName: "alpha", status: "running" }),
+      runState({ runId: "wf_b", workflowName: "beta", status: "running" }),
+    ]);
+    expect(component.render(120).join("\n")).toContain("Dynamic workflows");
+
+    component.setRuns([runState({ runId: "wf_a", workflowName: "alpha", status: "running" })]);
+
+    expect(component.render(120).join("\n")).not.toContain("Enter to view");
+  });
+
+  it("should render the empty state when there are no runs", () => {
+    const screen = make([]).render(80).join("\n");
+
+    expect(screen).toContain("Dynamic workflows");
+    expect(screen).toContain("No workflow runs found in .pi/workflows.");
+    expect(screen).toContain("esc close");
+  });
+});
+
+describe("WorkflowsTuiComponent navigation and controls", () => {
+  it("should return from agent detail to the overview when left is pressed", () => {
+    const component = make([hardeningRun()]);
+    component.handleInput("\x1b[C");
+    expect(component.render(120).join("\n")).toContain("┌ Slice · 7 agents");
+
+    component.handleInput("\x1b[D");
+
+    expect(component.render(120).join("\n")).toContain("┌ Phases");
+  });
+
+  it("should pause a running run when p is pressed", () => {
+    const onPauseRun = vi.fn<(runId: string) => void>();
+    const onResumeRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme,
+      now: () => NOW,
+      onPauseRun,
+      onResumeRun,
+    });
+
+    component.handleInput("p");
+
+    expect(onPauseRun).toHaveBeenCalledWith("wf_hard");
+    expect(onResumeRun).not.toHaveBeenCalled();
+  });
+
+  it("should resume a paused run when p is pressed", () => {
+    const onPauseRun = vi.fn<(runId: string) => void>();
+    const onResumeRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [runState({ runId: "wf_paused", status: "paused" })],
+      theme,
+      now: () => NOW,
+      onPauseRun,
+      onResumeRun,
+    });
+
+    component.handleInput("p");
+
+    expect(onResumeRun).toHaveBeenCalledWith("wf_paused");
+    expect(onPauseRun).not.toHaveBeenCalled();
+  });
+
+  it("should ignore pause-resume when no run is selected", () => {
+    const onPauseRun = vi.fn<(runId: string) => void>();
+    const onResumeRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [],
+      theme,
+      now: () => NOW,
+      onPauseRun,
+      onResumeRun,
+    });
+
+    component.handleInput("p");
+
+    expect(onPauseRun).not.toHaveBeenCalled();
+    expect(onResumeRun).not.toHaveBeenCalled();
+  });
+
+  it("should not request a stop confirmation when there is no run selected", () => {
+    const component = make([]);
+
+    component.handleInput("x");
+
+    expect(component.render(80).join("\n")).not.toContain("Stop workflow?");
+  });
+
+  it("should ignore non-decision keys while a stop confirmation is pending", () => {
+    const onStopRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme,
+      now: () => NOW,
+      onStopRun,
+    });
+
+    component.handleInput("x");
+    component.handleInput("z");
+
+    expect(component.render(120).join("\n")).toContain("Stop workflow?");
+    expect(onStopRun).not.toHaveBeenCalled();
+  });
+
+  it("should cancel a stop confirmation when n is pressed", () => {
+    const onStopRun = vi.fn<(runId: string) => void>();
+    const component = new WorkflowsTuiComponent({
+      runs: [hardeningRun()],
+      theme,
+      now: () => NOW,
+      onStopRun,
+    });
+
+    component.handleInput("x");
+    component.handleInput("n");
+
+    expect(component.render(120).join("\n")).not.toContain("Stop workflow?");
+    expect(onStopRun).not.toHaveBeenCalled();
+  });
+
+  it("should render a scrolling window of runs in a long chooser", () => {
+    const runs = Array.from({ length: 14 }, (_, index) =>
+      runState({
+        runId: `wf_${index}`,
+        workflowName: `flow-${index}`,
+        status: "running",
+        startTime: NOW - index,
+      }),
+    );
+    const component = make(runs);
+    // Move selection down so the window scrolls past the first rows.
+    for (let i = 0; i < 13; i += 1) component.handleInput("j");
+    const screen = component.render(120).join("\n");
+
+    expect(screen).toContain("flow-13");
+    expect(screen).not.toContain("flow-0 ");
+  });
+});
+
+describe("WorkflowsTuiComponent run and agent status colors", () => {
+  const statusGlyph = (status: WorkflowRunState["status"]): string =>
+    make([
+      runState({ runId: "wf_color_a", workflowName: "color-a", status, startTime: NOW }),
+      runState({ runId: "wf_color_b", workflowName: "color-b", status: "running", startTime: 1 }),
+    ])
+      .render(120)
+      .join("\n");
+
+  it("should color every run status bucket in the chooser without crashing", () => {
+    const statuses: WorkflowRunState["status"][] = [
+      "completed",
+      "failed",
+      "failing",
+      "stopped",
+      "stopping",
+      "running",
+      "resuming",
+      "paused",
+      "pausing",
+      "starting",
+      "completing",
+      "created",
+    ];
+
+    for (const status of statuses) {
+      expect(statusGlyph(status)).toContain("color-a");
+    }
+  });
+
+  const detailFor = (
+    agentState: WorkflowAgentProgress["state"],
+    resultPreview?: string,
+  ): string => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      agentCount: 1,
+      workflowProgress: [agent({ state: agentState, resultPreview })],
+    });
+    const component = new WorkflowsTuiComponent({ runs: [run], theme: ansiTheme, now: () => NOW });
+    component.handleInput("\x1b[C");
+    return component.render(120).join("\n");
+  };
+
+  it("should color and label agent outcomes for each terminal and active state", () => {
+    expect(detailFor("done", "all good")).toContain("all good");
+    expect(detailFor("failed", "boom")).toContain("boom");
+    expect(detailFor("stopped", "halted")).toContain("halted");
+    expect(detailFor("running")).toContain("Still running");
+    expect(detailFor("queued")).toContain("Still running");
+  });
+
+  it("should fall back to default outcome text when no result preview exists", () => {
+    expect(detailFor("failed")).toContain("Failed");
+    expect(detailFor("stopped")).toContain("Stopped");
+    expect(detailFor("done")).toContain("Completed");
+  });
+
+  it("should render outcome and detail panes for queued through done states without crashing", () => {
+    for (const state of ["queued", "running", "done", "failed", "stopped"] as const) {
+      expect(detailFor(state)).toContain("Outcome");
+    }
+  });
+
+  it("should color agent glyphs across done failed stopped running and queued states", () => {
+    expect(detailFor("done")).toContain("[32m");
+    expect(detailFor("failed")).toContain("[31m");
+    expect(detailFor("stopped")).toContain("[33m");
+    expect(detailFor("running")).toContain("[35m");
+    expect(detailFor("queued")).toContain("[2m");
+  });
 });

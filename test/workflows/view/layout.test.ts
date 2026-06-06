@@ -7,6 +7,7 @@ import {
   headerSummaryLine,
   padTo,
   paneInnerWidths,
+  titleSegment,
   truncateEllipsis,
   twoPaneBox,
   wordWrap,
@@ -116,5 +117,24 @@ describe("layout helpers", () => {
     expect(wrapped.join("\n")).toContain("one");
     expect(wrapped).toContain("");
     expect(wrapped.join("").replace(/\s/g, "")).toContain("twowordshere");
+  });
+
+  it("should emit a single wide grapheme that cannot fit within the width", () => {
+    const wrapped = wordWrap("漢字", 1);
+
+    expect(wrapped).toEqual(["漢", "字"]);
+    expect(wrapped.join("")).toBe("漢字");
+  });
+
+  it("should fill a fitting title segment using the default identity style", () => {
+    const segment = titleSegment("Phases", 12);
+
+    expect(segment).toBe(" Phases ────");
+    expect(visibleWidth(segment)).toBe(12);
+  });
+
+  it("should format an exact thousands token count without a fractional part", () => {
+    expect(formatTokens(2000)).toBe("2k");
+    expect(formatTokens(20_000)).toBe("20k");
   });
 });

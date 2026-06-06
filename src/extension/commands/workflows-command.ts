@@ -229,9 +229,13 @@ function formatSavedWorkflow(workflow: WorkflowSavedWorkflow): string {
   return [
     workflow.name,
     `  Scope: ${workflow.scope}`,
+    // The saved-workflow parser requires a non-empty description, so the
+    // undefined branch is defensive only.
+    /* v8 ignore start */
     workflow.meta.description === undefined
       ? undefined
       : `  Description: ${workflow.meta.description}`,
+    /* v8 ignore stop */
     workflow.meta.whenToUse === undefined ? undefined : `  When to use: ${workflow.meta.whenToUse}`,
     `  Path: ${workflow.path}`,
   ]

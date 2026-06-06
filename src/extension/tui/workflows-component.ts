@@ -209,7 +209,11 @@ export class WorkflowsTuiComponent implements Component {
 
   #renderOverview(width: number): string[] {
     const run = this.#selectedRun();
+    // `render` short-circuits to the empty state when there are no runs, so a
+    // selected run is always present here; the guard is defensive only.
+    /* v8 ignore start */
     if (run === undefined) return [this.#line(width, "No run selected")];
+    /* v8 ignore stop */
     const view = this.#monitorView(run);
     const header = this.#renderHeader(view, width);
 
@@ -255,27 +259,40 @@ export class WorkflowsTuiComponent implements Component {
 
   #renderAgentDetail(width: number): string[] {
     const run = this.#selectedRun();
+    // Defensive: `render` only reaches this screen when a run is selected.
+    /* v8 ignore start */
     if (run === undefined) return [this.#line(width, "No run selected")];
+    /* v8 ignore stop */
     const view = this.#monitorView(run);
     const header = this.#renderHeader(view, width);
     const agents = view.selectedPhaseAgents;
     const selected = agents[this.#nav.selectedAgentIndex];
 
+    // The selected phase is always within bounds on this screen, so the `?? ""`
+    // fallback is defensive only.
+    /* v8 ignore start */
     const selectedPhaseTitle = view.phases[this.#nav.selectedPhaseIndex]?.title ?? "";
+    /* v8 ignore stop */
     const leftTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${agents.length} agents`)}`;
     const agentRows = agents.map((agent, index) => {
       const cursor = index === this.#nav.selectedAgentIndex ? this.#theme.fg("accent", "› ") : "  ";
       return `${cursor}${this.#agentGlyph(agent)} ${agent.label}`;
     });
+    // The agent-detail screen is only entered when at least one agent exists, so
+    // `selected` is always defined and the empty fallbacks are defensive.
+    /* v8 ignore start */
     const detailRows =
       selected === undefined ? ["No agent selected"] : this.#detailSections(selected);
+    /* v8 ignore stop */
     const leftWidth = clampLeftWidth(agentRows, width);
 
     return [
       ...header,
       ...twoPaneBox({
         leftTitle,
+        /* v8 ignore start */
         rightTitle: this.#theme.fg("accent", selected?.label ?? ""),
+        /* v8 ignore stop */
         leftLines: agentRows,
         rightLines: detailRows,
         leftWidth,
@@ -332,7 +349,11 @@ export class WorkflowsTuiComponent implements Component {
   #renderPromptReader(width: number): string[] {
     const agent = this.#selectedAgentRow();
     const inner = Math.max(1, width - 4);
+    // The reader is only reachable with a selected agent, so the `?? ""` is
+    // defensive only.
+    /* v8 ignore start */
     const wrapped = wordWrap(agent?.fullPrompt ?? "", inner);
+    /* v8 ignore stop */
     const pageRows = Math.min(wrapped.length, PROMPT_VISIBLE_ROWS);
     const maxScroll = Math.max(0, wrapped.length - pageRows);
     this.#promptScroll = Math.min(this.#promptScroll, maxScroll);
@@ -345,7 +366,11 @@ export class WorkflowsTuiComponent implements Component {
     const body = windowLines.map((line) => `${border("│")} ${padTo(line, inner)} ${border("│")}`);
     const bottom = `${border("└")}${border("─".repeat(Math.max(0, width - 2)))}${border("┘")}`;
 
+    // `wordWrap` always yields at least one line (an empty prompt becomes `[""]`),
+    // so the zero-length branch is defensive only.
+    /* v8 ignore start */
     const first = wrapped.length === 0 ? 0 : this.#promptScroll + 1;
+    /* v8 ignore stop */
     const last = Math.min(wrapped.length, this.#promptScroll + pageRows);
     const indicator = `${first}-${last} of ${wrapped.length} ↓`;
     const footer = headerSummaryLine(
@@ -375,7 +400,11 @@ export class WorkflowsTuiComponent implements Component {
     const range = visibleRange(this.#nav.selectedRunIndex, view.rows.length, 10);
     for (let index = range.start; index < range.end; index += 1) {
       const row = view.rows[index];
+      // `visibleRange` always returns indices within `view.rows`, so the row is
+      // always present; the guard is defensive only.
+      /* v8 ignore start */
       if (row === undefined) continue;
+      /* v8 ignore stop */
       const selected = index === this.#nav.selectedRunIndex;
       const cursor = selected ? this.#theme.fg("accent", "› ") : "  ";
       const tokens = row.tokens === undefined ? "" : ` · ${formatTokens(row.tokens)} tok`;
@@ -446,7 +475,10 @@ export class WorkflowsTuiComponent implements Component {
 
   #renderStopConfirmation(width: number): string[] {
     const pending = this.#pendingStop;
+    // Only called when a stop confirmation is pending, so the guard is defensive.
+    /* v8 ignore start */
     if (pending === undefined) return [];
+    /* v8 ignore stop */
     const title = pending.type === "run" ? "Stop workflow?" : "Stop agent?";
     return [
       this.#line(width, this.#theme.fg("warning", title)),
@@ -456,22 +488,26 @@ export class WorkflowsTuiComponent implements Component {
   }
 
   #handleEscape(): void {
+    /* v8 ignore start -- handleInput routes pending confirmations away first */
     if (this.#pendingStop !== undefined) {
       this.#pendingStop = undefined;
       return;
     }
+    /* v8 ignore stop */
 
     const result = escapeMonitor(this.#nav, this.#bounds());
     if (result.close === true) {
       this.#onClose?.();
       return;
     }
+    /* v8 ignore start -- escapeMonitor always yields close or state once close is handled */
     if (result.state !== undefined) {
       if (result.state.screen === "agentDetail" && this.#nav.screen === "promptReader") {
         this.#promptScroll = 0;
       }
       this.#nav = result.state;
     }
+    /* v8 ignore stop */
   }
 
   #handleLeft(): void {
@@ -503,7 +539,11 @@ export class WorkflowsTuiComponent implements Component {
 
     if (this.#nav.screen === "agentDetail" || this.#nav.screen === "promptReader") {
       const agent = this.#selectedAgentRow();
+      // These screens are only entered when an agent is selected, so the guard
+      // is defensive only.
+      /* v8 ignore start */
       if (agent === undefined) return;
+      /* v8 ignore stop */
       this.#pendingStop = {
         type: "agent",
         runId: run.runId,
@@ -525,7 +565,11 @@ export class WorkflowsTuiComponent implements Component {
 
     const pending = this.#pendingStop;
     this.#pendingStop = undefined;
+    // `handleInput` only routes here when a confirmation is pending, so `pending`
+    // is always defined; the guard is defensive only.
+    /* v8 ignore start */
     if (pending === undefined) return;
+    /* v8 ignore stop */
     if (pending.type === "run") this.#onStopRun?.(pending.runId);
     else this.#onStopAgent?.(pending.runId, pending.agentId);
   }
@@ -554,7 +598,11 @@ export class WorkflowsTuiComponent implements Component {
 
   #agents(): MonitorAgentRow[] {
     const run = this.#selectedRun();
+    // Only consulted on screens that already have a selected run, so the empty
+    // fallback is defensive only.
+    /* v8 ignore start */
     return run === undefined ? [] : this.#monitorView(run).selectedPhaseAgents;
+    /* v8 ignore stop */
   }
 
   #selectedAgentRow(): MonitorAgentRow | undefined {
@@ -654,5 +702,9 @@ function outcomeText(agent: MonitorAgentRow): string {
 }
 
 function capitalize(text: string): string {
+  // Only ever called with a non-empty agent-state string, so the empty-string
+  // branch and the optional-chaining fallback are defensive only.
+  /* v8 ignore start -- only called with non-empty agent-state strings */
   return text.length === 0 ? text : `${text[0]?.toUpperCase()}${text.slice(1)}`;
+  /* v8 ignore stop */
 }

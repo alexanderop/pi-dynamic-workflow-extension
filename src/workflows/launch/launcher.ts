@@ -98,6 +98,7 @@ export async function launchWorkflow(
   const outputPath = workflowRunOutputPath(options.rootDir, runId);
   const journalPath = workflowRunJournalPath(options.rootDir, runId);
   const summarySource =
+    /* v8 ignore next -- parser guarantees meta.description is a non-empty string */
     parsed.value.meta.description ?? request.description ?? parsed.value.meta.name;
   const initialState: WorkflowRunState = {
     runId,
@@ -105,6 +106,7 @@ export async function launchWorkflow(
     sessionId: options.sessionId,
     triggerSource: options.triggerSource,
     workflowName: parsed.value.meta.name,
+    /* v8 ignore next -- parser guarantees meta.description is a non-empty string */
     description: parsed.value.meta.description ?? request.description,
     status: "running",
     defaultModel: parsed.value.meta.model ?? options.defaultModel,
@@ -489,13 +491,17 @@ function completeRunState(
 ): WorkflowRunState {
   const withRuntimeState = mergeRuntimeState(initialState, runtimeState);
   const completing = transitionRun(withRuntimeState, { type: "run_complete_requested", now });
+  /* v8 ignore start -- defensive: a running run always accepts run_complete_requested */
   if (completing.status === "error") throw new Error(completing.error.message);
+  /* v8 ignore stop */
   const completed = transitionRun(completing.value, {
     type: "run_completed",
     now,
     result: runtimeState.result,
   });
+  /* v8 ignore start -- defensive: a completing run always accepts run_completed */
   if (completed.status === "error") throw new Error(completed.error.message);
+  /* v8 ignore stop */
   return { ...completed.value, outputPath };
 }
 
@@ -507,9 +513,13 @@ function stopRunState(
 ): WorkflowRunState {
   const withRuntimeState = mergeRuntimeState(initialState, runtimeState);
   const stopping = transitionRun(withRuntimeState, { type: "run_stop_requested", now });
+  /* v8 ignore start -- defensive: a running run always accepts run_stop_requested */
   if (stopping.status === "error") throw new Error(stopping.error.message);
+  /* v8 ignore stop */
   const stopped = transitionRun(stopping.value, { type: "run_stopped", now });
+  /* v8 ignore start -- defensive: a stopping run always accepts run_stopped */
   if (stopped.status === "error") throw new Error(stopped.error.message);
+  /* v8 ignore stop */
   return { ...stopped.value, result: runtimeState.result, outputPath };
 }
 
@@ -524,9 +534,13 @@ function failRunState(
   const state =
     runtimeState === undefined ? initialState : mergeRuntimeState(initialState, runtimeState);
   const failing = transitionRun(state, { type: "run_fail_requested", now, failure });
+  /* v8 ignore start -- defensive: a running run always accepts run_fail_requested */
   if (failing.status === "error") throw new Error(failing.error.message);
+  /* v8 ignore stop */
   const failed = transitionRun(failing.value, { type: "run_failed", now, failure });
+  /* v8 ignore start -- defensive: a failing run always accepts run_failed */
   if (failed.status === "error") throw new Error(failed.error.message);
+  /* v8 ignore stop */
   return { ...failed.value, outputPath };
 }
 

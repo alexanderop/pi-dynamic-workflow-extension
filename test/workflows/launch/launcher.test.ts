@@ -284,12 +284,18 @@ return { result };
 `,
     });
 
+    // Hold the deferred background execution so the initial manifest can be
+    // observed deterministically before any fake agent starts running.
+    let startBackground: (() => void) | undefined;
     const result = await launchWorkflow(
       { script, args: { target: "src" } },
       launchOptions({
         schedulerRunner: agents.schedulerRunner,
         sessionId: "session_current",
         triggerSource: "ultracode",
+        defer: (start) => {
+          startBackground = start;
+        },
       }),
     );
 
@@ -330,6 +336,7 @@ return { result };
       startTime: 100,
     });
 
+    startBackground?.();
     await scan.waitUntilStarted();
     expect(scan.prompt).toBe("scan src");
     const store = new WorkflowRunStore({ rootDir });

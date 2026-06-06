@@ -5,7 +5,7 @@ import {
   WORKFLOW_SCRIPT_MAX_LENGTH,
   WORKFLOW_TOOL_DESCRIPTION,
 } from "#src/extension/tools/workflow-tool.ts";
-import { ok } from "#src/workflows/result.ts";
+import { err, ok } from "#src/workflows/result.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 
 interface RegisteredTool {
@@ -262,5 +262,238 @@ describe("Workflow tool", () => {
         transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
       },
     });
+  });
+
+  it("should default the trigger source to manual and forward terminal notifications to Pi", async () => {
+    let tool: RegisteredTool | undefined;
+    let capturedOptions: any;
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+      async (_request, opts) => {
+        capturedOptions = opts;
+        return ok({
+          taskId: "task_test",
+          runId: "wf_test",
+          scriptPath: "/repo/.pi/workflows/wf_test/script.js",
+          transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
+          confirmation: "ok",
+          completion: Promise.resolve(ok({ runId: "wf_test" } as WorkflowRunState)),
+        });
+      },
+    );
+    const sendMessage = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage,
+    };
+
+    registerWorkflowTool(pi as any, { launchWorkflow });
+
+    await tool?.execute("tool_call_1", { name: "saved-workflow" }, undefined, undefined, {
+      cwd: "/repo",
+      model: undefined,
+    });
+
+    expect(capturedOptions.triggerSource).toBe("manual");
+    expect(capturedOptions.defaultModel).toBeUndefined();
+    expect(capturedOptions.sessionId).toBeUndefined();
+
+    await capturedOptions.notifyTerminal("done");
+    expect(sendMessage).toHaveBeenCalledWith("done", {
+      deliverAs: "followUp",
+      triggerTurn: true,
+    });
+  });
+
+  it("should derive default model references across provider and id shapes", async () => {
+    const cases: Array<{ model: unknown; expected: string | undefined }> = [
+      { model: { id: "claude-x" }, expected: "claude-x" },
+      { model: { provider: "anthropic", id: "" }, expected: undefined },
+      { model: { provider: "", id: "claude-x" }, expected: "claude-x" },
+      { model: { provider: "anthropic", id: 5 }, expected: undefined },
+    ];
+
+    for (const { model, expected } of cases) {
+      let tool: RegisteredTool | undefined;
+      let capturedOptions: any;
+      const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+        async (_request, opts) => {
+          capturedOptions = opts;
+          return ok({
+            taskId: "task_test",
+            runId: "wf_test",
+            scriptPath: "/repo/.pi/workflows/wf_test/script.js",
+            transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
+            confirmation: "ok",
+            completion: Promise.resolve(ok({ runId: "wf_test" } as WorkflowRunState)),
+          });
+        },
+      );
+      const pi = {
+        registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+          tool = registered;
+        }),
+        sendMessage: vi.fn<(...args: unknown[]) => void>(),
+      };
+
+      registerWorkflowTool(pi as any, { launchWorkflow });
+      await tool?.execute("tool_call_1", { name: "wf" }, undefined, undefined, {
+        cwd: "/repo",
+        model,
+      });
+
+      expect(capturedOptions.defaultModel).toBe(expected);
+    }
+  });
+
+  it("should treat a session id lookup that throws as no session id", async () => {
+    let tool: RegisteredTool | undefined;
+    let capturedOptions: any;
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+      async (_request, opts) => {
+        capturedOptions = opts;
+        return ok({
+          taskId: "task_test",
+          runId: "wf_test",
+          scriptPath: "/repo/.pi/workflows/wf_test/script.js",
+          transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
+          confirmation: "ok",
+          completion: Promise.resolve(ok({ runId: "wf_test" } as WorkflowRunState)),
+        });
+      },
+    );
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+    };
+
+    registerWorkflowTool(pi as any, { launchWorkflow });
+    await tool?.execute("tool_call_1", { name: "wf" }, undefined, undefined, {
+      cwd: "/repo",
+      sessionManager: {
+        getSessionId: () => {
+          throw new Error("no session");
+        },
+      },
+    });
+
+    expect(capturedOptions.sessionId).toBeUndefined();
+  });
+
+  it("should throw when the workflow launch returns an error", async () => {
+    let tool: RegisteredTool | undefined;
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+      async () => err({ _tag: "WorkflowLaunchParseError", message: "boom" } as any),
+    );
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+    };
+
+    registerWorkflowTool(pi as any, { launchWorkflow });
+
+    await expect(
+      tool?.execute("tool_call_1", { script: "x" }, undefined, undefined, { cwd: "/repo" }),
+    ).rejects.toThrow("boom");
+  });
+
+  it("should launch through the default launchWorkflow when no override is provided", async () => {
+    let tool: RegisteredTool | undefined;
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+    };
+
+    registerWorkflowTool(pi as any);
+
+    // Invalid inline script: the real launchWorkflow returns a parse error before
+    // touching the filesystem, exercising the default-launcher branch and the throw.
+    await expect(
+      tool?.execute("tool_call_1", { script: "not a workflow" }, undefined, undefined, {
+        cwd: "/repo",
+        model: { provider: "anthropic", id: "claude-x" },
+      }),
+    ).rejects.toThrow(Error);
+  });
+
+  it("should render saved-workflow and bare launch source labels and details", () => {
+    let tool: RegisteredTool | undefined;
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+    };
+    const theme: RenderTheme = { fg: (_name, text) => text, bold: (text) => text };
+
+    registerWorkflowTool(pi as any);
+
+    const named = tool?.renderCall({ name: "audit" }, theme).render(120).join("\n");
+    expect(named).toContain("Workflow name audit");
+    expect(named).toContain("saved workflow: audit");
+
+    const bare = tool?.renderCall({}, theme, { executionStarted: true }).render(120).join("\n");
+    expect(bare).toContain("Workflow launch · validating and launching…");
+    expect(bare).toContain("waiting for workflow source arguments…");
+  });
+
+  it("should render plain text results and error results without launch details", () => {
+    let tool: RegisteredTool | undefined;
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+    };
+    const theme: RenderTheme = { fg: (_name, text) => text, bold: (text) => text };
+
+    registerWorkflowTool(pi as any);
+
+    const plain = tool
+      ?.renderResult({ content: [{ type: "text", text: "first line\nsecond" }] }, {}, theme)
+      .render(120)
+      .join("\n");
+    expect(plain?.trim()).toBe("first line");
+
+    const errored = tool
+      ?.renderResult({ content: [{ type: "text", text: "kaboom" }] }, {}, theme, {
+        isError: true,
+      })
+      .render(120)
+      .join("\n");
+    expect(errored?.trim()).toBe("failed kaboom");
+
+    const empty = tool?.renderResult({}, {}, theme).render(120).join("\n");
+    expect(empty?.trim()).toBe("");
+  });
+
+  it("should mark partial launch results as launching", () => {
+    let tool: RegisteredTool | undefined;
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+    };
+    const theme: RenderTheme = { fg: (_name, text) => text, bold: (text) => text };
+
+    registerWorkflowTool(pi as any);
+
+    const partial = tool
+      ?.renderResult(
+        { details: { runId: "wf_test", scriptPath: "/repo/script.js" } },
+        { isPartial: true },
+        theme,
+      )
+      .render(120)
+      .join("\n");
+    expect(partial).toContain("launching wf_test");
   });
 });

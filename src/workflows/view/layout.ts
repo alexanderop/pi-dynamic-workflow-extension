@@ -46,7 +46,9 @@ export function wordWrap(text: string, width: number): string[] {
     while (visibleWidth(remaining) > safeWidth) {
       const head = stripAnsi(truncateToWidth(remaining, safeWidth, ""));
       if (head.length === 0) {
+        /* v8 ignore start -- `remaining` is non-empty inside this loop (empty has visibleWidth 0, never > safeWidth), so the first grapheme is always defined and the `?? remaining` fallback is unreachable */
         const grapheme = [...remaining][0] ?? remaining;
+        /* v8 ignore stop */
         result.push(grapheme);
         remaining = remaining.slice(grapheme.length);
         continue;

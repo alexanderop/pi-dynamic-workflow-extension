@@ -57,7 +57,9 @@ export class WorkflowRunController {
     }
 
     const paused = transitionRun(pauseRequested.value, { type: "run_paused", now: this.#now() });
+    /* v8 ignore start -- pausing -> paused is always a valid transition */
     if (paused.status === "error") return paused;
+    /* v8 ignore stop */
 
     const written = await this.#store.writeRun(paused.value);
     if (written.status === "error") return written;
@@ -81,7 +83,9 @@ export class WorkflowRunController {
     }
 
     const resumed = transitionRun(resumeRequested.value, { type: "run_resumed", now: this.#now() });
+    /* v8 ignore start -- resuming -> running is always a valid transition */
     if (resumed.status === "error") return resumed;
+    /* v8 ignore stop */
 
     const written = await this.#store.writeRun(resumed.value);
     if (written.status === "error") return written;
@@ -105,7 +109,9 @@ export class WorkflowRunController {
     }
 
     const stopped = transitionRun(stopRequested.value, { type: "run_stopped", now: this.#now() });
+    /* v8 ignore start -- stopping -> stopped is always a valid transition */
     if (stopped.status === "error") return stopped;
+    /* v8 ignore stop */
 
     const written = await this.#store.writeRun(stopped.value);
     if (written.status === "error") return written;

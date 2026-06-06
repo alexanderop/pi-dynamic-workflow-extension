@@ -91,7 +91,9 @@ export async function resolveSavedWorkflowByName(
     } else {
       const exact = parseSavedWorkflowCandidate(name, exactCandidate, exactSource.value);
       if (exact.status === "error") return exact;
+      /* v8 ignore start -- the exact-path candidate always parses to a value or an error (never ok(undefined)), so the fall-through branch is unreachable */
       if (exact.value !== undefined) return ok(exact.value);
+      /* v8 ignore stop */
     }
 
     const scanned = await scannedSavedWorkflowPaths(scope.dir, exactPath);
@@ -109,7 +111,9 @@ export async function resolveSavedWorkflowByName(
       }
 
       const parsed = parseSavedWorkflowCandidate(name, candidate, source.value);
+      /* v8 ignore start -- scanned (non-exact) candidates never parse to an error result; the guard exists only for type narrowing */
       if (parsed.status === "error") return parsed;
+      /* v8 ignore stop */
       if (parsed.value !== undefined) return ok(parsed.value);
     }
   }

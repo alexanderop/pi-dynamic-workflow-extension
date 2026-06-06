@@ -140,6 +140,17 @@ describe("buildMonitorView", () => {
 
     expect(row?.fullPrompt).toHaveLength(500);
   });
+
+  it("should render a stopped-agent glyph for stopped agents", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      workflowProgress: [agent({ phaseTitle: "Review", state: "stopped" })],
+    });
+
+    const [row] = buildMonitorView(run, { selectedPhaseIndex: 0 }).selectedPhaseAgents;
+
+    expect(row?.glyph).toBe("■");
+  });
 });
 
 describe("buildChooserView", () => {
@@ -181,6 +192,20 @@ describe("buildChooserView", () => {
     const view = buildChooserView(runs, { now: 1000 });
 
     expect(view.rows[0]?.tokens).toBeUndefined();
+  });
+
+  it("should render distinct chooser glyphs for failing, stopped, and idle statuses", () => {
+    const runs = [
+      runState({ runId: "wf_fail", status: "failed" }),
+      runState({ runId: "wf_failing", status: "failing" }),
+      runState({ runId: "wf_stop", status: "stopped" }),
+      runState({ runId: "wf_stopping", status: "stopping" }),
+      runState({ runId: "wf_created", status: "created" }),
+    ];
+
+    const view = buildChooserView(runs);
+
+    expect(view.rows.map((row) => row.glyph)).toEqual(["!", "!", "■", "■", "●"]);
   });
 
   it("should count running and completed workflows", () => {
