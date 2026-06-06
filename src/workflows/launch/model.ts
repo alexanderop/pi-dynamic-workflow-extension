@@ -28,6 +28,7 @@ export interface WorkflowLaunchOptions {
   readonly maxConcurrentAgents?: number;
   readonly maxTotalAgents?: number;
   readonly budgetTotal?: number | null;
+  readonly onRuntimeControlReady?: WorkflowRuntimeOptions["onControlReady"];
   readonly notifyTerminal?: WorkflowTerminalNotifier;
   readonly inlineResultMaxChars?: number;
   readonly savedWorkflowDirs?: WorkflowSavedWorkflowLocations;

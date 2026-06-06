@@ -9,6 +9,8 @@ export interface ShowWorkflowsTuiOptions {
   readonly savedWorkflowCount: number;
   readonly loadRuns?: () => Promise<Result<WorkflowRunState[], WorkflowRunStoreError>>;
   readonly pollIntervalMs?: number;
+  readonly onPauseRun?: (runId: string) => void;
+  readonly onResumeRun?: (runId: string) => void;
 }
 
 export async function showWorkflowsTui(
@@ -21,6 +23,8 @@ export async function showWorkflowsTui(
       savedWorkflowCount: options.savedWorkflowCount,
       theme,
       onClose: () => done(undefined),
+      onPauseRun: options.onPauseRun,
+      onResumeRun: options.onResumeRun,
     });
 
     let disposed = false;

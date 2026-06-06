@@ -1160,9 +1160,11 @@ choices:
 
 A `/workflows` dialog demonstrably exists — the transcript shows a save
 confirmation and a "Dynamic workflows dialog dismissed" marker — but its live
-rendering is never surfaced into the agent-visible transcript. The intended
-terminal UI is specified separately in §23; treat it as design intent, not
-artifact-derived.
+rendering is never surfaced into the agent-visible transcript. The terminal UI
+specified in §23 is therefore a normative implementation target based on the
+user-supplied Claude Code workflow-monitor reference screens. Treat it as the
+visual and interaction contract for this project, not as proof of Claude Code's
+private implementation internals.
 
 Document the chosen answers before implementation so downstream behavior is
 predictable.
@@ -1170,14 +1172,16 @@ predictable.
 ## 23. Workflow UI Reference Screens
 
 > Status: not yet implemented. This section is the source of truth for how the
-> terminal UI should look and behave. The ASCII layouts below are normative for
-> the desired final shape.
+> `/workflows` terminal UI should look and behave. Existing implementations that
+> render a generic run/job browser are incomplete until they match the screens
+> and behavior below. The ASCII layouts are normative: renderer tests should use
+> them as golden references, adjusted only for terminal width and elapsed time.
 
 ### 23.1 Problem
 
-The workflow UI should match the newer native Pi workflow monitor screenshots
-instead of showing a generic job browser. The monitor needs to feel like a live
-terminal dashboard:
+The workflow UI should match the real Claude Code dynamic-workflow monitor
+reference screens instead of showing a generic job browser. The monitor needs to
+feel like a live terminal dashboard:
 
 - one active workflow opens directly into the workflow monitor,
 - the first view is a phase/agent overview,
@@ -1202,9 +1206,14 @@ terminal dashboard:
   - `●` pending/running list bullet when spinner is not available
   - `↻` running workflow in chooser
   - `↵` enter/original prompt action
-- Long names and prompt lines must truncate with `…`, never wrap through pane
-  borders.
-- Every rendered line must respect the TUI `render(width)` width contract.
+- Long names, prompt lines, paths, tool calls, and outcome text must truncate
+  with `…` when displayed in single-line rows, never wrap through pane borders.
+- Prompt-reader content may wrap inside the prompt pane, but the border and every
+  produced line must still respect the pane width.
+- Every rendered line must respect the Pi TUI `render(width)` width contract.
+- The final UI should look like the screenshots first; do not preserve older
+  `/workflows` list-browser sections such as generic `Runs`, `Progress`,
+  `Agents`, and `Details` headings unless they appear in the screens below.
 
 ### 23.3 State A: one active workflow opens to the overview
 
@@ -1432,3 +1441,35 @@ State C original prompt
 - Change persisted workflow snapshot format unless required to expose data
   already shown in these screens.
 - Add mouse support.
+
+### 23.10 UI implementation contract
+
+The UI implementation should be judged against the screens above, not against the
+current exploratory `/workflows` component. In particular:
+
+- `/workflows` must route by run count/state:
+  - zero runs: render an empty state;
+  - one active visible workflow: skip the chooser and open State A;
+  - multiple visible workflows: open State D.
+- State A and State B must use a two-pane bordered monitor. Do not render the old
+  generic list-browser layout with standalone `Runs`, `Progress`, `Agents`, and
+  `Details` sections.
+- The selected phase owns the cursor in State A. The selected agent owns the
+  cursor in State B. State C owns scroll position instead of row selection.
+- The monitor header must include the workflow description. If no description is
+  available, omit the description line rather than showing a placeholder.
+- The right-aligned summary must count terminal-success agents as done and use
+  the number of visible workflow-agent rows as the denominator.
+- Agent rows should use available manifest/read-model data only. Omit missing
+  model, token, tool-call, or idle fields instead of rendering `unknown`,
+  `default`, `0`, or `No metrics yet` placeholders.
+- The full original prompt must be available to State C. A short
+  `promptPreview` alone is insufficient for this UI contract because no prompt
+  text should be lost.
+- The structured detail activity section should prefer recent tool-call/event
+  summaries. If only one last-tool field exists, show that single recent item;
+  if none exists, show a short muted empty state inside the pane.
+- Save, pause, stop, and restart keys may be no-ops until controller support is
+  wired, but the reserved footer labels should remain stable.
+- Tests must assert that every view keeps `visibleWidth(line) <= width` for both
+  narrow and wide terminal widths.

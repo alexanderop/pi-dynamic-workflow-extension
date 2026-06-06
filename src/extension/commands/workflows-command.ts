@@ -1,6 +1,8 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { showWorkflowsTui } from "../tui/workflows-view.ts";
+import { getWorkflowRunControl } from "../../workflows/run/control-registry.ts";
+import { WorkflowRunController } from "../../workflows/run/controller.ts";
 import type { WorkflowRunState } from "../../workflows/run/model.ts";
 import { WorkflowRunStore } from "../../workflows/run/store.ts";
 import { listSavedWorkflows } from "../../workflows/saved/list.ts";
@@ -57,6 +59,12 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
           runs: runs.value,
           savedWorkflowCount: savedWorkflows.value.length,
           loadRuns: () => store.listRuns(),
+          onPauseRun: (runId) => {
+            void controlWorkflowRun(commandCtx, store, runId, "pause");
+          },
+          onResumeRun: (runId) => {
+            void controlWorkflowRun(commandCtx, store, runId, "resume");
+          },
         });
         return;
       }
@@ -68,6 +76,28 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
       );
     },
   });
+}
+
+async function controlWorkflowRun(
+  ctx: WorkflowCommandContext,
+  store: WorkflowRunStore,
+  runId: string,
+  operation: "pause" | "resume",
+): Promise<void> {
+  const control = getWorkflowRunControl(runId);
+  if (control === undefined) {
+    ctx.ui.notify(
+      `Could not ${operation} workflow run '${runId}': no live runtime control is available.`,
+      "warning",
+    );
+    return;
+  }
+
+  const controller = new WorkflowRunController({ store, control });
+  const result = await controller[operation](runId);
+  if (result.status === "error") {
+    ctx.ui.notify(result.error.message, "error");
+  }
 }
 
 function shouldUseWorkflowsTui(ctx: WorkflowCommandContext): boolean {

@@ -245,6 +245,55 @@ describe("WorkflowAgentScheduler", () => {
     await expect(secondResult).resolves.toBe("second result");
     expect(secondStarted).toBe(true);
   });
+
+  it("should keep queued fake agents from starting while paused", async () => {
+    const first = deferred<string>();
+    let secondStarted = false;
+    const scheduler = new WorkflowAgentScheduler({
+      maxConcurrent: 1,
+      createAgentId: sequenceIds("agent"),
+      runner: async ({ prompt }) => {
+        if (prompt === "first") return first.promise;
+        secondStarted = true;
+        return "second result";
+      },
+    });
+
+    const firstResult = scheduler.schedule("first");
+    const secondResult = scheduler.schedule("second");
+
+    expect(scheduler.pause()).toBe(true);
+    expect(scheduler.isPaused()).toBe(true);
+    first.resolve("first result");
+
+    await expect(firstResult).resolves.toBe("first result");
+    await delay(0);
+
+    expect(secondStarted).toBe(false);
+    expect(scheduler.progress()).toMatchObject([{ state: "done" }, { state: "queued" }]);
+
+    expect(scheduler.resume()).toBe(true);
+    expect(scheduler.isPaused()).toBe(false);
+    await expect(secondResult).resolves.toBe("second result");
+    expect(secondStarted).toBe(true);
+  });
+
+  it("should queue new fake agents scheduled while paused until resume", async () => {
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      runner: async ({ prompt }) => prompt,
+    });
+
+    expect(scheduler.pause()).toBe(true);
+    const result = scheduler.schedule("queued while paused");
+
+    await delay(0);
+    expect(scheduler.progress()).toMatchObject([{ state: "queued" }]);
+
+    expect(scheduler.resume()).toBe(true);
+    await expect(result).resolves.toBe("queued while paused");
+    expect(scheduler.progress()).toMatchObject([{ state: "done" }]);
+  });
 });
 
 interface Deferred<T> {

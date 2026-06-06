@@ -39,6 +39,12 @@ export interface WorkflowRuntimeReplayCache {
   get(key: WorkflowJournalKey): unknown;
 }
 
+export interface WorkflowRuntimeControl {
+  pause(): void;
+  resume(): void;
+  isPaused(): boolean;
+}
+
 export interface WorkflowRuntimeOptions {
   args?: unknown;
   cwd?: string;
@@ -49,6 +55,7 @@ export interface WorkflowRuntimeOptions {
   schedulerRunner?: WorkflowAgentRunner;
   journal?: WorkflowAgentJournal;
   replayCache?: WorkflowRuntimeReplayCache;
+  onControlReady?: (control: WorkflowRuntimeControl) => void;
 }
 
 export interface WorkflowRuntimeError {

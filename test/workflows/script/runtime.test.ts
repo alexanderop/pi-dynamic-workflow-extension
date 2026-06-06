@@ -4,8 +4,10 @@ import {
   pipeline,
   runWorkflowScript,
   tryRunWorkflowScript,
+  type WorkflowRuntimeControl,
 } from "#src/workflows/script/runtime.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
+import { deferred } from "../../support.ts";
 import { workflowScript } from "./workflow-factory.ts";
 
 describe("runWorkflowScript", () => {
@@ -135,6 +137,49 @@ return await parallel([
       { type: "workflow_agent", label: "two", state: "done", resultPreview: "done:second" },
       { type: "workflow_agent", label: "three", state: "done", resultPreview: "done:third" },
     ]);
+  });
+
+  it("should expose a live runtime control that pauses scheduler dequeuing", async () => {
+    let control: WorkflowRuntimeControl | undefined;
+    const first = deferred<string>();
+    let secondStarted = false;
+    const statePromise = runWorkflowScript(
+      workflowScript({
+        meta: { name: "controlled-agents" },
+        body: `
+return await parallel([
+  () => agent("first", { label: "first" }),
+  () => agent("second", { label: "second" }),
+]);
+`,
+      }),
+      {
+        maxConcurrentAgents: 1,
+        onControlReady: (runtimeControl) => {
+          control = runtimeControl;
+        },
+        schedulerRunner: async ({ prompt }) => {
+          if (prompt === "first") return first.promise;
+          secondStarted = true;
+          return AgentResponse.text("second result");
+        },
+      },
+    );
+
+    await delay(0);
+    expect(control).toBeDefined();
+    control!.pause();
+    first.resolve("first result");
+
+    await delay(0);
+    expect(control!.isPaused()).toBe(true);
+    expect(secondStarted).toBe(false);
+
+    control!.resume();
+    const state = await statePromise;
+
+    expect(secondStarted).toBe(true);
+    expect(state.result).toEqual(["first result", "second result"]);
   });
 });
 

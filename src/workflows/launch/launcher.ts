@@ -5,6 +5,7 @@ import { buildWorkflowJournalResultCache, WorkflowJournalStore } from "../journa
 import { tryParseWorkflowScript } from "../script/parser.ts";
 import { tryRunWorkflowScript } from "../script/runtime.ts";
 import { err, ok, type Result } from "../result.ts";
+import { registerWorkflowRunControl } from "../run/control-registry.ts";
 import { WorkflowRunStore } from "../run/store.ts";
 import { transitionRun } from "../run/state-machine.ts";
 import {
@@ -103,6 +104,7 @@ export async function launchWorkflow(
   if (prepared.status === "error") return prepared;
 
   const store = new WorkflowRunStore({ rootDir: options.rootDir });
+  let unregisterRuntimeControl: (() => void) | undefined;
   const completion = startBackgroundExecution({
     source: source.value.script,
     initialState,
@@ -120,9 +122,16 @@ export async function launchWorkflow(
       maxConcurrentAgents: options.maxConcurrentAgents,
       maxTotalAgents: options.maxTotalAgents,
       budgetTotal: options.budgetTotal,
+      onControlReady: (control) => {
+        unregisterRuntimeControl = registerWorkflowRunControl(runId, control);
+        options.onRuntimeControlReady?.(control);
+      },
       cwd: options.cwd ?? workflowProjectCwdFromRootDir(options.rootDir),
       journal: new WorkflowJournalStore({ journalPath }),
       replayCache: resume.value,
+    },
+    onComplete: () => {
+      unregisterRuntimeControl?.();
     },
   });
 
@@ -272,6 +281,7 @@ interface BackgroundExecutionOptions {
   readonly notifyTerminal?: WorkflowTerminalNotifier;
   readonly inlineResultMaxChars?: number;
   readonly runtimeOptions: WorkflowRuntimeOptions;
+  readonly onComplete?: () => void;
 }
 
 function startBackgroundExecution({
@@ -285,6 +295,7 @@ function startBackgroundExecution({
   notifyTerminal,
   inlineResultMaxChars,
   runtimeOptions,
+  onComplete,
 }: BackgroundExecutionOptions): Promise<Result<WorkflowRunState, WorkflowLaunchBackgroundError>> {
   return new Promise((resolve) => {
     defer(() => {
@@ -299,6 +310,7 @@ function startBackgroundExecution({
         inlineResultMaxChars,
         runtimeOptions,
       })
+        .finally(() => onComplete?.())
         .then(resolve)
         .catch((cause) => resolve(err(backgroundError(initialState.runId, cause))));
     });

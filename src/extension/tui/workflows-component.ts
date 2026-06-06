@@ -23,6 +23,8 @@ export interface WorkflowsTuiComponentOptions {
   readonly savedWorkflowCount?: number;
   readonly theme: WorkflowsComponentTheme;
   readonly onClose?: () => void;
+  readonly onPauseRun?: (runId: string) => void;
+  readonly onResumeRun?: (runId: string) => void;
 }
 
 type WorkflowTuiScreen = "chooser" | "overview" | "agentDetail" | "promptReader";
@@ -32,6 +34,8 @@ export class WorkflowsTuiComponent implements Component {
   #savedWorkflowCount: number;
   #theme: WorkflowsComponentTheme;
   #onClose?: () => void;
+  #onPauseRun?: (runId: string) => void;
+  #onResumeRun?: (runId: string) => void;
   #screen: WorkflowTuiScreen;
   #selectedRunIndex = 0;
   #selectedPhaseIndex = 0;
@@ -44,6 +48,8 @@ export class WorkflowsTuiComponent implements Component {
     this.#savedWorkflowCount = options.savedWorkflowCount ?? 0;
     this.#theme = options.theme;
     this.#onClose = options.onClose;
+    this.#onPauseRun = options.onPauseRun;
+    this.#onResumeRun = options.onResumeRun;
     this.#screen = options.runs.length === 1 ? "overview" : "chooser";
   }
 
@@ -88,6 +94,8 @@ export class WorkflowsTuiComponent implements Component {
       this.#handleEnter();
     } else if (matchesKey(data, Key.tab)) {
       this.#handleTab();
+    } else if (data === "p") {
+      this.#handlePauseResume();
     }
 
     if (
@@ -191,6 +199,20 @@ export class WorkflowsTuiComponent implements Component {
       this.#screen = "agentDetail";
     } else if (this.#screen === "agentDetail") {
       this.#screen = "overview";
+    }
+  }
+
+  #handlePauseResume(): void {
+    const run = this.#selectedRun()?.run;
+    if (run === undefined) return;
+
+    if (canPauseRun(run.status)) {
+      this.#onPauseRun?.(run.runId);
+      return;
+    }
+
+    if (canResumeRun(run.status)) {
+      this.#onResumeRun?.(run.runId);
     }
   }
 
@@ -394,16 +416,22 @@ export class WorkflowsTuiComponent implements Component {
     if (this.#screen === "overview") {
       return this.#theme.fg(
         "dim",
-        "↑↓ phase · ← detail · x stop workflow · p pause · esc back · s save",
+        `↑↓ phase · ← detail · x stop workflow · ${this.#pauseHelpText()} · esc back · s save`,
       );
     }
     if (this.#screen === "agentDetail") {
       return this.#theme.fg(
         "dim",
-        "↑↓ agent · ↵ prompt · x stop · r restart · p pause · esc back · s save",
+        `↑↓ agent · ↵ prompt · x stop · r restart · ${this.#pauseHelpText()} · esc back · s save`,
       );
     }
     return this.#theme.fg("dim", "↑↓ scroll · esc back");
+  }
+
+  #pauseHelpText(): string {
+    const status = this.#selectedRun()?.status;
+    if (status !== undefined && canResumeRun(status)) return "p resume";
+    return "p pause";
   }
 
   #line(width: number, text: string): string {
@@ -434,6 +462,14 @@ function visibleRange(
 function clampIndex(index: number, length: number): number {
   if (length === 0) return 0;
   return Math.max(0, Math.min(index, length - 1));
+}
+
+function canPauseRun(status: WorkflowRunStatus): boolean {
+  return status === "running" || status === "resuming";
+}
+
+function canResumeRun(status: WorkflowRunStatus): boolean {
+  return status === "paused" || status === "pausing";
 }
 
 function statusGlyph(status: WorkflowRunStatus | WorkflowAgentProgress["state"]): string {

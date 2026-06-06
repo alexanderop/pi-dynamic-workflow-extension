@@ -60,6 +60,7 @@ export class WorkflowAgentScheduler {
   readonly #stoppedAgents = new Set<number>();
   readonly #progress: WorkflowAgentProgress[] = [];
   #running = 0;
+  #paused = false;
 
   constructor(options: WorkflowAgentSchedulerOptions) {
     this.#maxConcurrent = options.maxConcurrent ?? calculateDefaultMaxConcurrent();
@@ -167,11 +168,30 @@ export class WorkflowAgentScheduler {
     return true;
   }
 
+  pause(): boolean {
+    if (this.#paused) return false;
+    this.#paused = true;
+    return true;
+  }
+
+  resume(): boolean {
+    if (!this.#paused) return false;
+    this.#paused = false;
+    this.#drain();
+    return true;
+  }
+
+  isPaused(): boolean {
+    return this.#paused;
+  }
+
   progress(): WorkflowAgentProgress[] {
     return this.#progress.map((agent) => ({ ...agent }));
   }
 
   #drain(): void {
+    if (this.#paused) return;
+
     while (this.#running < this.#maxConcurrent && this.#queue.length > 0) {
       const queued = this.#queue.shift()!;
       this.#start(queued);

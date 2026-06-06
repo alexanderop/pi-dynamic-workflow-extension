@@ -11,6 +11,7 @@ import type {
 } from "./model.ts";
 
 export type {
+  WorkflowRuntimeControl,
   WorkflowRuntimeError,
   WorkflowRuntimeOptions,
   WorkflowRuntimeState,
@@ -44,6 +45,16 @@ async function executeWorkflowScript(
       options.schedulerRunner ??
       (async ({ prompt, options: agentOptions }) =>
         await (options.agentRunner ?? defaultAgentRunner)(prompt, agentOptions)),
+  });
+
+  options.onControlReady?.({
+    pause: () => {
+      scheduler.pause();
+    },
+    resume: () => {
+      scheduler.resume();
+    },
+    isPaused: () => scheduler.isPaused(),
   });
 
   const budget: WorkflowBudget = {
