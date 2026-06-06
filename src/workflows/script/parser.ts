@@ -1,5 +1,5 @@
 import { parse } from "acorn";
-import { err, ok, type Result } from "../result.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowMeta, WorkflowPhase } from "./model.ts";
 
 export interface ParsedWorkflowScript {
@@ -15,6 +15,7 @@ export class WorkflowParseError extends Error {
 }
 
 export function parseWorkflowScript(source: string): ParsedWorkflowScript {
+  assertNoForbiddenDeterminismSubstrings(source);
   const program = parse(source, {
     ecmaVersion: "latest",
     sourceType: "module",
@@ -117,11 +118,13 @@ function validateWorkflowMeta(value: unknown): WorkflowMeta {
     throw new WorkflowParseError("Workflow meta.name must be a non-empty string.");
   }
 
-  const meta: WorkflowMeta = { name: value.name };
-  if (value.description !== undefined)
-    meta.description = requireString(value.description, "meta.description");
+  const meta: WorkflowMeta = {
+    name: value.name,
+    description: requireNonEmptyString(value.description, "meta.description"),
+  };
   if (value.whenToUse !== undefined)
     meta.whenToUse = requireString(value.whenToUse, "meta.whenToUse");
+  if (value.model !== undefined) meta.model = requireString(value.model, "meta.model");
   if (value.phases !== undefined) meta.phases = validatePhases(value.phases);
   return meta;
 }
@@ -146,8 +149,25 @@ function requireString(value: unknown, path: string): string {
   return value;
 }
 
+function requireNonEmptyString(value: unknown, path: string): string {
+  const text = requireString(value, path);
+  if (text.length === 0)
+    throw new WorkflowParseError(`Workflow ${path} must be a non-empty string.`);
+  return text;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertNoForbiddenDeterminismSubstrings(source: string): void {
+  const forbidden = ["Date.now", "Math.random", "new Date()"] as const;
+  const found = forbidden.find((text) => source.includes(text));
+  if (found !== undefined) {
+    throw new WorkflowParseError(
+      `Workflow scripts must be deterministic: ${found} is unavailable, even inside strings.`,
+    );
+  }
 }
 
 function assertDeterministic(nodes: any[]): void {

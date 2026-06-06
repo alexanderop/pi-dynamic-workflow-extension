@@ -73,6 +73,25 @@ describe("WorkflowRunStore", () => {
     });
   });
 
+  it("should preserve session ownership metadata when reading a run", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({
+        runId: "wf_session",
+        sessionId: "session_current",
+        triggerSource: "ultracode",
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_session");
+
+    expect(unwrap(result)).toMatchObject({
+      runId: "wf_session",
+      sessionId: "session_current",
+      triggerSource: "ultracode",
+    });
+  });
+
   it("should return a typed error when one workflow run does not exist", async () => {
     const result = await new WorkflowRunStore({ rootDir }).readRun("wf_missing");
 

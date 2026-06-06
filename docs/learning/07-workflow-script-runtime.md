@@ -78,7 +78,7 @@ Why forbid them? Resume (a future slice — not implemented yet) will re-run the
 If a workflow needs time, pass it through `args`:
 
 ```js
-export const meta = { name: "timestamped" }
+export const meta = { name: "timestamped", description: "Use an injected timestamp" }
 return args.startedAt
 ```
 
@@ -93,10 +93,10 @@ Current runtime globals:
 | `phase(title)` | Add a phase progress row (throws on empty/non-string title). |
 | `log(message)` | Add a run log (coerces to `String(message)`). |
 | `agent(prompt, options)` | Schedule one agent through the scheduler; runner is fake today. |
-| `parallel(thunks)` | Run promise thunks concurrently and return ordered results. |
-| `pipeline(items, ...stages)` | Run each item through async stages independently. |
+| `parallel(thunks)` | Run promise thunks concurrently and return ordered results; capped at 4096 thunks per call. |
+| `pipeline(items, ...stages)` | Run each item through async stages independently; capped at 4096 items per call. |
 
-`budget.spent()` and `budget.remaining()` do compute (`runtime.ts:40-45`), but two things are missing today: token spend is only an **estimate** — `(prompt.length + result.length) / 4`, rounded up (`runtime.ts:179-182`) — and there is **no enforcement**: exceeding `budget.total` does not reject an `agent()` call. Also note `spent()` only counts tokens from *already-resolved* agent calls, so reading it mid-call sees a stale total.
+`budget.spent()` and `budget.remaining()` compute from the runtime's token estimate — `(prompt.length + result.length) / 4`, rounded up. `budget.total` is now enforced as a hard ceiling for future `agent()` calls once `spent()` reaches `total`. Note that `spent()` only counts tokens from *already-resolved* agent calls, so reading it mid-call sees a stale total.
 
 Not implemented yet:
 
@@ -162,7 +162,7 @@ Example:
 ```js
 const results = await pipeline(
   ["src", "test"],
-  async (_previous, item, index) => {
+  async (item, _originalItem, index) => {
     return await agent(`Review ${item}`, { label: `review:${index}` })
   },
   async (review, item) => {
@@ -171,7 +171,7 @@ const results = await pipeline(
 )
 ```
 
-Each item advances independently. If `src` finishes review before `test`, `src` can start verify immediately.
+Each item advances independently. The first stage receives the item as both the previous result and original item, so short callbacks like `async (item) => ...` are valid. If `src` finishes review before `test`, `src` can start verify immediately.
 
 ## Captured runtime state
 

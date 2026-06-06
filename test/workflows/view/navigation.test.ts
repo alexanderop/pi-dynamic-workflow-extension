@@ -40,13 +40,13 @@ describe("monitor navigation", () => {
     expect(moveMonitorSelection(next, bounds(), 1).selectedPhaseIndex).toBe(1);
   });
 
-  it("should open agent detail from overview with left when agents exist", () => {
-    expect(focusInMonitor(state(), bounds(), "left").screen).toBe("agentDetail");
-    expect(focusInMonitor(state(), bounds({ agentCount: 0 }), "left").screen).toBe("overview");
+  it("should open agent detail from overview with right when agents exist", () => {
+    expect(focusInMonitor(state(), bounds(), "right").screen).toBe("agentDetail");
+    expect(focusInMonitor(state(), bounds({ agentCount: 0 }), "right").screen).toBe("overview");
   });
 
-  it("should return to overview from agent detail with right", () => {
-    expect(focusInMonitor(state({ screen: "agentDetail" }), bounds(), "right").screen).toBe(
+  it("should return to overview from agent detail with left", () => {
+    expect(focusInMonitor(state({ screen: "agentDetail" }), bounds(), "left").screen).toBe(
       "overview",
     );
   });

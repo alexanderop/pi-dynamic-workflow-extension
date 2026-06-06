@@ -1,4 +1,4 @@
-import type { WorkflowAgentProgress } from "../agent/model.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 
 export type WorkflowRunStatus =
   | "created"
@@ -17,9 +17,12 @@ export type WorkflowRunStatus =
 export interface WorkflowRunState {
   runId: string;
   taskId: string;
+  sessionId?: string;
+  triggerSource?: WorkflowRunTriggerSource;
   workflowName: string;
   description?: string;
   status: WorkflowRunStatus;
+  defaultModel?: string;
   script: string;
   scriptPath: string;
   phases: Array<{ title: string }>;
@@ -35,6 +38,8 @@ export interface WorkflowRunState {
   result?: unknown;
   failures?: WorkflowFailure[];
 }
+
+export type WorkflowRunTriggerSource = "ultracode" | "manual" | "saved" | "unknown";
 
 export type WorkflowProgressEntry = WorkflowPhaseProgress | WorkflowAgentProgress;
 

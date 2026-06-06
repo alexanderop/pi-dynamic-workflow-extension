@@ -1,5 +1,5 @@
-import type { WorkflowAgentProgress } from "../agent/model.ts";
-import type { WorkflowRunState, WorkflowRunStatus } from "../run/model.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
+import type { WorkflowRunState, WorkflowRunStatus } from "#src/workflows/run/model.ts";
 import { formatDuration } from "./layout.ts";
 import type { ChooserViewModel, MonitorAgentRow, MonitorViewModel } from "./model.ts";
 
@@ -161,7 +161,7 @@ function agentsForPhase(agents: WorkflowAgentProgress[], title: string): Workflo
   return agents.filter((agent) => agent.phaseTitle === undefined);
 }
 
-function isWorkflowAgentProgress(
+export function isWorkflowAgentProgress(
   value: WorkflowRunState["workflowProgress"][number],
 ): value is WorkflowAgentProgress {
   return value.type === "workflow_agent";

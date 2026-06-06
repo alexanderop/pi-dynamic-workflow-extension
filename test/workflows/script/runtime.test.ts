@@ -4,6 +4,7 @@ import {
   pipeline,
   runWorkflowScript,
   tryRunWorkflowScript,
+  WORKFLOW_COLLECTION_ITEM_LIMIT,
   type WorkflowRuntimeControl,
 } from "#src/workflows/script/runtime.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
@@ -44,6 +45,132 @@ return { result };
       { prompt: "Scan src", options: { label: "repo inventory" } },
     ]);
     expect(state.result).toEqual({ result: "fake:Scan src" });
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should let pipeline first-stage shorthand fan out agent calls", async () => {
+    const agents = setupAgentMock(
+      agent.call({ prompt: "inspect a" }, ({ prompt }) => AgentResponse.text(`done:${prompt}`)),
+      agent.call({ prompt: "inspect b" }, ({ prompt }) => AgentResponse.text(`done:${prompt}`)),
+    );
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "pipeline-shorthand",
+          description: "Use first stage previous as the pipeline item",
+        },
+        body: `
+const inspected = await pipeline(
+  [{ prompt: "inspect a" }, { prompt: "inspect b" }],
+  async (work) => agent(work.prompt),
+);
+return inspected;
+`,
+      }),
+      { schedulerRunner: agents.schedulerRunner },
+    );
+
+    expect(state.agentCalls).toEqual([
+      { prompt: "inspect a", options: {} },
+      { prompt: "inspect b", options: {} },
+    ]);
+    expect(state.result).toEqual(["done:inspect a", "done:inspect b"]);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should use meta.model as the default model for agent calls", async () => {
+    const agents = setupAgentMock(
+      agent.call({ prompt: "scan src", model: "opus" }, () => AgentResponse.text("ok")),
+    );
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "model-default",
+          description: "Use a model default from metadata",
+          model: "opus",
+        },
+        body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+      }),
+      { schedulerRunner: agents.schedulerRunner },
+    );
+
+    expect(state.result).toBe("ok");
+    expect(state.workflowProgress).toMatchObject([
+      { type: "workflow_agent", label: "scan-agent", model: "opus" },
+    ]);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should let explicit agent models override meta.model defaults", async () => {
+    const agents = setupAgentMock(
+      agent.call({ prompt: "scan src", model: "sonnet" }, () => AgentResponse.text("ok")),
+    );
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "model-override",
+          description: "Use an explicit agent model",
+          model: "opus",
+        },
+        body: `
+return await agent("scan src", { label: "scan-agent", model: "sonnet" });
+`,
+      }),
+      { schedulerRunner: agents.schedulerRunner },
+    );
+
+    expect(state.result).toBe("ok");
+    expect(state.workflowProgress).toMatchObject([
+      { type: "workflow_agent", label: "scan-agent", model: "sonnet" },
+    ]);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should resolve a direct non-schema agent failure to null", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "dead-agent", description: "Handle a dead agent as null" },
+        body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+      }),
+      {
+        schedulerRunner: async () => {
+          throw new Error("agent died");
+        },
+      },
+    );
+
+    expect(state.result).toBeNull();
+    expect(state.workflowProgress).toMatchObject([
+      { type: "workflow_agent", label: "scan-agent", state: "failed", resultPreview: "agent died" },
+    ]);
+  });
+
+  it("should fail fast when the scheduler total-agent cap is exceeded", async () => {
+    const agents = setupAgentMock(
+      agent.call({ prompt: "first" }, () => AgentResponse.text("first result")),
+    );
+
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "agent-cap", description: "Do not hide scheduler cap failures" },
+          body: `
+await agent("first");
+return await agent("second");
+`,
+        }),
+        {
+          maxTotalAgents: 1,
+          schedulerRunner: agents.schedulerRunner,
+        },
+      ),
+    ).rejects.toThrow(/maxTotalAgents=1/);
+
+    agents.expectAgentsInOrder([{ prompt: "first" }]);
     agents.expectNoUnhandledAgents();
   });
 
@@ -98,6 +225,31 @@ return m.random();
       status: "error",
       error: { _tag: "WorkflowRuntimeError", message: "boom" },
     });
+  });
+
+  it("should enforce budget.total as a hard ceiling before scheduling further agents", async () => {
+    const agents = setupAgentMock(
+      agent.call({ prompt: "first" }, () => AgentResponse.text("first result")),
+    );
+
+    await expect(
+      runWorkflowScript(
+        workflowScript({
+          meta: { name: "budget-ceiling" },
+          body: `
+await agent("first");
+return await agent("second");
+`,
+        }),
+        {
+          budgetTotal: 1,
+          schedulerRunner: agents.schedulerRunner,
+        },
+      ),
+    ).rejects.toThrow(/budget exhausted/);
+
+    agents.expectAgentsInOrder([{ prompt: "first" }]);
+    agents.expectNoUnhandledAgents();
   });
 
   it("should route workflow agent calls through the scheduler cap and expose progress rows", async () => {
@@ -267,13 +419,38 @@ describe("parallel", () => {
   it("should reject already-started promises when parallel receives non-thunk inputs", async () => {
     await expect(parallel([Promise.resolve("started") as any])).rejects.toThrow(/thunks/);
   });
+
+  it("should reject more than 4096 thunks", async () => {
+    const thunks = Array.from(
+      { length: WORKFLOW_COLLECTION_ITEM_LIMIT + 1 },
+      () => async () => null,
+    );
+
+    await expect(parallel(thunks)).rejects.toThrow(/at most 4096/);
+  });
 });
 
 describe("pipeline", () => {
+  it("should seed the first stage previous value with the original item", async () => {
+    const item = { name: "x" };
+    const result = await pipeline([item], async (previous, originalItem) => [
+      previous,
+      originalItem,
+    ]);
+
+    expect(result).toEqual([[item, item]]);
+  });
+
+  it("should support first-stage shorthand callbacks that treat previous as the item", async () => {
+    const result = await pipeline([{ name: "x" }], async (item) => (item as { name: string }).name);
+
+    expect(result).toEqual(["x"]);
+  });
+
   it("should pass previous result, original item, and index when item moves through multiple stages", async () => {
     const result = await pipeline(
       ["a", "b"],
-      async (_previous, item, index) => `${item}:${index}`,
+      async (previous, _item, index) => `${previous}:${index}`,
       async (previous, item) => `${previous}:${item.toUpperCase()}`,
       async (previous) => `${previous}:done`,
     );
@@ -298,6 +475,12 @@ describe("pipeline", () => {
 
     expect(result).toEqual(["fast", "slow"]);
     expect(events.indexOf("stage2:fast")).toBeLessThan(events.indexOf("stage1:slow"));
+  });
+
+  it("should reject more than 4096 items", async () => {
+    const items = Array.from({ length: WORKFLOW_COLLECTION_ITEM_LIMIT + 1 }, (_, index) => index);
+
+    await expect(pipeline(items, async (_previous, item) => item)).rejects.toThrow(/at most 4096/);
   });
 
   it("should drop a failed item to null and keep other items running when a stage throws", async () => {

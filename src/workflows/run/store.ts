@@ -1,8 +1,8 @@
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { err, ok, type Result } from "../result.ts";
-import type { WorkflowAgentProgress } from "../agent/model.ts";
+import { err, ok, type Result } from "#src/workflows/result.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowFailure,
   WorkflowPhaseProgress,
@@ -64,10 +64,11 @@ export class WorkflowRunStore {
       return err(readError(this.#rootDir, cause));
     }
 
+    const results = await Promise.all(
+      entries.filter((entry) => entry.isDirectory()).map((entry) => this.#readManifest(entry.name)),
+    );
     const runs: WorkflowRunState[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const result = await this.#readManifest(entry.name);
+    for (const result of results) {
       if (result.status === "ok") runs.push(result.value);
     }
 
@@ -186,9 +187,14 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
     return {
       runId: value.runId,
       taskId: value.taskId,
+      sessionId: isString(value.sessionId) ? value.sessionId : undefined,
+      triggerSource: isWorkflowRunTriggerSource(value.triggerSource)
+        ? value.triggerSource
+        : undefined,
       workflowName: value.workflowName,
       description: isString(value.description) ? value.description : undefined,
       status: value.status,
+      defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
       script: value.script,
       scriptPath: value.scriptPath,
       phases: normalizePhases(value.phases),
@@ -230,6 +236,10 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
   return {
     runId: value.runId,
     taskId: isString(value.taskId) ? value.taskId : `task_${String(value.id ?? value.runId)}`,
+    sessionId: isString(value.sessionId) ? value.sessionId : undefined,
+    triggerSource: isWorkflowRunTriggerSource(value.triggerSource)
+      ? value.triggerSource
+      : undefined,
     workflowName: value.name,
     description: isString(value.description)
       ? value.description
@@ -237,6 +247,7 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
         ? snapshot.description
         : undefined,
     status: normalizeObservedStatus(value.status),
+    defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
     script: value.script,
     scriptPath: value.scriptPath,
     phases,
@@ -359,6 +370,12 @@ function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
     value === "stopping" ||
     value === "stopped"
   );
+}
+
+function isWorkflowRunTriggerSource(
+  value: unknown,
+): value is NonNullable<WorkflowRunState["triggerSource"]> {
+  return value === "ultracode" || value === "manual" || value === "saved" || value === "unknown";
 }
 
 function isWorkflowProgressEntry(value: unknown): value is WorkflowProgressEntry {

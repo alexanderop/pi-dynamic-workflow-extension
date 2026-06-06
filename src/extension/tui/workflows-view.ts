@@ -1,7 +1,7 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { Result } from "../../workflows/result.ts";
-import type { WorkflowRunState } from "../../workflows/run/model.ts";
-import type { WorkflowRunStoreError } from "../../workflows/run/store.ts";
+import type { Result } from "#src/workflows/result.ts";
+import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import type { WorkflowRunStoreError } from "#src/workflows/run/store.ts";
 import { WorkflowsTuiComponent } from "./workflows-component.ts";
 
 export interface ShowWorkflowsTuiOptions {

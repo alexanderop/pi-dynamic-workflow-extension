@@ -1,7 +1,7 @@
-import type { AgentOptions } from "../agent/model.ts";
-import type { WorkflowAgentRunner } from "../agent/scheduler.ts";
-import type { WorkflowAgentJournal, WorkflowJournalKey } from "../journal/model.ts";
-import type { WorkflowPhaseProgress, WorkflowProgressEntry } from "../run/model.ts";
+import type { AgentOptions } from "#src/workflows/agent/model.ts";
+import type { WorkflowAgentRunner } from "#src/workflows/agent/scheduler.ts";
+import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
+import type { WorkflowPhaseProgress, WorkflowProgressEntry } from "#src/workflows/run/model.ts";
 
 export interface WorkflowPhase {
   title: string;
@@ -11,8 +11,9 @@ export interface WorkflowPhase {
 
 export interface WorkflowMeta {
   name: string;
-  description?: string;
+  description: string;
   whenToUse?: string;
+  model?: string;
   phases?: WorkflowPhase[];
 }
 
@@ -53,6 +54,7 @@ export interface WorkflowRuntimeOptions {
   args?: unknown;
   cwd?: string;
   budgetTotal?: number | null;
+  defaultModel?: string;
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;
   agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;
@@ -60,6 +62,7 @@ export interface WorkflowRuntimeOptions {
   journal?: WorkflowAgentJournal;
   replayCache?: WorkflowRuntimeReplayCache;
   onControlReady?: (control: WorkflowRuntimeControl) => void;
+  onStateChange?: (state: WorkflowRuntimeState) => void;
 }
 
 export interface WorkflowRuntimeError {

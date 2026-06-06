@@ -12,6 +12,12 @@
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "vitest"],
   "overrides": [
     {
+      "files": ["src/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "error"
+      }
+    },
+    {
       "files": ["**/*.test.ts", "**/*.spec.ts"],
       "rules": {
         "local/test-name-should": "error"

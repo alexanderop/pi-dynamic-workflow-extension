@@ -1,5 +1,5 @@
-import type { WorkflowAgentProgress } from "../agent/model.ts";
-import type { WorkflowRunStatus } from "../run/model.ts";
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
+import type { WorkflowRunStatus } from "#src/workflows/run/model.ts";
 
 export interface MonitorAgentRow {
   glyph: string;

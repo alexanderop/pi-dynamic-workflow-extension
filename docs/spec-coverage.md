@@ -1,0 +1,39 @@
+# Spec Coverage Map
+
+Use this map before changing workflow behavior. It connects `spec.md` to the
+current production modules, tests, and known implementation gaps so future
+agents can find the right edit surface quickly.
+
+Update this file when a change moves a spec area forward, adds a new module, or
+changes which tests prove the behavior.
+
+## Ownership Table
+
+| Spec area | Production owner | Test owner | Status | Next gap |
+|---|---|---|---|---|
+| §5 System architecture | `src/workflows/launch/launcher.ts`, `src/workflows/script/runtime.ts`, `src/workflows/agent/scheduler.ts`, `src/workflows/run/store.ts`, `src/workflows/run/controller.ts` | `test/workflows/launch/launcher.test.ts`, `test/workflows/launch/one-agent-smoke.test.ts`, `test/workflows/run/controller.test.ts` | Partial end-to-end shape exists. | Real Pi subagent execution and richer run control remain the largest integration gaps. |
+| §6 Workflow script format | `src/workflows/script/parser.ts`, `src/workflows/script/model.ts` | `test/workflows/script/parser.test.ts`, `test/workflows/script/parser.property.test.ts` | Literal `meta` parsing and deterministic-script guards exist, including Claude-compatible forbidden-text scans for time/random helpers. | Keep parser rules aligned with new observed workflow syntax. |
+| §7 Runtime API | `src/workflows/script/runtime.ts`, `src/workflows/script/model.ts`, `src/workflows/agent/structured-output-tool.ts` | `test/workflows/script/runtime.test.ts`, `test/workflows/script/runtime.property.test.ts`, `test/workflows/reference/claude-code-workflow-tool-contract.test.ts`, `test/workflows/agent/structured-output-tool.test.ts` | Core globals, `agent`, `parallel`, `pipeline`, logging, phases, `meta.model` defaults, direct non-schema agent-failure-to-null behavior, scheduler cap fail-fast behavior, budget surface, hard budget enforcement, 4096 item caps, and Pi runner structured-output tool capture exist. | Child `workflow()` calls and bounded structured-output retry/nudge policy need follow-up slices. |
+| §8 Launch contract | `src/workflows/launch/launcher.ts`, `src/workflows/launch/model.ts`, `src/workflows/launch/operations.ts` | `test/workflows/launch/launcher.test.ts`, `test/workflows/launch/workflow-scenario.test.ts` | Inline, saved-name, and script-path launches are implemented for the current runtime path. | Keep launch copy, notification, and resume behavior synchronized with persistence changes. |
+| §9 Subagent contract | `src/workflows/agent/model.ts`, `src/workflows/agent/scheduler.ts`, `src/workflows/agent/pi-runner.ts`, `src/workflows/agent/structured-output-tool.ts` | `test/workflows/agent/scheduler.test.ts`, `test/workflows/agent/scheduler.property.test.ts`, `test/workflows/agent/pi-runner.test.ts`, `test/workflows/agent/structured-output-tool.test.ts` | Scheduler and Pi runner adapter are present, including per-agent model propagation into Pi sessions and schema-backed `structured_output` capture for real Pi subagents. | Transcript metadata, bounded structured-output retries, and `agentType` mapping need explicit policy and tests. |
+| §10 Scheduling | `src/workflows/agent/scheduler.ts` | `test/workflows/agent/scheduler.test.ts`, `test/workflows/agent/scheduler.property.test.ts` | FIFO queueing, global concurrency cap, total-agent cap, progress rows, and stop behavior are covered. | Pause/resume behavior belongs in controller integration, not direct scheduler expansion unless the spec changes. |
+| §11 Pipeline semantics | `src/workflows/script/runtime.ts` | `test/workflows/script/runtime.test.ts`, `test/workflows/script/runtime.property.test.ts` | `parallel()` and `pipeline()` semantics are covered by unit and property tests. | Add cases only when `spec.md` records new externally visible behavior. |
+| §12 Run state model | `src/workflows/run/model.ts`, `src/workflows/run/state-machine.ts`, `src/workflows/run/store.ts` | `test/workflows/run/state-machine.test.ts`, `test/workflows/run/state-machine.property.test.ts`, `test/workflows/run/store.test.ts` | Typed states, transitions, replay helpers, and manifest storage exist. | Expand manifest compatibility only from observed artifacts or explicit Pi decisions. |
+| §13 Journal | `src/workflows/journal/model.ts`, `src/workflows/journal/key.ts`, `src/workflows/journal/store.ts` | `test/workflows/journal/key.test.ts`, `test/workflows/journal/key.property.test.ts`, `test/workflows/journal/store.test.ts` | Stable key inputs and JSONL event storage exist. | Keep invalidation and replay semantics aligned with resume behavior. |
+| §14 Resume | `src/workflows/launch/launcher.ts`, `src/workflows/journal/store.ts`, `src/workflows/journal/key.ts` | `test/workflows/launch/launcher.test.ts`, `test/workflows/launch/one-agent-smoke.test.ts` | Resume cache replay exists for current launcher scenarios. | Controller-driven resume of existing runs remains future work. |
+| §15 Saved workflows | `src/workflows/saved/resolver.ts`, `src/workflows/saved/list.ts`, `src/workflows/saved/save-run-script.ts` | `test/workflows/saved/resolver.test.ts`, `test/workflows/saved/resolver.property.test.ts`, `test/workflows/saved/list.test.ts`, `test/workflows/saved/save-run-script.test.ts` | Pi-namespaced lookup, listing, and save-run-script behavior are covered. | Recheck against new Claude artifact observations before changing lookup precedence. |
+| §16 Control operations | `src/workflows/run/controller.ts`, `src/workflows/run/control-registry.ts`, `src/workflows/run/state-machine.ts` | `test/workflows/run/controller.test.ts`, `test/workflows/run/state-machine.test.ts` | Pure transitions and controller surface exist. | Wire richer TUI actions only through the controller/projection boundary. |
+| §17 Notifications | `src/workflows/launch/launcher.ts`, `src/extension/ultracode/launch-ultracode-workflow.ts` | `test/workflows/launch/launcher.test.ts`, `test/extension/ultracode/register-ultracode.test.ts` | Testable completion notification payloads and ultracode integration hooks exist. | Keep large results file-backed instead of dumping them into chat. |
+| §18 Pi storage layout | `src/workflows/run/root-dir.ts`, `src/workflows/run/store.ts`, `src/workflows/saved/resolver.ts` | `test/workflows/run/root-dir.test.ts`, `test/workflows/run/store.test.ts`, `test/workflows/saved/resolver.test.ts` | Project-local run storage and Pi saved-workflow paths exist. | New storage decisions require an ADR before implementation. |
+| §24 `/workflows` UI | `src/workflows/view/*`, `src/extension/tui/*`, `src/extension/commands/workflows-command.ts` | `test/workflows/view/*`, `test/extension/tui/*`, `test/extension/commands/workflows-command.test.ts` | Projection, layout, navigation, command page objects, and TUI adapter tests exist. | Add controls through controller actions; keep view code read-model-only. |
+| Ultracode trigger and status line | `src/extension/ultracode/*`, `src/extension/statusline/workflow-statusline.ts`, `src/workflows/statusline/projector.ts` | `test/extension/ultracode/*`, `test/extension/statusline/workflow-statusline.test.ts`, `test/workflows/statusline/projector.test.ts` | Pi extension surfaces for authoring/launching/monitoring workflows exist. | Keep these adapters thin and update ADRs when Pi session policy changes. |
+
+## Editing Rules
+
+- For behavior defined in `spec.md`, start with the row above, then read the
+  linked production and test files.
+- For Pi adapter behavior, also read `docs/pi-extension-reference.md` and the
+  relevant ADRs before editing.
+- For new reverse-engineering findings, update `spec.md` first, then adjust this
+  map after implementation.
+- For durable design choices, add or update an ADR under `docs/adr/`.
