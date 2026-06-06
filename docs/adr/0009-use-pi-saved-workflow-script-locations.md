@@ -1,6 +1,6 @@
 # ADR 0009: Use Pi-Namespace Saved Workflow Locations With Claude-Like Files
 
-Status: accepted
+Status: accepted, amended 2026-06-06
 
 ## Context
 
@@ -34,14 +34,16 @@ under `.pi`, not `.claude`.
 Use Pi-namespaced saved workflow locations with Claude-like plain `.js` files:
 
 ```text
-<project>/.pi/workflows/*.js
+<pi-workflow-root>/*.js
 ~/.pi/workflows/*.js
 ```
 
-When launching by `name`, resolve project-local workflows before personal
-workflows. Within each scope, first check the conventional exact path
-`<name>.js`, then scan other `.js` files in that scope and match by exported
-`meta.name`.
+When launching by `name`, resolve project/workspace-local workflows before
+personal workflows. The project/workspace scope is the same resolved
+`.pi/workflows` root used for run artifacts (outermost existing ancestor root,
+falling back to `ctx.cwd/.pi/workflows`). Within each scope, first check the
+conventional exact path `<name>.js`, then scan other `.js` files in that scope
+and match by exported `meta.name`.
 
 The requested name must be a command name without path separators. If the exact
 `<name>.js` file exists but declares a different `meta.name`, fail clearly as an
@@ -59,7 +61,7 @@ launcher options so they never read or write the user's real home directory.
 - Pi dynamic workflows do not write user/project state into Claude Code's
   `.claude` namespace.
 - Saved workflow files keep Claude Code's plain `.js` module shape.
-- Project workflows can override personal workflows predictably.
+- Project/workspace workflows can override personal workflows predictably.
 - Saved workflows stay separate from per-run manifests, journals, outputs, and
   transcripts even though project saved scripts share the `.pi/workflows` root
   with run directories.

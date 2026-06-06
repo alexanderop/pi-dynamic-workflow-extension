@@ -94,6 +94,8 @@ export async function launchWorkflow(
   const initialState: WorkflowRunState = {
     runId,
     taskId,
+    sessionId: options.sessionId,
+    triggerSource: options.triggerSource,
     workflowName: parsed.value.meta.name,
     description: parsed.value.meta.description ?? request.description,
     status: "running",

@@ -14,6 +14,8 @@ type WorkflowRunPhase = string | { title: string };
 interface WorkflowRunBuilderOptions {
   readonly runId?: string;
   readonly taskId?: string;
+  readonly sessionId?: string;
+  readonly triggerSource?: WorkflowRunState["triggerSource"];
   readonly description?: string;
   readonly phases?: WorkflowRunPhase[];
   readonly agents?: WorkflowAgentProgress[];
@@ -82,6 +84,8 @@ function buildRun(
   return {
     runId,
     taskId: options.taskId ?? "task_test",
+    ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
+    ...(options.triggerSource === undefined ? {} : { triggerSource: options.triggerSource }),
     workflowName,
     ...(options.description === undefined ? {} : { description: options.description }),
     status,

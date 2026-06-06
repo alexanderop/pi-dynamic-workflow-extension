@@ -183,7 +183,11 @@ return { result };
 
     const result = await launchWorkflow(
       { script, args: { target: "src" } },
-      launchOptions({ schedulerRunner: agents.schedulerRunner }),
+      launchOptions({
+        schedulerRunner: agents.schedulerRunner,
+        sessionId: "session_current",
+        triggerSource: "ultracode",
+      }),
     );
 
     const launch = unwrap(result);
@@ -207,6 +211,8 @@ return { result };
     expect(initialManifest).toMatchObject({
       runId: "wf_test",
       taskId: "task_test",
+      sessionId: "session_current",
+      triggerSource: "ultracode",
       workflowName: "launch-smoke",
       description: "Launch a fake one-agent workflow",
       status: "running",

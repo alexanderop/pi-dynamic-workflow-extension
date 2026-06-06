@@ -426,6 +426,8 @@ every subagent transcript.
 interface WorkflowRunState {
   runId: string;
   taskId: string;
+  sessionId?: string;
+  triggerSource?: "ultracode" | "manual" | "saved" | "unknown";
   workflowName: string;
   status: WorkflowRunStatus;
   summary?: string;
@@ -671,6 +673,12 @@ the main conversation.
 
 Requirements:
 
+- In Pi, the extension-specific notification message SHOULD include an explicit
+  continuation instruction around the `<task-notification>` XML when the original
+  user input was handled by an extension trigger (for example `ultracode`). Pi
+  converts custom messages into user-context messages, but it does not provide
+  Claude Code's private task-notification policy, so the notification must tell
+  the main agent to continue from the workflow result.
 - `output-file` MUST point to the full result. The reference run truncated the
   inline `<result>` (`truncated 94566 chars, full result in <output-file>`).
 - Inline `result` MAY be truncated.
@@ -724,28 +732,33 @@ Observed Claude Code saved workflows live outside run state:
 
 Pi extension mapping:
 
+The extension resolves the workflow root from the Pi `cwd` by walking upward and
+using the outermost existing `.pi/workflows` directory. This lets a workspace-level
+Pi root such as `/Users/alexanderopalic/Projects/.pi/workflows` own workflow
+runs even when Pi is launched from a nested repository inside that workspace. If
+no ancestor has `.pi/workflows`, the extension falls back to
+`<cwd>/.pi/workflows`.
+
 ```text
-<pi-project-root>/
-  .pi/workflows/
-    <runId>/
-      manifest.json
-        Run state/read model for `/workflows`.
+<pi-workflow-root>/
+  <runId>/
+    manifest.json
+      Run state/read model for `/workflows`.
 
-      script.js
-        Exact script executed by this run.
+    script.js
+      Exact script executed by this run.
 
-      journal.jsonl
-        Append-only resume/cache journal.
+    journal.jsonl
+      Append-only resume/cache journal.
 
-      output.json
-        Full terminal workflow result.
+    output.json
+      Full terminal workflow result.
 
-      transcripts/
-        Full subagent transcripts and metadata.
+    transcripts/
+      Full subagent transcripts and metadata.
 
-  .pi/workflows/
-    <workflowName>.js
-      Project-local saved workflow scripts, using Claude-like plain `.js` files.
+  <workflowName>.js
+    Project/workspace-local saved workflow scripts, using Claude-like plain `.js` files.
 
 ~/.pi/workflows/
   <workflowName>.js
@@ -764,6 +777,12 @@ source currently executes extension command handlers as `Promise<void>` and
 ignores handler return values, so headless command output needs an explicit
 non-interactive emission path. The current extension emits plain text in `print`
 mode and one JSON line with `type: "workflow_command_output"` in `json` mode.
+
+Pi run manifests MAY include `sessionId` ownership metadata. When a current Pi
+session id is available from `ctx.sessionManager.getSessionId()`, the default
+`/workflows` view filters run manifests to that session id. Legacy manifests
+without `sessionId` and manifests from other sessions are hidden by the default
+session-scoped view. Saved workflow scripts are not session-scoped.
 
 ## 19. Security Requirements
 

@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { join } from "node:path";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
 import { getWorkflowRunControl } from "#src/workflows/run/control-registry.ts";
 import {
@@ -8,6 +7,7 @@ import {
 } from "#src/workflows/run/controller.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import type { Result } from "#src/workflows/result.ts";
+import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
 import { formatDuration } from "#src/workflows/view/layout.ts";
@@ -29,7 +29,7 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
     description: "Show dynamic workflow runs",
     handler: async (_args, ctx) => {
       const commandCtx = ctx as WorkflowCommandContext;
-      const rootDir = join(commandCtx.cwd, ".pi", "workflows");
+      const rootDir = workflowRootDirForCwd(commandCtx.cwd);
       const store = new WorkflowRunStore({ rootDir });
       const runs = await store.listRuns();
 
@@ -41,6 +41,7 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
         );
         return;
       }
+      const visibleRuns = filterRunsForCurrentSession(runs.value, commandCtx);
 
       const savedWorkflows = await listSavedWorkflows(
         commandCtx.savedWorkflowDirs ?? {
@@ -60,9 +61,13 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
 
       if (shouldUseWorkflowsTui(commandCtx)) {
         await showWorkflowsTui(commandCtx, {
-          runs: runs.value,
+          runs: visibleRuns,
           savedWorkflowCount: savedWorkflows.value.length,
-          loadRuns: () => store.listRuns(),
+          loadRuns: async () => {
+            const latest = await store.listRuns();
+            if (latest.status === "error") return latest;
+            return { status: "ok", value: filterRunsForCurrentSession(latest.value, commandCtx) };
+          },
           onPauseRun: (runId) => {
             void controlWorkflow(commandCtx, store, runId, `pause workflow run '${runId}'`, (c) =>
               c.pause(runId),
@@ -93,11 +98,28 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
 
       emitWorkflowCommandOutput(
         commandCtx,
-        formatWorkflowsOverview(runs.value, savedWorkflows.value),
+        formatWorkflowsOverview(visibleRuns, savedWorkflows.value),
         "info",
       );
     },
   });
+}
+
+function filterRunsForCurrentSession(
+  runs: WorkflowRunState[],
+  ctx: WorkflowCommandContext,
+): WorkflowRunState[] {
+  const sessionId = currentSessionId(ctx);
+  if (sessionId === undefined) return runs;
+  return runs.filter((run) => run.sessionId === sessionId);
+}
+
+function currentSessionId(ctx: WorkflowCommandContext): string | undefined {
+  try {
+    return ctx.sessionManager?.getSessionId?.();
+  } catch {
+    return undefined;
+  }
 }
 
 async function controlWorkflow(

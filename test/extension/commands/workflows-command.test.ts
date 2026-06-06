@@ -173,6 +173,67 @@ describe("registerWorkflowsCommand", () => {
     const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1];
     expect(tuiOptions?.runs).toHaveLength(2);
   });
+
+  it("should show only workflow runs from the current Pi session", async () => {
+    await writeRunManifest(
+      tempDir,
+      runState({
+        runId: "wf_current",
+        workflowName: "current-session",
+        sessionId: "session_current",
+      }),
+    );
+    await writeRunManifest(
+      tempDir,
+      runState({
+        runId: "wf_other",
+        workflowName: "other-session",
+        sessionId: "session_other",
+      }),
+    );
+    await writeRunManifest(
+      tempDir,
+      runState({
+        runId: "wf_legacy",
+        workflowName: "legacy-without-session",
+      }),
+    );
+    const command = registerCommand();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      sessionManager: { getSessionId: () => "session_current" },
+      ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
+    });
+
+    expect(showWorkflowsTui).toHaveBeenCalledOnce();
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1];
+    expect(tuiOptions?.runs.map((run) => run.runId)).toEqual(["wf_current"]);
+    await expect(tuiOptions?.loadRuns?.()).resolves.toMatchObject({
+      status: "ok",
+      value: [{ runId: "wf_current" }],
+    });
+  });
+
+  it("should read the workspace workflow root when invoked from a nested project", async () => {
+    const nestedProject = join(tempDir, "apps", "nested-project");
+    await mkdir(nestedProject, { recursive: true });
+    await writeRunManifest(tempDir, runState({ runId: "wf_workspace", status: "completed" }));
+    const command = registerCommand();
+
+    await command.handler("", {
+      cwd: nestedProject,
+      mode: "tui",
+      hasUI: true,
+      ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
+    });
+
+    expect(showWorkflowsTui).toHaveBeenCalledOnce();
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1];
+    expect(tuiOptions?.runs.map((run) => run.runId)).toEqual(["wf_workspace"]);
+  });
 });
 
 interface RegisteredCommandForTest {

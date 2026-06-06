@@ -186,6 +186,10 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
     return {
       runId: value.runId,
       taskId: value.taskId,
+      sessionId: isString(value.sessionId) ? value.sessionId : undefined,
+      triggerSource: isWorkflowRunTriggerSource(value.triggerSource)
+        ? value.triggerSource
+        : undefined,
       workflowName: value.workflowName,
       description: isString(value.description) ? value.description : undefined,
       status: value.status,
@@ -230,6 +234,10 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
   return {
     runId: value.runId,
     taskId: isString(value.taskId) ? value.taskId : `task_${String(value.id ?? value.runId)}`,
+    sessionId: isString(value.sessionId) ? value.sessionId : undefined,
+    triggerSource: isWorkflowRunTriggerSource(value.triggerSource)
+      ? value.triggerSource
+      : undefined,
     workflowName: value.name,
     description: isString(value.description)
       ? value.description
@@ -359,6 +367,12 @@ function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
     value === "stopping" ||
     value === "stopped"
   );
+}
+
+function isWorkflowRunTriggerSource(
+  value: unknown,
+): value is NonNullable<WorkflowRunState["triggerSource"]> {
+  return value === "ultracode" || value === "manual" || value === "saved" || value === "unknown";
 }
 
 function isWorkflowProgressEntry(value: unknown): value is WorkflowProgressEntry {

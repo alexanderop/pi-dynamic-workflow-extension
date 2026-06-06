@@ -1,5 +1,9 @@
 import type { Result } from "#src/workflows/result.ts";
-import type { WorkflowFailure, WorkflowRunState } from "#src/workflows/run/model.ts";
+import type {
+  WorkflowFailure,
+  WorkflowRunState,
+  WorkflowRunTriggerSource,
+} from "#src/workflows/run/model.ts";
 import type { WorkflowParseError } from "#src/workflows/script/parser.ts";
 import type { WorkflowRuntimeOptions } from "#src/workflows/script/model.ts";
 import type {
@@ -18,6 +22,8 @@ export interface WorkflowLaunchRequest {
 
 export interface WorkflowLaunchOptions {
   readonly rootDir: string;
+  readonly sessionId?: string;
+  readonly triggerSource?: WorkflowRunTriggerSource;
   readonly cwd?: string;
   readonly now?: () => number;
   readonly createTaskId?: () => string;

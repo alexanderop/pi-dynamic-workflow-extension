@@ -17,6 +17,8 @@ export type WorkflowRunStatus =
 export interface WorkflowRunState {
   runId: string;
   taskId: string;
+  sessionId?: string;
+  triggerSource?: WorkflowRunTriggerSource;
   workflowName: string;
   description?: string;
   status: WorkflowRunStatus;
@@ -35,6 +37,8 @@ export interface WorkflowRunState {
   result?: unknown;
   failures?: WorkflowFailure[];
 }
+
+export type WorkflowRunTriggerSource = "ultracode" | "manual" | "saved" | "unknown";
 
 export type WorkflowProgressEntry = WorkflowPhaseProgress | WorkflowAgentProgress;
 

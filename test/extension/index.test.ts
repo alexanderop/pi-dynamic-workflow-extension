@@ -21,9 +21,11 @@ describe("dynamicWorkflowExtension", () => {
 
   it("should register the workflows command when extension loads", () => {
     const registerCommand = vi.fn<(...args: unknown[]) => void>();
+    const on = vi.fn<(...args: unknown[]) => void>();
 
     dynamicWorkflowExtension({
       registerCommand,
+      on,
     } as any);
 
     expect(registerCommand).toHaveBeenCalledWith(
@@ -33,6 +35,7 @@ describe("dynamicWorkflowExtension", () => {
         handler: expect.any(Function),
       }),
     );
+    expect(on).toHaveBeenCalledWith("input", expect.any(Function));
   });
 
   it("should render an empty state when no workflow runs or saved workflows exist", async () => {
@@ -264,9 +267,11 @@ interface RegisteredCommandForTest {
 
 function registerWorkflowsCommand(): RegisteredCommandForTest {
   const registerCommand = vi.fn<(...args: unknown[]) => void>();
+  const on = vi.fn<(...args: unknown[]) => void>();
 
   dynamicWorkflowExtension({
     registerCommand,
+    on,
   } as any);
 
   return registerCommand.mock.calls[0]?.[1] as RegisteredCommandForTest;

@@ -1,6 +1,6 @@
 # ADR 0005: Use Project-Local Pi Workflow Run Storage
 
-Status: accepted
+Status: accepted, amended 2026-06-06
 
 ## Context
 
@@ -14,7 +14,14 @@ planning note.
 
 ## Decision
 
-Use project-local `.pi/workflows` as the first workflow run storage root.
+Use a Pi workflow root named `.pi/workflows` as the first workflow run storage
+root. When launched from a nested cwd, resolve this root by walking upward from
+`ctx.cwd` and choosing the outermost existing `.pi/workflows` directory. If no
+ancestor already has `.pi/workflows`, fall back to `ctx.cwd/.pi/workflows`.
+
+This keeps workflow artifacts with the existing Pi workspace state instead of
+creating a new nested runtime tree in whichever package/repo happened to trigger
+the extension.
 
 Each launched run gets one directory:
 
@@ -46,8 +53,8 @@ Pi-namespaced `.pi/workflows/*.js` paths with Claude-like plain JavaScript files
 
 - Filesystem integration tests can use a temporary `.pi/workflows` root without
   depending on a live Pi session.
-- The extension can derive the default root from `ctx.cwd`, keeping workflow runs
-  scoped to the project being worked on.
+- The extension can derive the default root from `ctx.cwd` while still reusing an
+  existing workspace-level Pi root for nested projects.
 - `/workflows` stays cheap because it only needs manifest files for the overview.
 - This storage is project-local runtime state, so later hardening still needs
   atomic manifest writes, partial-file recovery, and a clearer policy for which
