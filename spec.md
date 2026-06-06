@@ -808,11 +808,13 @@ session-scoped view. Saved workflow scripts are not session-scoped.
 The Pi extension SHOULD also expose a passive active-workflow status line through
 `ctx.ui.setStatus("dynamic-workflows", text)`. This status line is a compact cue,
 not the full monitor: it selects the newest active run in the current session,
-formats workflow name, optional description, done/total agent count, elapsed
-runtime, and token usage, and clears itself when no active run remains. Because
-Pi footer statuses are non-interactive, arrow-key selection and `Enter` handling
-belong to a future below-editor widget or the `/workflows` TUI rather than this
-passive status entry.
+formats workflow name, done/total agent count, elapsed runtime, current phase,
+current active agent, token usage, and a truncated optional description. Essential
+live fields SHOULD appear before the description so Pi footer truncation preserves
+elapsed time, phase, and agent context. The status line clears itself when no
+active run remains. Because Pi footer statuses are non-interactive, arrow-key
+selection and `Enter` handling belong to a future below-editor widget or the
+`/workflows` TUI rather than this passive status entry.
 
 ## 19. Pi Ultracode Session Policy
 

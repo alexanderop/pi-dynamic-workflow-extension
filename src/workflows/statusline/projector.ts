@@ -1,6 +1,11 @@
+import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type { WorkflowRunState, WorkflowRunStatus } from "#src/workflows/run/model.ts";
 import { formatDuration, formatTokens } from "#src/workflows/view/layout.ts";
 import { isActiveRun, isWorkflowAgentProgress } from "#src/workflows/view/projector.ts";
+
+const DEFAULT_DESCRIPTION_WIDTH = 48;
+const SUMMARY_PHASE_WIDTH = 24;
+const SUMMARY_AGENT_WIDTH = 28;
 
 export interface FormatWorkflowStatuslineOptions {
   readonly now?: number;
@@ -19,9 +24,15 @@ export function formatWorkflowStatusline(
   const agents = run.workflowProgress.filter(isWorkflowAgentProgress);
   const doneAgents = agents.filter((agent) => agent.state === "done").length;
   const totalAgents = agents.length;
+  const activeAgent = selectActiveAgent(agents);
+  const activePhaseTitle = currentPhaseTitle(run, activeAgent);
   const summaryParts = [
-    `${doneAgents}/${totalAgents} agents done`,
+    `${doneAgents}/${totalAgents} agents`,
     formatDuration(run.durationMs ?? Math.max(0, now - run.startTime)),
+    activePhaseTitle === undefined
+      ? undefined
+      : `phase ${truncatePlain(activePhaseTitle, SUMMARY_PHASE_WIDTH)}`,
+    activeAgent === undefined ? undefined : activeAgentSummary(activeAgent, agents),
     run.totalTokens > 0 ? `↓ ${formatTokens(run.totalTokens)} tokens` : undefined,
   ].filter((part): part is string => part !== undefined);
 
@@ -36,7 +47,11 @@ export function formatWorkflowStatusline(
     });
   }
 
-  return [`${statusGlyph(run.status)} ${run.workflowName}`, run.description, summary]
+  return [
+    `${statusGlyph(run.status)} ${run.workflowName}`,
+    summary,
+    compactDescription(run.description),
+  ]
     .filter((part): part is string => part !== undefined && part.length > 0)
     .join("  ");
 }
@@ -86,6 +101,58 @@ function compactStatusline({
     truncatePlain(description, descriptionWidth),
   ].join(separator);
   return `${left}${separator}${summary}`;
+}
+
+function compactDescription(description: string | undefined): string | undefined {
+  if (description === undefined || description.length === 0) return undefined;
+  return truncatePlain(description, DEFAULT_DESCRIPTION_WIDTH);
+}
+
+function activeAgentSummary(
+  activeAgent: WorkflowAgentProgress,
+  agents: readonly WorkflowAgentProgress[],
+): string {
+  const runningAgents = agents.filter((agent) => agent.state === "running");
+  const extraRunning =
+    activeAgent.state === "running" && runningAgents.length > 1
+      ? ` +${runningAgents.length - 1}`
+      : "";
+
+  return `agent ${truncatePlain(activeAgent.label, SUMMARY_AGENT_WIDTH)}${extraRunning}`;
+}
+
+function selectActiveAgent(
+  agents: readonly WorkflowAgentProgress[],
+): WorkflowAgentProgress | undefined {
+  return (
+    newestAgent(agents.filter((agent) => agent.state === "running")) ??
+    newestAgent(agents.filter((agent) => agent.state === "queued"))
+  );
+}
+
+function newestAgent(agents: WorkflowAgentProgress[]): WorkflowAgentProgress | undefined {
+  return agents.toSorted(compareAgentActivityNewestFirst)[0];
+}
+
+function compareAgentActivityNewestFirst(
+  left: WorkflowAgentProgress,
+  right: WorkflowAgentProgress,
+): number {
+  return agentActivityTime(right) - agentActivityTime(left) || right.index - left.index;
+}
+
+function agentActivityTime(agent: WorkflowAgentProgress): number {
+  return agent.lastProgressAt ?? agent.startedAt ?? agent.queuedAt;
+}
+
+function currentPhaseTitle(
+  run: WorkflowRunState,
+  activeAgent: WorkflowAgentProgress | undefined,
+): string | undefined {
+  if (activeAgent?.phaseTitle !== undefined) return activeAgent.phaseTitle;
+
+  const phaseEntries = run.workflowProgress.filter((entry) => entry.type === "workflow_phase");
+  return phaseEntries.at(-1)?.title ?? (run.phases.length === 1 ? run.phases[0]?.title : undefined);
 }
 
 function truncatePlain(text: string, width: number): string {

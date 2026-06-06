@@ -12,15 +12,16 @@ describe("workflow statusline projector", () => {
       description: "In-depth quality review of the pi dynamic workflow extension",
       startTime: WORKFLOW_NOW - 258_000,
       agents: [
-        workflowAgent.done("scan"),
-        workflowAgent.done("review"),
-        workflowAgent.running("verify"),
+        workflowAgent.done("scan", { phase: "Review" }),
+        workflowAgent.done("review", { phase: "Review" }),
+        workflowAgent.running("verify", { phase: "Verify" }),
       ],
+      phases: ["Review", "Verify"],
       totalTokens: 832_600,
     });
 
     expect(formatWorkflowStatusline(run, { now: WORKFLOW_NOW })).toBe(
-      "○ pi-workflow-extension-review  In-depth quality review of the pi dynamic workflow extension  2/3 agents done · 4m 18s · ↓ 832.6k tokens",
+      "○ pi-workflow-extension-review  2/3 agents · 4m 18s · phase Verify · agent verify · ↓ 832.6k tokens  In-depth quality review of the pi dynamic workf…",
     );
   });
 
@@ -31,7 +32,7 @@ describe("workflow statusline projector", () => {
     });
 
     expect(formatWorkflowStatusline(run, { now: WORKFLOW_NOW })).toBe(
-      "○ quick-review  0/1 agents done · 2s",
+      "○ quick-review  0/1 agents · 2s · agent scan",
     );
   });
 
@@ -43,7 +44,7 @@ describe("workflow statusline projector", () => {
     });
 
     expect(formatWorkflowStatusline(run, { now: WORKFLOW_NOW, maxWidth: 40 })).toBe(
-      "○ very-long-workf…  0/1 agents done · 1s",
+      "○ very-lo…  0/1 agents · 1s · agent scan",
     );
   });
 
@@ -61,7 +62,7 @@ describe("workflow statusline projector", () => {
     });
 
     expect(formatWorkflowStatusline(run, { now: WORKFLOW_NOW, maxWidth: 133 })).toBe(
-      "○ pi-workflow-extension-r…  In-depth quality review of the pi dynamic-workflow extensi…  10/41 agents done · 4m 18s · ↓ 832.6k tokens",
+      "○ pi-workflow-extensi…  In-depth quality review of the pi dynamic-wo…  10/41 agents · 4m 18s · agent running-30 +30 · ↓ 832.6k tokens",
     );
   });
 

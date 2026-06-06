@@ -14,11 +14,18 @@ describe("workflow statusline controller", () => {
     controller.update(
       workflowRun.running("review", {
         startTime: WORKFLOW_NOW - 3_000,
-        agents: [workflowAgent.done("scan"), workflowAgent.running("verify")],
+        agents: [
+          workflowAgent.done("scan", { phase: "Review" }),
+          workflowAgent.running("verify", { phase: "Verify" }),
+        ],
+        phases: ["Review", "Verify"],
       }),
     );
 
-    expect(setStatus).toHaveBeenCalledWith("dynamic-workflows", "○ review  1/2 agents done · 3s");
+    expect(setStatus).toHaveBeenCalledWith(
+      "dynamic-workflows",
+      "○ review  1/2 agents · 3s · phase Verify · agent verify",
+    );
   });
 
   it("should keep the newest active workflow for the current session", () => {
@@ -47,10 +54,7 @@ describe("workflow statusline controller", () => {
       }),
     ]);
 
-    expect(setStatus).toHaveBeenLastCalledWith(
-      "dynamic-workflows",
-      "○ newer  0/0 agents done · 2s",
-    );
+    expect(setStatus).toHaveBeenLastCalledWith("dynamic-workflows", "○ newer  0/0 agents · 2s");
   });
 
   it("should clear the footer status when no active workflows remain", () => {
@@ -78,10 +82,7 @@ describe("workflow statusline controller", () => {
     now = WORKFLOW_NOW + 61_000;
     controller.tick();
 
-    expect(setStatus).toHaveBeenLastCalledWith(
-      "dynamic-workflows",
-      "○ review  0/0 agents done · 1m 1s",
-    );
+    expect(setStatus).toHaveBeenLastCalledWith("dynamic-workflows", "○ review  0/0 agents · 1m 1s");
   });
 
   it("should clear the footer status when disposed", () => {

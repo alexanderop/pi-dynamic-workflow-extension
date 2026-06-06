@@ -366,8 +366,9 @@ Scope:
 
 Tests:
 
-- Pure projector formats name, description, agent progress, elapsed time, token
-  usage, truncation, and active-run selection.
+- Pure projector formats name, done/total agent progress, elapsed time, current
+  phase, active agent, token usage, truncated description, and active-run
+  selection.
 - Launcher observer receives initial, live, and terminal states without affecting
   execution when it throws.
 - Extension controller sets, refreshes, and clears the Pi footer status.

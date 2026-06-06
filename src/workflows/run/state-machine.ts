@@ -38,11 +38,18 @@ export interface WorkflowTransitionError {
 
 type WorkflowRunEventType = WorkflowRunEvent["type"];
 type WorkflowAgentEventType = WorkflowAgentEvent["type"];
+
+/**
+ * Every state must declare an entry (terminal states use `{}`). Making the
+ * state key required — rather than optional — means adding a new status to the
+ * union is a compile error until its transitions are defined. This is the
+ * useful half of XState's `setup()` exhaustiveness, without the dependency.
+ */
 type TransitionTable<TState extends string, TEvent extends string> = {
-  readonly [State in TState]?: Partial<Record<TEvent, TState>>;
+  readonly [State in TState]: Partial<Record<TEvent, TState>>;
 };
 
-const runTransitions: TransitionTable<WorkflowRunState["status"], WorkflowRunEventType> = {
+export const runTransitions: TransitionTable<WorkflowRunState["status"], WorkflowRunEventType> = {
   created: {
     run_start_requested: "starting",
     run_fail_requested: "failing",
@@ -91,7 +98,10 @@ const runTransitions: TransitionTable<WorkflowRunState["status"], WorkflowRunEve
   },
 };
 
-const agentTransitions: TransitionTable<WorkflowAgentProgress["state"], WorkflowAgentEventType> = {
+export const agentTransitions: TransitionTable<
+  WorkflowAgentProgress["state"],
+  WorkflowAgentEventType
+> = {
   queued: {
     agent_started: "running",
     agent_stopped: "stopped",

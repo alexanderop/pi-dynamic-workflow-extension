@@ -25,8 +25,12 @@ The extension owns a statusline controller that projects manifest-backed
 `WorkflowRunState` values into compact text:
 
 ```text
-○ workflow-name  optional description  2/3 agents done · 4m 18s · ↓ 832.6k tokens
+○ workflow-name  2/3 agents · 4m 18s · phase Verify · agent verify-api · ↓ 832.6k tokens  optional descript…
 ```
+
+The status keeps the active-run metrics, elapsed time, phase, and active agent
+before the optional description. The description is truncated so Pi's footer-level
+line truncation does not hide the live progress context.
 
 The controller selects the newest active run in the current Pi session when a
 session id is available, updates elapsed time on a timer, and clears the status
