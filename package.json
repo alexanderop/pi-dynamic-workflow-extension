@@ -20,18 +20,21 @@
     "lint": "oxlint src test tools",
     "lint:fix": "oxlint --fix src test tools",
     "pi": "pi --no-extensions -e .",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "test:coverage": "vitest --run --coverage"
   },
   "dependencies": {
     "acorn": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "4.1.7",
+    "fast-check": "^4.8.0",
     "jscpd": "^4.2.4",
     "oxfmt": "^0.53.0",
     "oxlint": "^1.68.0",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "vitest": "^4.1.7"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",

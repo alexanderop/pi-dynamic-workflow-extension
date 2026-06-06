@@ -7,6 +7,7 @@ This backlog treats the dynamic workflow feature as one epic that should be buil
 - Prefer one behavior plus its tests over broad infrastructure.
 - Keep the Pi extension shell thin; put workflow behavior in ordinary modules.
 - Use fake subagents before live Pi agent sessions.
+- Use property-based tests for pure workflow invariants before reaching for broad integration fuzzing.
 - Make run JSON the `/workflows` read model from the beginning.
 - Preserve every new workflow-model finding in `spec.md`.
 - Do not add live model tests until fake-runner and filesystem integration tests pass.
@@ -31,6 +32,7 @@ Tests:
 - Smoke test creates an isolated temp run fixture.
 - Fake runner can resolve string, object, failure, and delayed results.
 - Helpers clean up temp files.
+- Property-based tests cover layout, navigation, journal-key canonicalization, state-machine replay, parser guards, saved-name validation, runtime helper semantics, and bounded scheduler caps.
 
 Dependencies:
 
@@ -40,7 +42,7 @@ Spec coverage:
 
 - Enables every acceptance criterion without satisfying a user-facing workflow behavior by itself.
 
-Status: pending.
+Status: partially done. Fake-agent helpers, shared async support utilities, and initial `fast-check` property tests exist. Reusable temp directory and fixture-builder coverage can still be expanded.
 
 ### Slice 0.1: Installable Pi Package Shell
 

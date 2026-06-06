@@ -111,8 +111,8 @@ export function clampMonitorNavigation(
   bounds: MonitorBounds,
 ): MonitorNavigationState {
   let screen = state.screen;
+  if (screen === "promptReader" && bounds.agentCount === 0) screen = "overview";
   if (screen === "agentDetail" && bounds.agentCount === 0) screen = "overview";
-  if (screen === "promptReader" && bounds.agentCount === 0) screen = "agentDetail";
 
   return {
     screen,
