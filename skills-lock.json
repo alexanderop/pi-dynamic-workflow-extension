@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "lfg": {
+      "source": "alexanderop/skills",
+      "sourceType": "github",
+      "skillPath": "skills/in-progress/lfg/SKILL.md",
+      "computedHash": "450a43f4c43d70d82b49cdbfefbeda0074dd9603fbd6dbcf873174a9596c06f2"
+    }
+  }
+}
