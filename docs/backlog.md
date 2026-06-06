@@ -154,7 +154,11 @@ Spec coverage:
 - Threads through §5, §8, §9, §12, §13, and §17.
 - Advances acceptance criteria 1, 3, 5, 11, 12, and 16 in fake-runner form.
 
-Status: pending.
+Status: implemented with `test/workflows/launch/one-agent-smoke.test.ts`. The smoke
+story launches an inline workflow with a pending fake agent, proves the launch
+returns before agent completion, reads the initial and final manifests through
+`WorkflowRunStore`, verifies journal `started`/`result` events, checks the full
+`output.json`, and asserts the terminal notification points to that output file.
 
 ## Epic 1: Workflow Read Model And `/workflows` UI
 
@@ -281,6 +285,11 @@ Spec coverage:
 
 - §12 Run State Model.
 - §20 acceptance criterion 11.
+
+Status: implemented as a first stateful `/workflows` monitor. One run opens an
+overview monitor, multiple runs open a chooser, left-arrow opens structured
+agent detail, enter opens the selected agent prompt reader, escape steps back
+through states, and render tests protect the TUI width contract.
 
 ## Epic 2: Pure Workflow Runtime Semantics
 

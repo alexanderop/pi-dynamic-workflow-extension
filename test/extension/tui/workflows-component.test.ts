@@ -82,6 +82,123 @@ describe("WorkflowsTuiComponent", () => {
     expect(screen).toContain("output: .pi/workflows/wf_repo_audit/output.json");
   });
 
+  it("should open the monitor overview directly when exactly one workflow is active", () => {
+    const component = new WorkflowsTuiComponent({
+      runs: [
+        runState({
+          runId: "wf_repo_audit",
+          workflowName: "repo-audit",
+          status: "running",
+          phases: [{ title: "Review" }, { title: "Verify" }],
+          workflowProgress: [
+            { type: "workflow_phase", index: 1, title: "Review" },
+            { type: "workflow_phase", index: 2, title: "Verify" },
+            agent({ label: "review:security", state: "done", phaseTitle: "Review" }),
+            agent({ index: 1, label: "verify:security", state: "running", phaseTitle: "Verify" }),
+          ],
+          agentCount: 2,
+          startTime: Date.now() - 72_000,
+        }),
+      ],
+      theme,
+    });
+
+    const screen = component.render(100).join("\n");
+
+    expect(screen).toContain("repo-audit");
+    expect(screen).toContain("1/2 agents");
+    expect(screen).toContain("Phases");
+    expect(screen).toContain("Review");
+    expect(screen).toContain("Verify");
+    expect(screen).not.toContain("Runs");
+  });
+
+  it("should open a workflow chooser when multiple workflows are available", () => {
+    const component = new WorkflowsTuiComponent({
+      runs: [
+        runState({ runId: "wf_running", workflowName: "running-review", status: "running" }),
+        runState({ runId: "wf_completed", workflowName: "finished-audit", status: "completed" }),
+      ],
+      theme,
+    });
+
+    const screen = component.render(100).join("\n");
+
+    expect(screen).toContain("Choose a workflow");
+    expect(screen).toContain("↻ wf_running");
+    expect(screen).toContain("✓ wf_completed");
+  });
+
+  it("should switch from overview to structured agent detail with left arrow", () => {
+    const component = new WorkflowsTuiComponent({
+      runs: [
+        runState({
+          runId: "wf_repo_audit",
+          workflowName: "repo-audit",
+          status: "running",
+          phases: [{ title: "Review" }],
+          workflowProgress: [
+            agent({
+              label: "review:security",
+              state: "running",
+              promptPreview:
+                "You are auditing security.\nRead src/security.ts.\nReport validated findings.",
+              lastToolName: "Read",
+              lastToolSummary: "src/security.ts",
+              resultPreview: undefined,
+            }),
+          ],
+          agentCount: 1,
+          totalTokens: 41_100,
+          totalToolCalls: 11,
+        }),
+      ],
+      theme,
+    });
+
+    component.handleInput("\x1b[D");
+    const screen = component.render(100).join("\n");
+
+    expect(screen).toContain("review:security");
+    expect(screen).toContain("Prompt ·");
+    expect(screen).toContain("Activity · last 3");
+    expect(screen).toContain("Outcome");
+    expect(screen).toContain("Still running");
+  });
+
+  it("should open the selected agent prompt reader from structured detail", () => {
+    const component = new WorkflowsTuiComponent({
+      runs: [
+        runState({
+          runId: "wf_repo_audit",
+          workflowName: "repo-audit",
+          status: "running",
+          phases: [{ title: "Review" }],
+          workflowProgress: [
+            agent({
+              label: "review:security",
+              promptPreview: Array.from(
+                { length: 12 },
+                (_, index) => `Prompt line ${index + 1}`,
+              ).join("\n"),
+            }),
+          ],
+          agentCount: 1,
+        }),
+      ],
+      theme,
+    });
+
+    component.handleInput("\x1b[D");
+    component.handleInput("\r");
+    const screen = component.render(100).join("\n");
+
+    expect(screen).toContain("Prompt · 12 lines");
+    expect(screen).toContain("Prompt line 1");
+    expect(screen).toContain("Prompt line 12");
+    expect(screen).not.toContain("Activity ·");
+  });
+
   it("should keep every rendered line within the requested width", () => {
     const component = new WorkflowsTuiComponent({
       runs: [
