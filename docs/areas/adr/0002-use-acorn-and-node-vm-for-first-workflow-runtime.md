@@ -38,7 +38,7 @@ Use Node's built-in `node:vm` module for the first JavaScript execution kernel.
 
 The runtime will evaluate the parsed body as an async wrapper with only the
 workflow globals documented in `spec.md`: `args`, `budget`, `phase`, `log`,
-`agent`, `parallel`, `pipeline`, and eventually nested `workflow`.
+`agent`, `parallel`, and `pipeline`.
 
 Keep this execution kernel separate from launcher, scheduler, persistence,
 journal, subagent runner, and UI modules.

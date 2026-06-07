@@ -17,5 +17,4 @@ Each chunk should name:
 Available chunks:
 
 - [`001-structured-output-retry-adr.md`](../projects/structured-output-retry/chunk.md)
-- [`002-child-workflow-runtime.md`](../projects/child-workflow-global/chunk.md)
 - [`003-atomic-manifest-writes.md`](../projects/atomic-manifest-writes/chunk.md)

@@ -63,7 +63,6 @@ persistence, journal, resume, saved workflow, and `/workflows` foundations.
 - Do not make `ultracode` a slash command only. A command can be a fallback, but
   the primary experience is typing the word in the editor.
 - Do not bypass the existing `launchWorkflow()` persistence path.
-- Do not implement nested `workflow()` in the first slice.
 - Do not implement `agent({ isolation: "worktree" })` in the first slice.
 - Do not require live model tests in CI.
 

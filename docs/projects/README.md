@@ -12,12 +12,10 @@ to prevent.
 
 | # | Project | Status | The remaining gap | Spec |
 |---|---|---|---|---|
-| 1 | [agent-mock-boundary](./agent-mock-boundary/)       | ~95%        | `agents.boundary()` scoped runtime override (everything else implemented) | [spec](./agent-mock-boundary/spec.md) |
-| 2 | [child-workflow-global](./child-workflow-global/)   | partial     | runtime global `workflow(nameOrRef, args?)` — parity item 13 (items 1–12, 14–18 done) | [spec](./child-workflow-global/spec.md) |
-| 3 | [test-page-objects](./test-page-objects/)           | partial     | `saveRun`/`restartAgent` screen actions + spies, saved-workflow-scenario, journal assertions | [spec](./test-page-objects/spec.md) |
-| 4 | [live-feedback](./live-feedback/)                   | not started | live per-agent activity states (queued/thinking/using-tool/…) wired scheduler → projector → TUI | [spec](./live-feedback/spec.md) |
-| 5 | [workflows-monitor](./workflows-monitor/)           | in progress | spec §24 four-state TUI rebuild | [plan](./workflows-monitor/plan.md) · [ticket](./workflows-monitor/ticket.md) |
-| 6 | [saved-workflow-scopes](./saved-workflow-scopes/)   | **blocked** | re-introduce user scope — **requires revisiting ADR 0009** (commit `51e10ce7` deliberately dropped it) | [spec](./saved-workflow-scopes/spec.md) |
+| 1 | [test-page-objects](./test-page-objects/)           | partial     | `saveRun`/`restartAgent` screen actions + spies, saved-workflow-scenario, journal assertions | [spec](./test-page-objects/spec.md) |
+| 2 | [live-feedback](./live-feedback/)                   | not started | live per-agent activity states (queued/thinking/using-tool/…) wired scheduler → projector → TUI | [spec](./live-feedback/spec.md) |
+| 3 | [workflows-monitor](./workflows-monitor/)           | in progress | spec §24 four-state TUI rebuild | [plan](./workflows-monitor/plan.md) · [ticket](./workflows-monitor/ticket.md) |
+| 4 | [saved-workflow-scopes](./saved-workflow-scopes/)   | **blocked** | re-introduce user scope — **requires revisiting ADR 0009** (commit `51e10ce7` deliberately dropped it) | [spec](./saved-workflow-scopes/spec.md) |
 
 ## Ongoing infra work (no single finish line)
 
@@ -28,8 +26,14 @@ the numbered projects above.
 - [atomic-manifest-writes](./atomic-manifest-writes/) — single-writer / CAS policy for `manifest.json`.
 - [align-with-pi](./align-with-pi/) — pi-author convention alignment workstreams (W1–W6).
 
-## Done → archived
+## Done
 
+- **agent-mock-boundary** — MSW-style fake-agent fixture now includes
+  `setupDefaultAgentTestServer(...)` for shared default mocks and
+  `agents.boundary(...)` scoped runtime overrides with nested and concurrent
+  boundary coverage. Spec remains in
+  [`agent-mock-boundary/spec.md`](./agent-mock-boundary/spec.md) until the docs
+  folder is explicitly archived.
 - **ultracode-trigger-and-real-agent** — trigger detection, model-facing launch
   tool, and real Pi subagent runner are wired and tested. Spec lives in
   [`../archive/ultracode-trigger-and-real-agent-spec.md`](../archive/ultracode-trigger-and-real-agent-spec.md).

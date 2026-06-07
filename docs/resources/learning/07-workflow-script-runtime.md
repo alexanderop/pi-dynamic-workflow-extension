@@ -102,7 +102,6 @@ Not implemented yet:
 
 | Global/feature | Status |
 |---|---|
-| `workflow()` | Future nested workflow support. |
 | real `agent()` subagents | Future Pi agent-session adapter. |
 | `agent({ schema })` validation | Future structured output slice. |
 | `agent({ isolation: "worktree" })` | Future worktree isolation slice. |

@@ -22,8 +22,8 @@ guarantees and fidelity to its own spec**, not missing scaffolding:
 1. **The sandbox is theatre.** `node:vm` is presented as enforcing the
    determinism/filesystem bans, but it is trivially escapable — a workflow script
    can reach `process.env` and raw `fs`. (CRITICAL)
-2. **Three documented contract clauses are unimplemented:** `budget.total` as a
-   hard ceiling, the nested `workflow()` global, and the per-call 4096 fan-out cap.
+2. **Two documented contract clauses are unimplemented:** `budget.total` as a
+   hard ceiling and the per-call 4096 fan-out cap.
 3. **Two correctness bugs that bite the moment real content flows through:**
    subagent failures (auth/rate-limit) are silently swallowed, and ANSI-styled text
    gets duplicated/corrupted by the hand-rolled wrapper.
@@ -47,7 +47,6 @@ post-input `requestRender`) — and the re-derivations are where the bugs live.
 | 5 | HIGH | Script runtime | Enforce `budget.total` as a hard ceiling: `agent()` must throw when `spent >= total`. |
 | 6 | HIGH | Ultracode | Register a `pi.registerTool` workflow-launch actuator (the ADR/spec-mandated one) — wire the existing `launchUltracodeWorkflow`. |
 | 7 | HIGH | Launch/agent | `isolation: "worktree"` is a no-op but taught to the LLM — implement `git worktree add` per agent, or remove the option + authoring instruction. |
-| 8 | HIGH | Script runtime | Add the nested `workflow()` global with a one-level depth guard (spec §7). |
 
 ---
 
@@ -90,15 +89,6 @@ runtime documents in `model.ts:19-23` but doesn't implement.
 `if (budget.total !== null && spentTokens >= budget.total) throw new Error('Workflow budget exhausted')`.
 Guard on `total !== null` (else `remaining()` is `Infinity`). Add a test asserting
 it throws rather than running to the agent cap.
-
-#### 🟠 HIGH — Nested `workflow()` global is missing — `runtime.ts:84`
-`spec.md:185-216` and §7 require a `workflow(nameOrRef, args)` global sharing the
-parent's concurrency cap, agent counter, abort signal, and budget, with one-level
-nesting. The context object injects everything **except** `workflow`, so calling it
-is a `ReferenceError`. No depth guard exists.
-**Pi:** no equivalent — pure contract-fidelity gap vs the extension's own spec.
-**Fix:** Add the `workflow` global reusing the parent scheduler/budget/token
-accumulator; add a `nestingDepth` guard that throws at depth 1.
 
 #### 🟡 MEDIUM — `vm` `timeout: 1000` doesn't bound async workflows — `runtime.ts:118`
 `runInContext(context, { timeout: 1000 })` only bounds **synchronous** execution up
@@ -453,7 +443,6 @@ reducer treat `stopped`-without-`started` as a replay no-op.
 - Single-writer (or CAS) ownership of `manifest.json`.
 - Make subagent failure a first-class outcome (`stopReason`/`errorMessage` plumbing
   end-to-end through the scheduler/journal).
-- Implement nested `workflow()` (touches scheduler, budget pool, abort propagation).
 - Register the ultracode launch tool and wire `model`/`modelRegistry` from host
   context (turns the dead launch path into a live one).
 - Consider decomposing `launcher.ts` (see §7).

@@ -36,11 +36,10 @@ When updating a slice:
 | 0.2 Reference Docs And Backlog | Ongoing | `AGENTS.md`, `README.md`, `docs/archive/backlog.md`, `docs/areas/spec-coverage.md`, `docs/resources/learning/*` | Docs review | Keep docs synchronized with implemented behavior and remove stale "future" claims as slices land. |
 | 0.3 Decisions Log | Partial | `docs/areas/adr/*`, `docs/areas/adr/README.md` | ADR review | Add ADRs for structured-output retry policy and Claude-style `agentType` to Pi mapping before implementing those areas. |
 | 4.3 Restart Agent Invalidates Cache | Open | `src/workflows/journal/*`, `src/workflows/run/controller.ts`, `src/workflows/agent/scheduler.ts` | `test/workflows/journal/*`, `test/workflows/run/controller.test.ts` | Add journal invalidation behavior and prove replay ignores invalidated results. |
-| 5.3 Child `workflow()` | Open | `src/workflows/script/runtime.ts`, `src/workflows/saved/resolver.ts`, `src/workflows/launch/launcher.ts` | `test/workflows/script/runtime.test.ts`, `test/workflows/launch/launcher.test.ts` | Expose child workflow execution with shared scheduler/budget and one-level nesting guard. |
 | 7.1 Pi AgentSession Adapter | Partial | `src/workflows/agent/pi-runner.ts`, `src/extension/ultracode/*` | `test/workflows/agent/pi-runner.test.ts`, Pi reference docs | Add optional live smoke coverage only after mocked sidechain-session behavior remains stable. |
 | 7.2 Structured Output Validation | Partial | `src/workflows/agent/pi-runner.ts`, `src/workflows/agent/structured-output-tool.ts`, `src/workflows/script/runtime.ts`, `src/workflows/journal/*` | `test/workflows/agent/*`, `test/workflows/script/runtime.test.ts` | ADR 0014 defines the Pi-native terminating tool and two-nudge policy; implement the bounded correction loop. Current Pi runner captures validated `structured_output` tool results and fails missing tool calls. |
 | 7.3 Worktree Isolation | Open | `src/workflows/agent/pi-runner.ts`, launch/runtime agent options | New filesystem integration tests | Define preservation/cleanup policy before creating worktrees. |
-| 8.1 Budget Accounting | Open | `src/workflows/script/runtime.ts`, child workflow runtime when added | `test/workflows/script/runtime.test.ts` | Enforce the hard budget ceiling for `agent()` calls and share budget with child workflows. |
+| 8.1 Budget Accounting | Open | `src/workflows/script/runtime.ts` | `test/workflows/script/runtime.test.ts` | Enforce the hard budget ceiling for `agent()` calls. |
 | 8.2 Failure Recovery And Atomic Persistence | Open | `src/workflows/run/store.ts`, `src/workflows/journal/store.ts`, `src/workflows/launch/launcher.ts` | `test/workflows/run/store.test.ts`, `test/workflows/journal/store.test.ts`, `test/workflows/launch/launcher.test.ts` | Add atomic manifest writes and tolerant journal replay for partial trailing lines. |
 
 ### Implemented Slices To Preserve
@@ -782,7 +781,7 @@ Spec coverage:
 - §16 Control Operations.
 - §21 acceptance criterion 14.
 
-## Epic 5: Saved Workflows And Nested Workflows
+## Epic 5: Saved Workflows
 
 Goal: support reusable workflow scripts after inline launch is reliable.
 
@@ -854,32 +853,6 @@ saved-workflow path derived from `meta.name`, validates that `meta.name` is a
 safe command name, and leaves manifest, journal, transcripts, and output files
 behind. UI/controller wiring for the `/workflows` save action remains future
 work.
-
-### Slice 5.3: Child `workflow()`
-
-User value: workflow authors can compose workflows.
-
-Scope:
-
-- Implement `workflow(nameOrRef, args)`.
-- Share parent scheduler, total-agent counter, abort signal, and budget.
-- Forbid nesting deeper than one child level.
-
-Tests:
-
-- Child workflow shares concurrency cap.
-- Child workflow shares total-agent cap.
-- Nested child call throws.
-- Child result returns to parent script.
-
-Dependencies:
-
-- Slices 3.3, 5.1, and 5.2.
-
-Spec coverage:
-
-- §7 Runtime API.
-- §21 acceptance criterion 22.
 
 ## Epic 6: Controls And `/workflows` Actions
 
@@ -1035,18 +1008,16 @@ User value: workflows respect turn-level output-token budgets.
 Scope:
 
 - Add budget object with `total`, `spent()`, and `remaining()`.
-- Share budget with child workflows.
 - Throw on `agent()` once spent reaches total.
 
 Tests:
 
 - `remaining()` is `Infinity` when total is null.
 - Throws after spent reaches total.
-- Child workflow shares budget.
 
 Dependencies:
 
-- Slices 5.3 and 7.1.
+- Slice 7.1.
 
 Spec coverage:
 
@@ -1097,8 +1068,8 @@ Spec coverage:
    - Slices 5.1, 5.2, 6.1, 6.2.
 8. Milestone H: real Pi subagents and structured output.
    - Slices 7.1, 7.2, 7.3.
-9. Milestone I: nested workflows, budget, and hardening.
-   - Slices 5.3, 8.1, 8.2.
+9. Milestone I: budget and hardening.
+   - Slices 8.1, 8.2.
 
 ## Open Decisions
 

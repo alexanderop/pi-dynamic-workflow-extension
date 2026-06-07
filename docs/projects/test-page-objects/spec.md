@@ -652,27 +652,11 @@ await workflowScenario()
 Use this pattern for deterministic-runtime guards such as `Date.now()`,
 `Math.random()`, argument-less `new Date()`, and forbidden workflow globals.
 
-### Child Workflow And Budget Examples
+### Budget Examples
 
-When child workflow support and budget semantics are under test, the scenario
-harness should keep the assertions at the public workflow boundary:
-
-```ts
-const scenario = await workflowScenario()
-  .withSavedWorkflow("child", childScript)
-  .withScript(parentScriptCallingWorkflow)
-  .withAgents(agent.label("child-agent").replyText("ok"))
-  .launch();
-
-await scenario.complete();
-
-scenario.shouldHaveCompletedWithResult({ child: "ok" });
-scenario.shouldHaveSharedSchedulerBudget();
-```
-
-Nested workflow rejection and budget exhaustion should use
-`expectLaunchError(...)` or `shouldHaveFailedWithError(...)`, depending on
-whether the error occurs before or during run execution.
+Budget exhaustion should use `expectLaunchError(...)` or
+`shouldHaveFailedWithError(...)`, depending on whether the error occurs before
+or during run execution.
 
 ## Layer 3b: Saved Workflow Scenario Harness
 

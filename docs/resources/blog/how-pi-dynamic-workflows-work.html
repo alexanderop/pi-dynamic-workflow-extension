@@ -302,7 +302,6 @@ return results</code></pre>
       <tr><td><code>phase(title)</code> / <code>log(msg)</code></td><td>Drop a progress marker / a run-level log line.</td></tr>
       <tr><td><code>args</code></td><td>Whatever input the launch passed in.</td></tr>
       <tr><td><code>budget</code></td><td><code>{ total, spent(), remaining() }</code> — a hard token ceiling for the run.</td></tr>
-      <tr><td><code>workflow(name, args)</code></td><td>Run another saved workflow inline, sharing the same caps.</td></tr>
     </tbody>
   </table>
 
@@ -356,7 +355,7 @@ agent, parallel, pipeline, phase, log, args, budget  // ✓ the only things in s
 <section class="reveal">
   <p class="kicker">06 — The traffic cop</p>
   <h2>One scheduler, two hard caps</h2>
-  <p>Every <code>agent()</code> call — whether bare, inside a <code>parallel</code>, a <code>pipeline</code> stage, or a nested <code>workflow()</code> — funnels through a single run-wide scheduler. It enforces two limits:</p>
+  <p>Every <code>agent()</code> call — whether bare, inside a <code>parallel</code>, or a <code>pipeline</code> stage — funnels through a single run-wide scheduler. It enforces two limits:</p>
 
   <div class="grid">
     <div class="card"><div class="ic">⚡</div><h4>maxConcurrent</h4><p><code>min(16, cpuCores − 2)</code>. On the reference 12-core machine, the run peaked at exactly 10 live agents.</p></div>

@@ -95,7 +95,6 @@ The `budget` global is real ([`runtime.ts:40-45`](../../../src/workflows/script/
 
 Known gaps:
 
-- `workflow()` nested call is not implemented (it is not even exposed as a global).
 - Budget tracking exists but there is no hard-ceiling enforcement: nothing rejects an `agent()` call when `spent()` reaches `total`.
 - `agent({ schema })` does not validate real structured output yet.
 - `agent({ isolation: "worktree" })` is accepted on `AgentOptions` but ignored by the scheduler and runtime.

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowAgentRunRequest,
@@ -427,6 +428,11 @@ export class PendingAgentHandler extends AgentMockHandler {
   }
 }
 
+interface AgentMockBoundaryScope {
+  initialHandlers: AgentMockHandler[];
+  handlers: AgentMockHandler[];
+}
+
 export class AgentMockServer {
   #initialHandlers: AgentMockHandler[];
   #onUnhandledAgent: AgentMockUnhandledStrategy;
@@ -435,6 +441,7 @@ export class AgentMockServer {
   #events: AgentMockEvent[] = [];
   #isListening: boolean;
   readonly #compatibilityMode: boolean;
+  readonly #boundaryStorage = new AsyncLocalStorage<AgentMockBoundaryScope>();
 
   constructor(
     handlers: AgentMockHandler[],
@@ -479,30 +486,51 @@ export class AgentMockServer {
     this.#isListening = false;
   }
 
+  async boundary<T>(callback: () => T | Promise<T>): Promise<Awaited<T>> {
+    const inheritedHandlers = [...this.#activeHandlers()];
+    const scope: AgentMockBoundaryScope = {
+      initialHandlers: inheritedHandlers,
+      handlers: [...inheritedHandlers],
+    };
+
+    return await this.#boundaryStorage.run(scope, async () => await callback());
+  }
+
   use(...handlers: AgentMockHandler[]): void {
     validateHandlers(handlers, "agents.use");
-    this.#handlers = [...handlers, ...this.#handlers];
+    this.#setActiveHandlers([...handlers, ...this.#activeHandlers()]);
   }
 
   resetHandlers(...nextHandlers: AgentMockHandler[]): void {
     validateHandlers(nextHandlers, "agents.resetHandlers");
-    for (const handler of this.#handlers) handler.reset();
-    if (nextHandlers.length > 0) this.#initialHandlers = [...nextHandlers];
-    this.#handlers = [...this.#initialHandlers];
+    const scope = this.#activeScope();
+    const activeHandlers = this.#activeHandlers();
+    for (const handler of activeHandlers) handler.reset();
+
+    if (scope === undefined) {
+      if (nextHandlers.length > 0) this.#initialHandlers = [...nextHandlers];
+      this.#handlers = [...this.#initialHandlers];
+    } else {
+      if (nextHandlers.length > 0) scope.initialHandlers = [...nextHandlers];
+      scope.handlers = [...scope.initialHandlers];
+    }
+
     this.#calls = [];
     this.#events = [];
   }
 
   restoreHandlers(): void {
-    for (const handler of this.#handlers) handler.restore();
+    for (const handler of this.#activeHandlers()) handler.restore();
   }
 
   listHandlers(): readonly AgentMockHandler[] {
-    return [...this.#handlers];
+    return [...this.#activeHandlers()];
   }
 
   printHandlers(): string {
-    return this.#handlers.map((handler) => handler.header).join("\n");
+    return this.#activeHandlers()
+      .map((handler) => handler.header)
+      .join("\n");
   }
 
   calls(): AgentMockCall[] {
@@ -573,7 +601,7 @@ export class AgentMockServer {
   }
 
   expectAllHandlersUsed(): void {
-    const unused = this.#handlers.filter((handler) => !handler.isUsed);
+    const unused = this.#activeHandlers().filter((handler) => !handler.isUsed);
     if (unused.length === 0) return;
     throw new Error(
       `Expected all agent handlers to be used, but found ${unused.length} unused:\n${unused
@@ -606,7 +634,7 @@ export class AgentMockServer {
       agentId,
       journalKey,
     });
-    const handler = this.#handlers.find((candidate) => candidate.test(prompt, callOptions));
+    const handler = this.#activeHandlers().find((candidate) => candidate.test(prompt, callOptions));
 
     if (handler === undefined) {
       const call = {
@@ -682,6 +710,23 @@ export class AgentMockServer {
     return call.prompt;
   }
 
+  #activeScope(): AgentMockBoundaryScope | undefined {
+    return this.#boundaryStorage.getStore();
+  }
+
+  #activeHandlers(): AgentMockHandler[] {
+    return this.#activeScope()?.handlers ?? this.#handlers;
+  }
+
+  #setActiveHandlers(handlers: AgentMockHandler[]): void {
+    const scope = this.#activeScope();
+    if (scope === undefined) {
+      this.#handlers = handlers;
+      return;
+    }
+    scope.handlers = handlers;
+  }
+
   #assertListening(): void {
     if (this.#isListening) return;
     const hint = this.#compatibilityMode
@@ -721,6 +766,31 @@ export function setupAgentTestServer(
   ...args: Array<AgentMockHandler | AgentMockServerOptions>
 ): AgentMockServer {
   const { handlers, options } = splitServerArgs(args);
+  return setupAgentTestServerFromHandlers(handlers, options);
+}
+
+export function setupDefaultAgentTestServer(...handlers: AgentMockHandler[]): AgentMockServer;
+export function setupDefaultAgentTestServer(
+  ...args: [...AgentMockHandler[], AgentMockServerOptions]
+): AgentMockServer;
+export function setupDefaultAgentTestServer(
+  ...args: Array<AgentMockHandler | AgentMockServerOptions>
+): AgentMockServer {
+  const { handlers, options } = splitServerArgs(args);
+  return setupAgentTestServerFromHandlers([...handlers, defaultAgentMockHandler()], options);
+}
+
+export function defaultAgentMockHandler(): AgentMockHandler {
+  return agent.any().replyText(({ prompt, options }) => {
+    const label = options.label === undefined ? "" : ` label=${JSON.stringify(options.label)}`;
+    return `[default mocked agent${label}] ${prompt}`;
+  });
+}
+
+function setupAgentTestServerFromHandlers(
+  handlers: AgentMockHandler[],
+  options: AgentMockServerOptions | undefined,
+): AgentMockServer {
   const server = new AgentMockServer(handlers, options);
 
   beforeAll(() => {

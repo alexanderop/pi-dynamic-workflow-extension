@@ -1,14 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
-import { delay } from "../../support.ts";
+import { deferred, delay } from "../../support.ts";
 import {
   AgentMockError,
   AgentResponse,
   agent,
   setupAgentMock,
   setupAgentServer,
+  setupAgentTestServer,
+  setupDefaultAgentTestServer,
   type AgentMockCall,
   type AgentMockUnhandledPrint,
 } from "./agent-mock.ts";
+
+const sharedAgents = setupDefaultAgentTestServer(
+  agent.label("global-scan").replyText("global scan default"),
+);
+
+const strictSharedAgents = setupAgentTestServer(
+  agent.label("strict-scan").replyText("strict scan default"),
+);
 
 describe("setupAgentMock", () => {
   it("should return handler responses for matching agent calls", async () => {
@@ -423,6 +433,123 @@ describe("setupAgentServer", () => {
 
     await expect(agents.runner("scan src")).resolves.toBe("scan src");
     agents.close();
+  });
+});
+
+describe("setupAgentTestServer", () => {
+  it("should fail when a shared strict server receives an agent call with no mock", async () => {
+    await expect(
+      strictSharedAgents.runner("unknown work", { label: "unknown-agent" }),
+    ).rejects.toThrow(/Unhandled agent call: agent\("unknown work" label="unknown-agent"\)/);
+  });
+});
+
+describe("setupDefaultAgentTestServer", () => {
+  it("should provide a catch-all default mocked agent response", async () => {
+    await expect(sharedAgents.runner("unknown work", { label: "unknown-agent" })).resolves.toBe(
+      '[default mocked agent label="unknown-agent"] unknown work',
+    );
+  });
+
+  it("should prefer global explicit handlers over the catch-all default", async () => {
+    await expect(sharedAgents.runner("scan src", { label: "global-scan" })).resolves.toBe(
+      "global scan default",
+    );
+  });
+
+  it("should let a test override global defaults inside a boundary", async () => {
+    await sharedAgents.boundary(async () => {
+      sharedAgents.use(agent.label("global-scan").replyText("test override"));
+
+      await expect(sharedAgents.runner("scan src", { label: "global-scan" })).resolves.toBe(
+        "test override",
+      );
+    });
+
+    await expect(sharedAgents.runner("scan src", { label: "global-scan" })).resolves.toBe(
+      "global scan default",
+    );
+  });
+});
+
+describe("agent mock boundaries", () => {
+  it("should scope runtime handlers to the boundary callback", async () => {
+    const agents = setupAgentMock(agent.label("scan-agent").replyText("initial"));
+
+    await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("initial");
+
+    await agents.boundary(async () => {
+      agents.use(agent.label("scan-agent").replyText("scoped"));
+
+      await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("scoped");
+    });
+
+    await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("initial");
+  });
+
+  it("should let nested boundaries inherit parent handlers without leaking child overrides", async () => {
+    const agents = setupAgentMock(agent.label("scan-agent").replyText("initial"));
+
+    await agents.boundary(async () => {
+      agents.use(agent.label("scan-agent").replyText("outer"));
+      await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("outer");
+
+      await agents.boundary(async () => {
+        agents.use(agent.label("scan-agent").replyText("inner"));
+        await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("inner");
+      });
+
+      await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("outer");
+    });
+
+    await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("initial");
+  });
+
+  it("should reset handlers inside a boundary to the boundary starting handlers", async () => {
+    const agents = setupAgentMock(agent.label("scan-agent").replyText("initial"));
+    agents.use(agent.label("scan-agent").replyText("global override"));
+
+    await agents.boundary(async () => {
+      await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe(
+        "global override",
+      );
+
+      agents.use(agent.label("scan-agent").replyText("scoped"));
+      await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("scoped");
+
+      agents.resetHandlers();
+      await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe(
+        "global override",
+      );
+    });
+
+    await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe(
+      "global override",
+    );
+
+    agents.resetHandlers();
+    await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("initial");
+  });
+
+  it("should isolate concurrent boundary handler overrides", async () => {
+    const agents = setupAgentMock(agent.label("scan-agent").replyText("initial"));
+    const firstCanRun = deferred<void>();
+
+    const first = agents.boundary(async () => {
+      agents.use(agent.label("scan-agent").replyText("first"));
+      await firstCanRun.promise;
+      return await agents.runner("scan src", { label: "scan-agent" });
+    });
+
+    const second = agents.boundary(async () => {
+      agents.use(agent.label("scan-agent").replyText("second"));
+      firstCanRun.resolve();
+      await delay(1);
+      return await agents.runner("scan src", { label: "scan-agent" });
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
+    await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("initial");
   });
 });
 

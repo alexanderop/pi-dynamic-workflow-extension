@@ -32,6 +32,8 @@ It already supports:
 - `agents.schedulerRunner` for full scheduler-shaped calls;
 - `use`, `resetHandlers`, `restoreHandlers`, and `listHandlers`;
 - recorded calls and lifecycle events;
+- scoped `agents.boundary(...)` runtime overrides for nested and concurrent
+  async test scenarios;
 - call assertions such as `expectNoAgents`, `expectNoUnhandledAgents`,
   `expectAgentCalledTimes`, and `expectAgentsInOrder`;
 - a small JSON-schema subset validator for structured fake responses.
@@ -122,12 +124,20 @@ Compatibility:
 Support a shared-test-server pattern for larger suites:
 
 ```ts
-export const agents = setupAgentTestServer(
+export const agents = setupDefaultAgentTestServer(
   agent.label("default-scan").replyText("ok"),
 );
 ```
 
-`setupAgentTestServer` should register Vitest lifecycle hooks:
+`setupDefaultAgentTestServer(...)` appends a catch-all default mocked agent
+handler after the explicit handlers, so every `agent()` call has a deterministic
+fake response unless a more specific global handler or test-local boundary
+override matches first. This is the preferred MSW-like shared-server API. Use
+`setupAgentTestServer(...)` only when a suite deliberately wants strict
+unhandled-agent failures with no fallback.
+
+`setupAgentTestServer` and `setupDefaultAgentTestServer` should register Vitest
+lifecycle hooks:
 
 - `beforeAll(() => agents.listen())`
 - `afterEach(() => agents.resetHandlers())`
@@ -370,8 +380,9 @@ events are sufficient for now.
 
 ### Boundary Scoping
 
-MSW supports scoped runtime overrides for concurrent tests. We may need this if
-workflow integration tests start sharing a global mock server.
+MSW supports scoped runtime overrides for concurrent tests. The current helper
+implements this with async-context scoped handler lists so workflow integration
+tests can share a global mock server without runtime handler leakage.
 
 Target API:
 
@@ -386,10 +397,31 @@ Requirements:
 
 - handlers added inside a boundary are scoped to that boundary;
 - nested boundaries inherit parent handlers;
-- `resetHandlers()` inside a boundary resets to the boundary's initial state;
-- this can be deferred until concurrent shared-server tests need it.
+- concurrent boundaries keep their runtime overrides isolated;
+- `resetHandlers()` inside a boundary resets to the boundary's initial state.
 
 ## Recommended Test Shapes
+
+### Shared Default Server Suite
+
+```ts
+const agents = setupDefaultAgentTestServer(
+  agent.label("repo-inventory").replyJson({ summary: "default inventory" }),
+);
+
+it("should override one mocked agent for this scenario", async () => {
+  await agents.boundary(async () => {
+    agents.use(agent.label("repo-inventory").replyJson({ summary: "scenario inventory" }));
+
+    // calls inside this block see the scenario override; other calls fall back
+    // to the shared defaults, including the catch-all default agent mock.
+  });
+});
+```
+
+Use this shape for larger MSW-style suites where every agent call should have a
+safe deterministic fake by default. Use `setupAgentTestServer(...)` instead when
+a suite intentionally wants strict unhandled-agent failures.
 
 ### Runtime Integration Test
 
@@ -454,9 +486,11 @@ await expect(
    - one resume-cache test.
 5. Keep low-level `agent.call(...)` tests to protect matcher internals.
 6. Add optional global `setupAgentTestServer` only after we decide whether the
-   test suite benefits from a shared mock server.
+   test suite benefits from a shared mock server. Implemented alongside
+   `setupDefaultAgentTestServer`, the preferred shared-server helper with a
+   deterministic catch-all default agent mock.
 7. Add `boundary(...)` only if concurrent shared-server tests need scoped
-   overrides.
+   overrides. Implemented for nested and concurrent async scenarios.
 
 ## Non-Goals
 
@@ -468,14 +502,12 @@ await expect(
 - Do not expose scheduler internals in test APIs beyond the public
   scheduler-shaped runner request.
 
-## Open Questions
+## Decisions
 
-- Should `setupAgentMock(...)` remain the primary API, or should new tests use
-  `setupAgentServer(...)` exclusively after the lifecycle API lands?
-- Should schema validation be enabled by default for all schema-bearing calls,
-  or should tests be able to disable it for exploratory fixtures?
-- Should shared global servers be allowed in this repo, or should we prefer
-  per-test servers to avoid cross-test state?
-- Should fluent handlers preserve the exact same `header` formatting as
-  `agent.call(...)`, or should diagnostics print the fluent form developers
-  wrote?
+- Use `setupAgentMock(...)` for focused per-test fake-agent fixtures.
+- Use `setupDefaultAgentTestServer(...)` for MSW-style shared suites where every
+  agent call should have a deterministic default fake.
+- Use `setupAgentTestServer(...)` for shared suites that deliberately want strict
+  unhandled-agent failures.
+- Keep schema validation enabled by default for schema-bearing calls.
+- Print fluent handler diagnostics in the fluent form developers wrote.

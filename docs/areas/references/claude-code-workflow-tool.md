@@ -111,7 +111,6 @@ export const meta = {
 | `parallel` | `parallel(thunks: Array<() => Promise<any>>): Promise<any[]>` | Run thunks concurrently — **this is a barrier** (awaits all). A throwing thunk resolves to `null` (the call never rejects), so `.filter(Boolean)` before use. |
 | `log` | `log(message: string): void` | Narrator progress line above the tree. |
 | `phase` | `phase(title: string): void` | Start a new phase; later `agent()` calls group under it. |
-| `workflow` | `workflow(nameOrRef, args?): Promise<any>` | Run another workflow inline (one level deep only). Shares concurrency cap, agent counter, abort signal, token budget. |
 
 ### Globals
 
@@ -231,8 +230,8 @@ claim that every invocation writes its script to disk for iteration/resume.
 Cross-check our DSL/runtime against the real contract above:
 
 - **DSL surface** (`src/workflows/script/`): we model `agent` / `parallel` /
-  `pipeline` / `phase` / `log` / `budget` / nested `workflow`. Confirm the
-  **no-barrier `pipeline` vs barrier `parallel`** semantics match §3.
+  `pipeline` / `phase` / `log` / `budget`. Confirm the **no-barrier `pipeline`
+  vs barrier `parallel`** semantics match §3.
 - **`meta` as a pure literal** parsed statically — our acorn parser should reject
   computed `meta` the same way.
 - **Determinism ban** on time/random — our runtime should forbid the same helpers

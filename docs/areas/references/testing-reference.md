@@ -252,6 +252,19 @@ unwrap(await launch.completion);
 agents.expectNoUnhandledAgents();
 ```
 
+For MSW-style shared server suites, define one global default server at module
+scope:
+
+```ts
+export const agents = setupDefaultAgentTestServer(
+  agent.label("repo-inventory").replyJson({ summary: "default inventory" }),
+);
+```
+
+This appends a deterministic catch-all mocked agent response after explicit
+global handlers, so every agent has a default fake. Individual tests can override
+handlers without leaking by wrapping their scenario in `agents.boundary(...)`.
+
 Testing strategy:
 
 - Prefer this fixture over ad-hoc `let runnerCalls = 0` mocks in launcher/runtime integration tests.
@@ -260,7 +273,12 @@ Testing strategy:
 - Use `agents.expectNoAgents()` when resume/cache behavior should avoid new agent work.
 - Use `agents.expectNoUnhandledAgents()` when every expected agent call should be covered by a handler.
 - Use `agents.expectAgentCalled(...)`, `agents.expectAgentCalledTimes(...)`, `agents.expectAgentsInOrder(...)`, and `agents.expectAllHandlersUsed()` for MSW-style assertions at the agent boundary.
+- Use `setupDefaultAgentTestServer(...)` for shared MSW-style suites where every
+  agent should have a default fake response.
 - Use `agents.use(...)` for runtime overrides; newer handlers take priority.
+- Use `agents.boundary(async () => { ... })` when a runtime override must stay
+  scoped to one async scenario; nested boundaries inherit parent handlers and
+  concurrent boundaries keep their overrides isolated.
 - Use `agents.resetHandlers()` and `agents.restoreHandlers()` for lifecycle tests.
 - Use `{ once: true }` or generator resolvers for sequential responses.
 - Use `agent.pending(...)` for timing tests: register it like any handler, then

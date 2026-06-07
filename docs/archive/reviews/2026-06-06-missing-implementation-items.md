@@ -22,7 +22,6 @@ This is an actionable triage/checklist document. It does **not** replace:
 | Severity | Area | Item | Recommended disposition | Likely owners | References | Status |
 |---|---|---|---|---|---|---|
 | Critical | Runtime/security | `node:vm` sandbox is escapable and over-claimed | Decide trust-boundary ADR/update, then either harden or document non-sandbox status | `src/workflows/script/runtime.ts`, `docs/areas/adr/*`, `spec.md` | Review §1, spec §20 | Open |
-| High | Runtime contract | Missing child `workflow(nameOrRef, args)` global | Implement shared scheduler/budget child execution and one-level nesting guard | `src/workflows/script/runtime.ts`, `src/workflows/launch/launcher.ts`, `src/workflows/saved/resolver.ts` | spec §7, backlog 5.3, chunk 002 | Open |
 | High | Agent isolation | `isolation: "worktree"` is advertised but no-op | Implement git worktree setup/cleanup or remove from prompts/docs until supported | `src/workflows/agent/pi-runner.ts`, script model/prompts/docs | spec §7/§9, backlog 7.3 | Open |
 | High | Structured output | Missing bounded two-nudge correction loop | Implement missing/invalid/schema-mismatch nudges and failure behavior | `src/workflows/agent/pi-runner.ts`, `src/workflows/agent/structured-output-tool.ts` | spec §9/§17, ADR 0014, backlog 7.2, chunk 001 | Partial |
 | High | Transcripts | Per-agent transcript/meta artifacts are not written into run transcripts dir | Define and persist `agent-*.jsonl` and `agent-*.meta.json` | `src/workflows/agent/pi-runner.ts`, run storage | spec §9/§18 | Open |
@@ -50,12 +49,6 @@ This is an actionable triage/checklist document. It does **not** replace:
 ## Contract gaps vs `spec.md`
 
 These items are direct divergences from the current specification and should either be implemented or the spec should be deliberately revised.
-
-### Child `workflow()`
-
-- **Expected:** `workflow(nameOrRef, args)` runs a saved/script-path child workflow inline, shares parent concurrency cap, total-agent counter, abort signal, and token budget, and throws when nested more than one level deep.
-- **Observed gap:** Runtime does not expose a `workflow` global.
-- **Disposition:** Implement. Existing chunk: [`docs/projects/child-workflow-global/chunk.md`](../../projects/child-workflow-global/chunk.md).
 
 ### Budget enforcement and telemetry
 
@@ -176,7 +169,6 @@ Harvest token counts, tool-call counts, last tool name/summary, and recent activ
 Existing chunks that already cover part of this list:
 
 - [`001-structured-output-retry-adr.md`](../../projects/structured-output-retry/chunk.md) — structured-output retry policy.
-- [`002-child-workflow-runtime.md`](../../projects/child-workflow-global/chunk.md) — child `workflow()` runtime.
 - [`003-atomic-manifest-writes.md`](../../projects/atomic-manifest-writes/chunk.md) — atomic manifest persistence.
 
 Good new chunk candidates:

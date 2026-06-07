@@ -232,11 +232,6 @@ declare function pipeline<T>(
   ...stages: Array<(prev: unknown, item: T, index: number) => Promise<unknown>>
 ): Promise<unknown[]>;
 
-declare function workflow(
-  nameOrRef: string | { scriptPath: string },
-  args?: unknown,
-): Promise<unknown>;
-
 interface AgentOptions {
   label?: string;
   phase?: string;
@@ -282,20 +277,15 @@ Runtime behavior:
   first stage, `previousStageResult === originalItem`. A single `pipeline()` call
   MUST accept at most 4096 items. A stage that throws drops that item to `null`
   and skips its remaining stages.
-- `workflow(nameOrRef, args)` runs another workflow inline as a sub-step and
-  resolves to that workflow's return value. A string resolves a saved workflow
-  by name; `{ scriptPath }` runs a script file. The child shares the parent
-  run's concurrency cap, total-agent counter, abort signal, and token budget.
-  Nesting is one level only: calling `workflow()` inside a child MUST throw.
 - `budget.total` is the turn's output-token target, or `null` if none was set.
   `budget.spent()` returns output tokens spent this turn across the main loop and
-  all workflows (the pool is shared). `budget.remaining()` returns
+  the current workflow run. `budget.remaining()` returns
   `max(0, total - spent())`, or `Infinity` when `total` is `null`. The target is
   a hard ceiling: once `spent()` reaches `total`, further `agent()` calls MUST
   throw. Budget-driven loops MUST guard on `budget.total` so that an unset
   budget (`remaining()` of `Infinity`) does not run to the total-agent cap.
-- All `agent()` calls, including calls inside `parallel()`, `pipeline()`, and a
-  nested `workflow()`, MUST pass through the same scheduler.
+- All `agent()` calls, including calls inside `parallel()` and `pipeline()`,
+  MUST pass through the same scheduler.
 
 ## 8. Launch Contract
 
@@ -393,7 +383,7 @@ Each `agent()` call MUST create a fresh sidechain session with:
   workflow package. If the runner cannot provide the required tools to
   subagents, the launch MUST fail before spending subagent tokens. Loading
   external tools for this purpose MUST NOT recursively expose the `Workflow` tool
-  to subagents unless a future nested-workflow design explicitly requires it.
+  to subagents.
 - Transcript path:
   `subagents/workflows/<runId>/agent-<agentId>.jsonl`
 - Metadata path:
@@ -422,8 +412,6 @@ maxConcurrent = Math.min(16, Math.max(1, cpuCores - 2))
 maxTotalAgents = 1000 // runaway-loop backstop, far above any real workflow
 ```
 
-A `workflow()` child shares both caps with its parent: the concurrency limit and
-the total-agent counter are run-wide, not per-workflow.
 
 Queue behavior:
 
@@ -1015,14 +1003,12 @@ An implementation is complete when these scenarios pass:
    schema, and `null` when the user skips the agent.
 21. `budget.total` acts as a hard ceiling: `agent()` throws once `spent()`
    reaches `total`, and `remaining()` is `Infinity` when no target is set.
-22. `workflow()` runs a saved or script-path workflow inline, shares the parent
-   caps and budget, and throws when nested more than one level deep.
-23. `Date.now()`, `Math.random()`, and argument-less `new Date()` throw inside a
+22. `Date.now()`, `Math.random()`, and argument-less `new Date()` throw inside a
    workflow script.
-24. `meta.requiredTools` rejects launch before run creation when required
+23. `meta.requiredTools` rejects launch before run creation when required
    external tools are missing or inactive, and the error explains that the
    workflow package does not bundle those tools.
-25. A Pi skill can package a workflow script and launch it by passing
+24. A Pi skill can package a workflow script and launch it by passing
    `scriptPath` plus `args` to `Workflow`; this skill-driven launch is treated as
    explicit multi-agent opt-in without requiring `ultracode`.
 
@@ -1346,8 +1332,8 @@ observed in real scripts:
   top-level `await`, top-level `return`, the `null`/`.filter(Boolean)` skip
   idiom, and `meta.whenToUse`/`meta.phases[].detail`.
 - NOT exercised by any reference script (documented API, no on-disk usage):
-  the `budget` global, the `workflow()` nested call, `agent({ isolation:
-  'worktree' })`, `agent({ model })`, `pipeline` with three or more stages, and
+  the `budget` global, `agent({ isolation: 'worktree' })`, `agent({ model })`,
+  `pipeline` with three or more stages, and
   `agent()` without a `schema` (the string-return branch).
 
 ## 23. Open Questions
