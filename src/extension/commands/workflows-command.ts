@@ -20,7 +20,13 @@ import {
   buildWorkflowLaunchOptions,
   currentSessionId,
 } from "#src/extension/workflow-launch-options.ts";
-import { prepareWorkflowNotification } from "#src/extension/workflow-notifications.ts";
+import { terminalNotifier } from "#src/extension/workflow-notifications.ts";
+import {
+  emitWorkflowCommandOutput as emitCommandOutput,
+  resolveWorkflowCommandMode,
+  type WorkflowCommandMode,
+  type WorkflowCommandOutputType,
+} from "#src/extension/commands/command-output.ts";
 import {
   defaultProjectWorkflowFeatureConfigPath,
   defaultUserWorkflowFeatureConfigPath,
@@ -41,14 +47,17 @@ import {
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
 import { saveRunScript } from "#src/workflows/saved/save-run-script.ts";
+import {
+  GENERIC_WORKFLOW_COMMAND_NAME,
+  type SavedWorkflowCommandRegistration,
+  type SavedWorkflowCommandRegistry,
+} from "#src/extension/commands/saved-workflow-commands.ts";
 import { formatDuration } from "#src/workflows/view/layout.ts";
 import type {
   WorkflowSavedWorkflow,
   WorkflowSavedWorkflowLocations,
 } from "#src/workflows/saved/resolver.ts";
 
-type WorkflowCommandOutputType = "info" | "error";
-type WorkflowCommandMode = "tui" | "rpc" | "json" | "print";
 type WorkflowCommandContext = ExtensionCommandContext & {
   mode?: WorkflowCommandMode;
   savedWorkflowDirs?: WorkflowSavedWorkflowLocations;
@@ -70,6 +79,12 @@ export interface RegisterWorkflowsCommandOptions {
     request: WorkflowLaunchRequest,
     options: WorkflowLaunchOptions,
   ) => Promise<Result<WorkflowLaunch, WorkflowLaunchError>>;
+  /**
+   * Registry used to register a saved workflow as a slash command immediately
+   * after `/workflows` saves a run. When provided, the save notification
+   * reports whether the matching direct command was registered or skipped.
+   */
+  readonly savedCommandRegistry?: SavedWorkflowCommandRegistry;
 }
 
 type RegisterWorkflowsCommandPi = Pick<ExtensionAPI, "registerCommand"> &
@@ -157,7 +172,7 @@ export function registerWorkflowsCommand(
             );
           },
           onSaveRun: (runId) => {
-            void saveWorkflowRunScript(commandCtx, rootDir, runId);
+            void saveWorkflowRunScript(commandCtx, rootDir, runId, options);
           },
         });
         return;
@@ -377,6 +392,7 @@ async function saveWorkflowRunScript(
   ctx: WorkflowCommandContext,
   rootDir: string,
   runId: string,
+  options: RegisterWorkflowsCommandOptions,
 ): Promise<void> {
   const result = await saveRunScript(
     { runId },
@@ -387,7 +403,31 @@ async function saveWorkflowRunScript(
     return;
   }
 
-  ctx.ui.notify(`Saved workflow '${result.value.name}' to ${result.value.path}.`, "info");
+  const registration = await registerSavedCommand(ctx, options.savedCommandRegistry, result.value);
+  ctx.ui.notify(formatSaveNotification(result.value.name, result.value.path, registration), "info");
+}
+
+async function registerSavedCommand(
+  ctx: WorkflowCommandContext,
+  registry: SavedWorkflowCommandRegistry | undefined,
+  saved: { readonly name: string },
+): Promise<SavedWorkflowCommandRegistration | undefined> {
+  if (registry === undefined) return undefined;
+  return registry.registerSavedWorkflowByName(ctx, saved.name);
+}
+
+function formatSaveNotification(
+  name: string,
+  path: string,
+  registration: SavedWorkflowCommandRegistration | undefined,
+): string {
+  if (registration?.status === "registered") {
+    return `Saved workflow '${name}' to ${path} and registered /${name}.`;
+  }
+  if (registration?.reason !== undefined) {
+    return `Saved workflow '${name}' to ${path}. ${registration.reason}`;
+  }
+  return `Saved workflow '${name}' to ${path}. Launch with /${GENERIC_WORKFLOW_COMMAND_NAME} ${name} <args> or Workflow({ name: "${name}" }).`;
 }
 
 async function resumeStoppedWorkflow(
@@ -437,13 +477,7 @@ function resumeStoppedLaunchOptions(
   return buildWorkflowLaunchOptions(ctx, pi, {
     rootDir,
     triggerSource: "manual",
-    notifyTerminal:
-      pi.sendMessage === undefined
-        ? undefined
-        : async (notification) => {
-            const { message, delivery } = prepareWorkflowNotification(notification);
-            await pi.sendMessage?.(message, delivery);
-          },
+    notifyTerminal: terminalNotifier(pi.sendMessage),
   });
 }
 
@@ -469,9 +503,7 @@ async function controlWorkflow(
 }
 
 function shouldUseWorkflowsTui(ctx: WorkflowCommandContext): boolean {
-  return (
-    (ctx.mode ?? (ctx.hasUI ? "tui" : "print")) === "tui" && typeof ctx.ui.custom === "function"
-  );
+  return resolveWorkflowCommandMode(ctx) === "tui" && typeof ctx.ui.custom === "function";
 }
 
 function emitWorkflowCommandOutput(
@@ -479,23 +511,7 @@ function emitWorkflowCommandOutput(
   message: string,
   type: WorkflowCommandOutputType,
 ): void {
-  const mode = ctx.mode ?? (ctx.hasUI ? "tui" : "print");
-
-  if (mode !== "json" && mode !== "print") {
-    ctx.ui.notify(message, type);
-    return;
-  }
-
-  if (mode === "json") {
-    const stream = type === "error" ? process.stderr : process.stdout;
-    stream.write(
-      `${JSON.stringify({ type: "workflow_command_output", command: "workflows", severity: type, message })}\n`,
-    );
-    return;
-  }
-
-  const stream = type === "error" ? process.stderr : process.stdout;
-  stream.write(`${message}\n`);
+  emitCommandOutput(ctx, "workflows", message, type);
 }
 
 function formatWorkflowsOverview(

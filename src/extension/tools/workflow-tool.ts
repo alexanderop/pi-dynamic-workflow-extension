@@ -15,7 +15,7 @@ import { WORKFLOW_SCRIPT_MAX_LENGTH } from "#src/workflows/launch/model.ts";
 import type { WorkflowLaunchOperations } from "#src/workflows/launch/operations.ts";
 import type { WorkflowRunTriggerSource } from "#src/workflows/run/model.ts";
 import { buildWorkflowLaunchOptions } from "#src/extension/workflow-launch-options.ts";
-import { prepareWorkflowNotification } from "#src/extension/workflow-notifications.ts";
+import { terminalNotifier } from "#src/extension/workflow-notifications.ts";
 
 export { WORKFLOW_SCRIPT_MAX_LENGTH };
 export const WORKFLOW_TOOL_NAME = "Workflow";
@@ -200,10 +200,7 @@ function toLaunchOptions(
     rootDir: workflowRootDirForCwd(ctx.cwd),
     triggerSource: options.getTriggerSource?.() ?? "manual",
     operations: options.operations,
-    notifyTerminal: async (notification) => {
-      const { message, delivery } = prepareWorkflowNotification(notification);
-      await pi.sendMessage(message, delivery);
-    },
+    notifyTerminal: terminalNotifier(pi.sendMessage),
   });
 }
 

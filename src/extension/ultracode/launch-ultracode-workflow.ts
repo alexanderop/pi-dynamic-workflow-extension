@@ -12,7 +12,7 @@ import type { PiWorkflowAgentRunnerOptions } from "#src/workflows/agent/pi-runne
 import type { Result } from "#src/workflows/result.ts";
 import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 import {
-  prepareWorkflowNotification,
+  terminalNotifier,
   type WorkflowNotificationDeliveryOptions,
 } from "#src/extension/workflow-notifications.ts";
 
@@ -102,15 +102,9 @@ export async function launchUltracodeWorkflow(
         sessionFactory: ctx.agentRunner,
       }),
       onRunStateChange: ctx.onRunStateChange,
-      notifyTerminal:
-        ctx.sendMessage === undefined
-          ? undefined
-          : async (notification) => {
-              const { message, delivery } = prepareWorkflowNotification(notification, (n) =>
-                withUltracodeContinuationPrompt(n, goal),
-              );
-              await ctx.sendMessage?.(message, delivery);
-            },
+      notifyTerminal: terminalNotifier(ctx.sendMessage, (n) =>
+        withUltracodeContinuationPrompt(n, goal),
+      ),
     },
   );
 }

@@ -1,17 +1,17 @@
 ---
 title: Saved Workflow Slash Commands
-status: proposed
+status: implemented
 priority: P1
 last_audited: 2026-06-07
-implementation: "Not implemented. Saved workflows can currently be saved, listed, and launched by Workflow({ name }), but .pi/workflows/*.js files are not registered as Pi slash commands."
-next: "Build a Pi command adapter that registers saved workflow scripts as slash commands and launches them by name with trailing text as args."
+implementation: "Implemented. src/extension/commands/saved-workflow-commands.ts registers a generic /workflow <name> [args] command and, on session_start, direct /<meta.name> commands for command-safe saved workflows; /workflows save registers the new command and reports registered/skipped status. Covered by test/extension/commands/saved-workflow-commands.test.ts and updated workflows-command/index tests."
+next: "Optional follow-ups: surface skipped-registration diagnostics in the /workflows monitor, and revisit completions once Pi gives getArgumentCompletions access to ctx."
 ---
 
 # Spec: Saved Workflow Slash Commands
 
 ## Status
 
-Proposed.
+Implemented.
 
 Current behavior is functional but incomplete for the desired user experience:
 

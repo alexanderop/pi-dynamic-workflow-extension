@@ -705,10 +705,30 @@ Requirements:
 - Do not copy transcripts.
 - Do not copy final result.
 
-A saved workflow is a project-local retriggerable command template. A UI adapter MAY
-surface `<meta.name>.js` as a slash-style command such as `/deep-research who is
-alexander opalic`; internally that retrigger launches the saved workflow by
-`name` and passes the trailing text as invocation `args`.
+A saved workflow is a project-local retriggerable command template. This extension
+surfaces saved workflows as Pi slash commands through a command adapter
+(`src/extension/commands/saved-workflow-commands.ts`):
+
+- On `session_start` the adapter scans the resolved workflow root, statically parses
+  each saved `meta` (never executing workflow JavaScript), and registers a direct
+  `/<meta.name>` command when the name is command-safe and does not collide with a
+  reserved name, prompt template, skill command, or existing extension command.
+- A direct command such as `/deep-research who is alexander opalic` launches the saved
+  workflow by `name` with the trailing text passed verbatim as `args` (empty string
+  when there is no trailing text), using `triggerSource: "saved"` and the same launch
+  options builder as the `Workflow` tool. Handlers launch by `name` at invocation, so
+  edits to `.pi/workflows/<name>.js` are picked up without re-registering.
+- A stable generic `/workflow <name> [args]` command launches any saved workflow by
+  name, including those skipped for direct registration due to a collision, and offers
+  saved workflow names as argument completions.
+- Saving a completed run from `/workflows` registers the matching direct command
+  immediately when safe, and the save notification reports whether `/<name>` was
+  registered or the usable fallback (`/workflow <name>` or `Workflow({ name })`).
+- Command names are keyed by `meta.name`. Direct registration requires a non-empty
+  name with no path separators, whitespace, or leading `/`, not starting with `skill:`,
+  not equal to the reserved `workflow`/`workflows` commands, and no collision with an
+  existing command. Pi exposes no unregister API, so a deleted saved file fails at
+  invocation with the resolver not-found error until `/reload` clears stale commands.
 
 A later invocation of the saved workflow creates a new run id and new run state.
 

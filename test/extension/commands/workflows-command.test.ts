@@ -6,6 +6,7 @@ import {
   registerWorkflowsCommand,
   type RegisterWorkflowsCommandOptions,
 } from "#src/extension/commands/workflows-command.ts";
+import { SavedWorkflowCommandRegistry } from "#src/extension/commands/saved-workflow-commands.ts";
 import { WORKFLOW_FEATURE_SESSION_ENTRY_TYPE } from "#src/extension/features/resolve.ts";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
 import type { ShowWorkflowsTuiOptions } from "#src/extension/tui/workflows-view.ts";
@@ -280,7 +281,49 @@ describe("registerWorkflowsCommand", () => {
     await waitForPath(savedPath);
 
     expect(await readFile(savedPath, "utf8")).toBe(script);
-    expect(notify).toHaveBeenCalledWith(`Saved workflow 'saved-audit' to ${savedPath}.`, "info");
+    expect(notify).toHaveBeenCalledWith(
+      `Saved workflow 'saved-audit' to ${savedPath}. Launch with /workflow saved-audit <args> or Workflow({ name: "saved-audit" }).`,
+      "info",
+    );
+  });
+
+  it("should register a direct command and report it when saving with a registry", async () => {
+    const rootDir = join(tempDir, ".pi", "workflows");
+    const scriptPath = join(rootDir, "wf_test", "script.js");
+    const script =
+      "export const meta = { name: 'saved-audit', description: 'Saved audit' }\nreturn 'ok'\n";
+    await mkdir(join(rootDir, "wf_test"), { recursive: true });
+    await writeFile(scriptPath, script, "utf8");
+    await writeRunManifest(tempDir, runState({ status: "completed", scriptPath }));
+
+    const registerCommandSpy = vi.fn<(...args: unknown[]) => void>();
+    const savedCommandRegistry = new SavedWorkflowCommandRegistry(
+      fakePi({ registerCommand: registerCommandSpy, getCommands: () => [] }),
+    );
+    const command = registerCommand({ savedCommandRegistry });
+    const notify = vi.fn<(...args: unknown[]) => void>();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      ui: { custom: vi.fn<() => void>(), notify },
+    });
+
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as
+      | ShowWorkflowsTuiOptions
+      | undefined;
+    tuiOptions?.onSaveRun?.("wf_test");
+    const savedPath = join(rootDir, "saved-audit.js");
+    await waitForPath(savedPath);
+    await vi.waitFor(() =>
+      expect(registerCommandSpy).toHaveBeenCalledWith("saved-audit", expect.anything()),
+    );
+
+    expect(notify).toHaveBeenCalledWith(
+      `Saved workflow 'saved-audit' to ${savedPath} and registered /saved-audit.`,
+      "info",
+    );
   });
 
   it("should launch a successor run when resuming a stopped workflow from the TUI", async () => {

@@ -1,4 +1,5 @@
 import type { WorkflowTaskNotification } from "#src/workflows/launch/launcher.ts";
+import type { WorkflowTerminalNotifier } from "#src/workflows/launch/model.ts";
 
 export interface WorkflowNotificationDeliveryOptions {
   readonly deliverAs?: "steer" | "followUp" | "nextTurn";
@@ -49,4 +50,25 @@ export function prepareWorkflowNotification(
       ? withStoppedWorkflowDoNotRerunPrompt(notification)
       : decorate(notification);
   return { message, delivery: workflowNotificationDeliveryOptions(notification) };
+}
+
+type WorkflowNotificationSender = (
+  message: WorkflowTaskNotification,
+  delivery: WorkflowNotificationDeliveryOptions,
+) => void | Promise<void>;
+
+/**
+ * Build the terminal notifier passed to a workflow launch, or `undefined` when
+ * the host cannot deliver messages. Centralizes the `sendMessage` guard and the
+ * `prepareWorkflowNotification` plumbing shared by every launch call site.
+ */
+export function terminalNotifier(
+  sendMessage: WorkflowNotificationSender | undefined,
+  decorate?: (notification: WorkflowTaskNotification) => WorkflowTaskNotification,
+): WorkflowTerminalNotifier | undefined {
+  if (sendMessage === undefined) return undefined;
+  return async (notification) => {
+    const { message, delivery } = prepareWorkflowNotification(notification, decorate);
+    await sendMessage(message, delivery);
+  };
 }

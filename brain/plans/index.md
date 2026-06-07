@@ -21,7 +21,7 @@ to prevent.
 | Priority | Project | Status | Implemented audit | Next action | Spec |
 |---|---|---|---|---|---|
 | P0 | [root workflow spec](../../spec.md) | partial | Core runtime, saved workflows, journal resume, notifications, feature flags, structured output retry, and monitor foundations exist. | Use this ledger plus [spec-coverage](../contracts/spec-coverage.md) to choose the next slice. | [spec](../../spec.md) |
-| P1 | [saved-workflow-slash-commands](./workflows/saved-workflow-slash-commands/) | proposed | Not implemented; saved workflows can be saved, listed, and launched by `Workflow({ name })`, but `.pi/workflows/*.js` files are not Pi slash commands. | Build the Pi command adapter for `/workflow <name>` and direct `/<meta.name>` commands. | [spec](./workflows/saved-workflow-slash-commands/spec.md) |
+| P1 | [saved-workflow-slash-commands](./workflows/saved-workflow-slash-commands/) | implemented | `src/extension/commands/saved-workflow-commands.ts` registers a generic `/workflow <name> [args]` command and, on `session_start`, direct `/<meta.name>` commands for command-safe saved workflows; `/workflows` save registers the command and reports registered/skipped status. | Optional: surface skipped-registration diagnostics in `/workflows`; revisit completions when Pi gives `getArgumentCompletions` a ctx. | [spec](./workflows/saved-workflow-slash-commands/spec.md) |
 | P1 | [test-page-objects](./workflows/test-page-objects/) | partial | Builders, `workflowScenario`, `workflowsCommandPage`, `workflowsScreen`, and TUI page-object tests exist. | Add `restartAgent` screen actions/spies, saved-workflow-scenario, and richer journal assertions. | [spec](./workflows/test-page-objects/spec.md) |
 | P2 | [live-feedback](./workflows/live-feedback/) | partial | Honest no-telemetry labels, phase/agent display dedupe, fake-runner live event plumbing, and Pi `AgentSession.subscribe()` mapping exist. | Add throttled live manifest persistence and a detail activity timeline. | [spec](./workflows/live-feedback/spec.md) |
 | P2 | [workflows-monitor](./workflows/workflows-monitor/) | partial | Projection, layout, navigation, command page objects, TUI adapter tests, save-run, and stopped-run resume affordance exist. | Finish the spec §24 four-state monitor rebuild. | [plan](./workflows/workflows-monitor/plan.md) · [ticket](./workflows/workflows-monitor/ticket.md) |
@@ -39,7 +39,6 @@ to prevent.
 These are agent-ready chunks that can be picked up alongside the priority table
 above.
 
-- [saved-workflow-slash-commands](./workflows/saved-workflow-slash-commands/spec.md) — register saved `.pi/workflows/*.js` files as Pi slash commands and add a `/workflow <name>` fallback.
 - [atomic-manifest-writes](./workflows/atomic-manifest-writes/) — finish partial-trailing-line journal recovery.
 - [sidechain-transcripts](./workflows/sidechain-transcripts/spec.md) — Pi-native sidechain session persistence and raw transcript replay; keep overview/detail manifest-only.
 - [align-with-pi](./workflows/align-with-pi/) — pi-author convention alignment workstreams W2-W6.

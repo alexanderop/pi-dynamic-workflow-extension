@@ -34,7 +34,7 @@ pi -e .
 
 ## Current Behavior
 
-The package announces auth-configured Pi models and their supported thinking modes when a session starts, registers a `/workflows` command for project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`, and ships the `workflow-debugger` skill for investigating failed or surprising workflow runs.
+The package announces auth-configured Pi models and their supported thinking modes when a session starts, registers a `/workflows` command for project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`, registers saved workflows as slash commands (a generic `/workflow <name> [args]` plus direct `/<meta.name>` commands discovered on session start), and ships the `workflow-debugger` skill for investigating failed or surprising workflow runs.
 
 The core workflow modules now support metadata parsing, sandboxed script execution, scheduler-capped `agent()` calls, run-state discovery, inline launch persistence, saved workflow launch by name or explicit path, saved workflow listing with `description`/`whenToUse` guidance, per-run `journal.jsonl` audit/cache events, resume cache replay for inline launches, terminal `output.json` files, structured-output capture for Pi subagents, and testable task-notification payloads. The `ultracode` trigger wires agents to real Pi sidechain sessions and sends completion notifications back through `pi.sendMessage()`.
 

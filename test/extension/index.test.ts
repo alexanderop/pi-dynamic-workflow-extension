@@ -42,6 +42,10 @@ describe("dynamicWorkflowExtension", () => {
         handler: expect.any(Function),
       }),
     );
+    expect(registerCommand).toHaveBeenCalledWith(
+      "workflow",
+      expect.objectContaining({ handler: expect.any(Function) }),
+    );
     expect(registerTool).toHaveBeenCalledWith(expect.objectContaining({ name: "Workflow" }));
     expect(registerFlag).toHaveBeenCalledWith("workflow-experimental-model-routing", {
       description: "Enable experimental per-agent workflow model routing",
@@ -49,7 +53,7 @@ describe("dynamicWorkflowExtension", () => {
       default: false,
     });
     expect(on).toHaveBeenCalledWith("input", expect.any(Function));
-    expect(on.mock.calls.filter(([event]) => event === "session_start")).toHaveLength(3);
+    expect(on.mock.calls.filter(([event]) => event === "session_start")).toHaveLength(4);
     expect(on.mock.calls.filter(([event]) => event === "session_shutdown")).toHaveLength(2);
   });
 
@@ -293,7 +297,8 @@ function registerWorkflowsCommand(): RegisteredCommandForTest {
     }),
   );
 
-  return registerCommand.mock.calls[0]?.[1] as RegisteredCommandForTest;
+  const workflowsCall = registerCommand.mock.calls.find(([name]) => name === "workflows");
+  return workflowsCall?.[1] as RegisteredCommandForTest;
 }
 
 function runState(overrides: Partial<WorkflowRunState> = {}): WorkflowRunState {
