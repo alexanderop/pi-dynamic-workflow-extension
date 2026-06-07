@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowRunPhase,
@@ -55,6 +56,7 @@ export function buildMonitorView(
     header: {
       workflowName: run.workflowName,
       description: run.description,
+      artifactDir: artifactDirLabel(run),
       doneAgents: agents.filter((agent) => agent.state === "done").length,
       totalAgents: Math.max(agents.length, plannedAgentCount(run)),
       elapsedLabel: liveDurationLabel(run, now),
@@ -125,6 +127,26 @@ function formatThinkingLevelLabel(
 ): string | undefined {
   if (thinkingLevel === undefined) return undefined;
   return `thinking ${thinkingLevel}`;
+}
+
+function artifactDirLabel(run: WorkflowRunState): string {
+  const artifactDir = dirname(run.scriptPath);
+  const normalizedArtifactDir = artifactDir.replaceAll("\\", "/");
+  const standardRelativeDir = `.pi/workflows/${run.runId}`;
+  const standardAbsoluteSuffix = `/${standardRelativeDir}`;
+
+  if (
+    normalizedArtifactDir === standardRelativeDir ||
+    normalizedArtifactDir.endsWith(standardAbsoluteSuffix)
+  ) {
+    return `${standardRelativeDir}/`;
+  }
+
+  return ensureTrailingSlash(artifactDir);
+}
+
+function ensureTrailingSlash(path: string): string {
+  return path.endsWith("/") || path.endsWith("\\") ? path : `${path}/`;
 }
 
 export function isActiveRun(status: WorkflowRunStatus): boolean {

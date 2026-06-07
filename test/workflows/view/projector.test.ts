@@ -234,6 +234,27 @@ describe("buildMonitorView", () => {
     expect(view.header.description).toBeUndefined();
   });
 
+  it("should expose a compact artifact directory label from the run script path", () => {
+    const view = buildMonitorView(
+      runState({
+        runId: "wf_debug",
+        scriptPath: "/Users/alex/project/.pi/workflows/wf_debug/script.js",
+      }),
+      { selectedPhaseIndex: 0 },
+    );
+
+    expect(view.header.artifactDir).toBe(".pi/workflows/wf_debug/");
+  });
+
+  it("should fall back to the script copy directory for non-standard run paths", () => {
+    const view = buildMonitorView(
+      runState({ runId: "wf_debug", scriptPath: "/tmp/wf_debug/script.js" }),
+      { selectedPhaseIndex: 0 },
+    );
+
+    expect(view.header.artifactDir).toBe("/tmp/wf_debug/");
+  });
+
   it("should expose the full prompt on agent rows for the prompt reader", () => {
     const run = runState({
       phases: [{ title: "Review" }],

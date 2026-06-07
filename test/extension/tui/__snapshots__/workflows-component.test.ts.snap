@@ -4,6 +4,7 @@ exports[`WorkflowsTuiComponent golden screens > should snapshot a narrow overvie
 "────────────────────────────────────────────────────────────
 hardening_slice_and_author               1/8 agents · 1m 12s
 Slice the spec into TDD plans and author a pipeline workflow
+artifacts dir: .pi/workflows/wf_hard/
 
 ┌ Phases ───────────┬ Slice · 7 agents ────────────────────┐
 │ › 1 Slice  0/7    │ ● slice:P0.1-j… 41.1k tok · 11 tools │
@@ -22,6 +23,7 @@ exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical St
 "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 hardening_slice_and_author                                                                           1/8 agents · 1m 12s
 Slice the spec into TDD plans and author a pipeline workflow
+artifacts dir: .pi/workflows/wf_hard/
 
 ┌ Phases ───────────┬ Slice · 7 agents ────────────────────────────────────────────────────────────────────────────────┐
 │ › 1 Slice  0/7    │ ● slice:P0.1-journal-keying Opus 4.8 (1M context)                           41.1k tok · 11 tools │
@@ -40,6 +42,7 @@ exports[`WorkflowsTuiComponent golden screens > should snapshot the canonical St
 "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 hardening_slice_and_author                                                                           1/8 agents · 1m 12s
 Slice the spec into TDD plans and author a pipeline workflow
+artifacts dir: .pi/workflows/wf_hard/
 
 ┌ Slice · 7 agents ──────────────────┬ slice:P0.1-journal-keying ──────────────────────────────────────────────────────┐
 │ › ● slice:P0.1-journal-keying      │ ● Running · Opus 4.8 (1M context)                                               │

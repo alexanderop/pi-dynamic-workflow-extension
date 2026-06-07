@@ -1390,6 +1390,7 @@ feel like a live terminal dashboard:
 - A thin accent line across the top of the monitor.
 - Workflow name in bold accent/lavender.
 - Workflow description in muted text directly below the name.
+- Artifact directory in dim text in the monitor header: `artifacts dir: .pi/workflows/<runId>/`.
 - Right-aligned status summary: `<done>/<total> agents · <elapsed>`.
 - Bordered content area with single-line box drawing.
 - Muted footer with keyboard shortcuts.
@@ -1417,6 +1418,7 @@ workflow chooser and open this monitor directly.
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 hardening_slice_and_author                                                       1/8 agents · 1m12s
 Slice the workflow-correctness-hardening spec into TDD-ready implementation plans, and author a reusable spec-implementation pipeline workflow
+artifacts dir: .pi/workflows/wf_hard/
 
 ┌ Phases ───────────────┬ Slice · 7 agents ────────────────────────────────────────────────────────────────┐
 │ › 1 Slice   0/7       │ ● slice:P0.1-journal-keyi… Opus 4.8 (1M context)                   41.1k tok · 11 tools │
@@ -1464,6 +1466,7 @@ This is not a raw dump. It is structured into list + detail panes.
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 hardening_slice_and_author                                                       3/8 agents · 1m37s
 Slice the workflow-correctness-hardening spec into TDD-ready implementation plans, and author a reusable spec-implementation pipeline workflow
+artifacts dir: .pi/workflows/wf_hard/
 
 ┌ Slice · 7 agents ─────────────────┬ slice:P0.1-journal-keying ─────────────────────────────────────────┐
 │ › ● slice:P0.1-journal-keying      │ ● Running · Opus 4.8 (1M context)                                  │
@@ -1620,8 +1623,8 @@ State C original prompt
 ### 24.8 UI acceptance criteria
 
 - `/workflows` with one active workflow opens directly to the overview monitor.
-- The overview monitor matches State A: header, description, phases pane, agent
-  pane, metrics, border, and footer.
+- The overview monitor matches State A: header, description, artifact directory,
+  phases pane, agent pane, metrics, border, and footer.
 - Arrow navigation can switch from overview to structured agent detail.
 - Agent detail matches State B and never dumps the full prompt by default.
 - `enter` opens a full original prompt reader matching State C.
@@ -1657,6 +1660,10 @@ current exploratory `/workflows` component. In particular:
   cursor in State B. State C owns scroll position instead of row selection.
 - The monitor header must include the workflow description. If no description is
   available, omit the description line rather than showing a placeholder.
+- The monitor header must include the run artifact directory as
+  `artifacts dir: <path>`. Prefer the compact `.pi/workflows/<runId>/` label
+  when the persisted script copy lives under that standard run directory; fall
+  back to the script-copy directory for non-standard paths.
 - The right-aligned summary must count terminal-success agents as done and use
   the larger of visible workflow-agent rows, declared planned phase counts, and
   declared planned agent rows as the denominator.

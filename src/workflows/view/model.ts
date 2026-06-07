@@ -39,6 +39,7 @@ export interface MonitorViewModel {
   header: {
     workflowName: string;
     description?: string;
+    artifactDir: string;
     doneAgents: number;
     totalAgents: number;
     elapsedLabel: string;

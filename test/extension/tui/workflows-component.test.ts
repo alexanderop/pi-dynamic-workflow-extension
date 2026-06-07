@@ -97,6 +97,7 @@ const hardeningRun = (): WorkflowRunState =>
     workflowName: "hardening_slice_and_author",
     description: "Slice the spec into TDD plans and author a pipeline workflow",
     status: "running",
+    scriptPath: "/tmp/project/.pi/workflows/wf_hard/script.js",
     startTime: NOW - 72_000,
     agentCount: 8,
     phases: [{ title: "Slice" }, { title: "Author" }],
@@ -179,10 +180,11 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).toContain("\u001b[33midle 1m 12s");
   });
 
-  it("should show the workflow description in the overview header", () => {
+  it("should show the workflow description and artifact directory in the overview header", () => {
     const screen = make([hardeningRun()]).render(120).join("\n");
 
     expect(screen).toContain("Slice the spec into TDD plans and author a pipeline workflow");
+    expect(screen).toContain("artifacts dir: .pi/workflows/wf_hard/");
   });
 
   it("should call out planned phase agent counts before names are known", () => {

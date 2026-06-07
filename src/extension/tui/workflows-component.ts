@@ -214,6 +214,12 @@ export class WorkflowsTuiComponent implements Component {
         ),
       );
     }
+    lines.push(
+      this.#line(
+        width,
+        this.#theme.fg("dim", truncateEllipsis(`artifacts dir: ${view.header.artifactDir}`, width)),
+      ),
+    );
     lines.push("");
     return lines;
   }
