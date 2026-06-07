@@ -6,11 +6,11 @@ This repository is exploratory. The current source is only the installable packa
 
 Reference notes for future implementation:
 
-- [Learning guide](./docs/learning/README.md)
-- [Pi extension reference](./docs/pi-extension-reference.md)
-- [Pi testing reference](./docs/testing-reference.md)
-- [Error handling](./docs/error-handling.md)
-- [Dynamic workflows backlog](./docs/backlog.md)
+- [Learning guide](./docs/resources/learning/README.md)
+- [Pi extension reference](./docs/areas/references/pi-extension-reference.md)
+- [Pi testing reference](./docs/areas/references/testing-reference.md)
+- [Error handling](./docs/areas/references/error-handling.md)
+- [Dynamic workflows backlog](./docs/archive/backlog.md)
 
 ## Install
 
@@ -65,7 +65,7 @@ Pi loads this package through the `pi` manifest in `package.json`:
 
 The extension entrypoint stays small. Most behavior should live in ordinary TypeScript modules so the workflow runtime can be unit-tested without launching Pi.
 
-Current module structure follows [ADR 0007](./docs/adr/0007-organize-workflows-as-domain-modules.md):
+Current module structure follows [ADR 0007](./docs/areas/adr/0007-organize-workflows-as-domain-modules.md):
 
 ```text
 src/
