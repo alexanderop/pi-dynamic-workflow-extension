@@ -482,6 +482,8 @@ interface WorkflowRunState {
   sessionId?: string;
   triggerSource?: "ultracode" | "skill" | "manual" | "saved" | "unknown";
   workflowName: string;
+  description?: string;
+  args?: unknown;
   status: WorkflowRunStatus;
   summary?: string;
   script: string;
@@ -665,6 +667,11 @@ Rules:
 - JavaScript variables are reconstructed by rerunning the script.
 - Changing prompt, schema, model, label, phase, or agent type SHOULD produce a
   different key.
+- A stopped run is terminal and MUST NOT be changed back to `running` in place.
+  User-initiated resume from `/workflows` MUST create a successor run by launching
+  the stopped run's `scriptPath` with `resumeFromRunId` set to the stopped run id
+  and the original persisted `args`. Completed journal results are replayed from
+  cache; incomplete or stopped calls run again under the new run id.
 
 ## 15. Save Semantics
 
@@ -709,7 +716,9 @@ interface WorkflowController {
 Behavior:
 
 - `pause` stops dequeuing new agents and marks the run `paused`.
-- `resume` moves the run back to `running` and continues by journal replay.
+- `resume` moves a paused run back to `running` and continues dequeuing work.
+  It does not apply to terminal stopped runs; stopped-run resume is a user action
+  that launches a new successor run with `resumeFromRunId` per §14.
 - `stopRun` cancels queued work, requests cancellation for running agents, and
   marks the run `stopped`.
 - `stopAgent` cancels one queued or running agent and records a stopped event.
@@ -749,7 +758,11 @@ Requirements:
   (for example `ultracode`). Pi converts custom messages into user-context
   messages, but it does not provide Claude Code's private task-notification
   policy, so the notification must tell the main agent to continue from the
-  workflow result.
+  workflow result. Exception: `stopped` is user cancellation state, not a request
+  to continue; stopped notifications MUST NOT trigger a main-agent turn and MUST
+  explicitly tell the agent not to rerun, resume, or replace the workflow by
+  itself. Resuming or restarting stopped workflow work is user-controlled through
+  `/workflows`.
 - `output-file` MUST point to the full result. The reference run truncated the
   inline `<result>` (`truncated 94566 chars, full result in <output-file>`).
 - Inline `result` MAY be truncated.
@@ -894,6 +907,9 @@ not the primary Pi behavior.
 Terminal workflow notifications for ultracode-launched runs SHOULD use
 `pi.sendMessage(..., { triggerTurn: true })`, not `pi.sendUserMessage(...)`, so
 the main agent is re-invoked with the result without creating a new user message.
+Stopped workflow notifications are the exception: they SHOULD still be delivered
+as a follow-up status message, but with `triggerTurn: false`, because a user stop
+must not cause the main agent to launch a replacement workflow.
 
 ### 19.1 Pi Skill-Packaged Workflow Policy
 

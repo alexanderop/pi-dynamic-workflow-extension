@@ -22,6 +22,7 @@ export interface WorkflowsScreenOptions {
   readonly onClose?: () => void;
   readonly onPauseRun?: (runId: string) => void;
   readonly onResumeRun?: (runId: string) => void;
+  readonly onResumeStoppedRun?: (runId: string) => void | Promise<void>;
   readonly onStopRun?: (runId: string) => void;
   readonly onStopAgent?: (runId: string, agentId: string) => void;
 }
@@ -38,6 +39,7 @@ export class WorkflowsScreen {
     close: vi.fn<() => void>(),
     pauseRun: vi.fn<(runId: string) => void>(),
     resumeRun: vi.fn<(runId: string) => void>(),
+    resumeStoppedRun: vi.fn<(runId: string) => void | Promise<void>>(),
     stopRun: vi.fn<(runId: string) => void>(),
     stopAgent: vi.fn<(runId: string, agentId: string) => void>(),
   };
@@ -52,6 +54,7 @@ export class WorkflowsScreen {
       close: vi.fn<() => void>(options.onClose),
       pauseRun: vi.fn<(runId: string) => void>(options.onPauseRun),
       resumeRun: vi.fn<(runId: string) => void>(options.onResumeRun),
+      resumeStoppedRun: vi.fn<(runId: string) => void | Promise<void>>(options.onResumeStoppedRun),
       stopRun: vi.fn<(runId: string) => void>(options.onStopRun),
       stopAgent: vi.fn<(runId: string, agentId: string) => void>(options.onStopAgent),
     };
@@ -63,6 +66,7 @@ export class WorkflowsScreen {
       onClose: this.#spies.close,
       onPauseRun: this.#spies.pauseRun,
       onResumeRun: this.#spies.resumeRun,
+      onResumeStoppedRun: this.#spies.resumeStoppedRun,
       onStopRun: this.#spies.stopRun,
       onStopAgent: this.#spies.stopAgent,
     });
@@ -140,6 +144,10 @@ export class WorkflowsScreen {
 
   pauseOrResumeRun(): this {
     return this.press("p");
+  }
+
+  requestResumeStoppedRun(): this {
+    return this.press("r");
   }
 
   shouldShowText(textOrPattern: string | RegExp): this {
@@ -242,6 +250,14 @@ export class WorkflowsScreen {
     this.#assert(
       this.#spies.resumeRun.mock.calls.some((call) => call[0] === runId),
       `Expected resume-run callback for ${runId}.`,
+    );
+    return this;
+  }
+
+  shouldHaveResumedStoppedRun(runId: string): this {
+    this.#assert(
+      this.#spies.resumeStoppedRun.mock.calls.some((call) => call[0] === runId),
+      `Expected resume-stopped-run callback for ${runId}.`,
     );
     return this;
   }

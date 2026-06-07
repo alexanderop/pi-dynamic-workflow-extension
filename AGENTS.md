@@ -8,6 +8,8 @@ A second goal is to understand how Claude Code's dynamic workflow feature works.
 
 ## Required context
 
+**IMPORTANT: For any task, read the related docs first before implementing or answering.** Use the docs index below to find what is relevant, and do not skip this even for tasks that look small.
+
 Before making changes in this repo:
 
 1. Read `spec.md`.

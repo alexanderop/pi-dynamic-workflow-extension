@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { PiWorkflowAgentRunnerOptions } from "#src/workflows/agent/pi-runner.ts";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
 import { getWorkflowRunControl } from "#src/workflows/run/control-registry.ts";
 import {
@@ -8,6 +9,18 @@ import {
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import type { Result } from "#src/workflows/result.ts";
 import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
+import {
+  launchWorkflow,
+  type WorkflowLaunch,
+  type WorkflowLaunchError,
+  type WorkflowLaunchOptions,
+  type WorkflowLaunchRequest,
+} from "#src/workflows/launch/launcher.ts";
+import {
+  buildWorkflowLaunchOptions,
+  currentSessionId,
+} from "#src/extension/workflow-launch-options.ts";
+import { prepareWorkflowNotification } from "#src/extension/workflow-notifications.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
 import { formatDuration } from "#src/workflows/view/layout.ts";
@@ -21,9 +34,28 @@ type WorkflowCommandMode = "tui" | "rpc" | "json" | "print";
 type WorkflowCommandContext = ExtensionCommandContext & {
   mode?: WorkflowCommandMode;
   savedWorkflowDirs?: WorkflowSavedWorkflowLocations;
+  model?: PiWorkflowAgentRunnerOptions["model"];
+  modelRegistry?: PiWorkflowAgentRunnerOptions["modelRegistry"] & {
+    getAvailable?: () =>
+      | Promise<WorkflowLaunchOptions["availableModels"]>
+      | WorkflowLaunchOptions["availableModels"];
+  };
 };
 
-export function registerWorkflowsCommand(pi: Pick<ExtensionAPI, "registerCommand">): void {
+export interface RegisterWorkflowsCommandOptions {
+  readonly launchWorkflow?: (
+    request: WorkflowLaunchRequest,
+    options: WorkflowLaunchOptions,
+  ) => Promise<Result<WorkflowLaunch, WorkflowLaunchError>>;
+}
+
+type RegisterWorkflowsCommandPi = Pick<ExtensionAPI, "registerCommand"> &
+  Partial<Pick<ExtensionAPI, "sendMessage" | "getThinkingLevel">>;
+
+export function registerWorkflowsCommand(
+  pi: RegisterWorkflowsCommandPi,
+  options: RegisterWorkflowsCommandOptions = {},
+): void {
   pi.registerCommand("workflows", {
     description: "Show dynamic workflow runs",
     handler: async (_args, ctx) => {
@@ -76,6 +108,9 @@ export function registerWorkflowsCommand(pi: Pick<ExtensionAPI, "registerCommand
               c.resume(runId),
             );
           },
+          onResumeStoppedRun: async (runId) => {
+            await resumeStoppedWorkflow(commandCtx, pi, store, rootDir, runId, options);
+          },
           onStopRun: (runId) => {
             void controlWorkflow(commandCtx, store, runId, `stop workflow run '${runId}'`, (c) =>
               c.stopRun(runId),
@@ -112,12 +147,61 @@ function filterRunsForCurrentSession(
   return runs.filter((run) => run.sessionId === sessionId);
 }
 
-function currentSessionId(ctx: WorkflowCommandContext): string | undefined {
-  try {
-    return ctx.sessionManager?.getSessionId?.();
-  } catch {
-    return undefined;
+async function resumeStoppedWorkflow(
+  ctx: WorkflowCommandContext,
+  pi: RegisterWorkflowsCommandPi,
+  store: WorkflowRunStore,
+  rootDir: string,
+  runId: string,
+  options: RegisterWorkflowsCommandOptions,
+): Promise<void> {
+  const current = await store.readRun(runId);
+  if (current.status === "error") {
+    ctx.ui.notify(current.error.message, "error");
+    return;
   }
+
+  if (current.value.status !== "stopped") {
+    ctx.ui.notify(`Only stopped workflow runs can be resumed this way.`, "warning");
+    return;
+  }
+
+  const launch = await (options.launchWorkflow ?? launchWorkflow)(
+    {
+      scriptPath: current.value.scriptPath,
+      resumeFromRunId: current.value.runId,
+      args: current.value.args,
+    },
+    await resumeStoppedLaunchOptions(ctx, pi, rootDir),
+  );
+
+  if (launch.status === "error") {
+    ctx.ui.notify(launch.error.message, "error");
+    return;
+  }
+
+  ctx.ui.notify(
+    `Resumed workflow '${current.value.workflowName}' as ${launch.value.runId}.`,
+    "info",
+  );
+}
+
+function resumeStoppedLaunchOptions(
+  ctx: WorkflowCommandContext,
+  pi: RegisterWorkflowsCommandPi,
+  rootDir: string,
+): Promise<WorkflowLaunchOptions> {
+  return buildWorkflowLaunchOptions(ctx, pi, {
+    rootDir,
+    triggerSource: "manual",
+    notifyTerminal:
+      pi.sendMessage === undefined
+        ? undefined
+        : async (notification) => {
+            const { message, delivery } = prepareWorkflowNotification(notification);
+            await pi.sendMessage?.(message, delivery);
+          },
+  });
 }
 
 async function controlWorkflow(

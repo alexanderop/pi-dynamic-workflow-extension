@@ -103,6 +103,7 @@ export async function launchWorkflow(
     triggerSource: options.triggerSource,
     workflowName: parsed.value.meta.name,
     description: parsed.value.meta.description ?? request.description,
+    args: request.args,
     status: "running",
     defaultModel: parsed.value.meta.model ?? options.defaultModel,
     defaultThinkingLevel: parsed.value.meta.thinkingLevel ?? options.defaultThinkingLevel,

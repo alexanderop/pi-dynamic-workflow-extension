@@ -1,7 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
-import { createPiWorkflowAgentRunner } from "#src/workflows/agent/pi-runner.ts";
 import {
   launchWorkflow,
   type WorkflowLaunch,
@@ -15,6 +14,8 @@ import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 import { WORKFLOW_SCRIPT_MAX_LENGTH } from "#src/workflows/launch/model.ts";
 import type { WorkflowLaunchOperations } from "#src/workflows/launch/operations.ts";
 import type { WorkflowRunTriggerSource } from "#src/workflows/run/model.ts";
+import { buildWorkflowLaunchOptions } from "#src/extension/workflow-launch-options.ts";
+import { prepareWorkflowNotification } from "#src/extension/workflow-notifications.ts";
 
 export { WORKFLOW_SCRIPT_MAX_LENGTH };
 export const WORKFLOW_TOOL_NAME = "Workflow";
@@ -186,31 +187,20 @@ function toLaunchRequest(params: WorkflowToolParams): WorkflowLaunchRequest {
   };
 }
 
-async function toLaunchOptions(
+function toLaunchOptions(
   ctx: ExtensionContext,
   pi: RegisterWorkflowToolPi,
   options: RegisterWorkflowToolOptions,
 ): Promise<WorkflowLaunchOptions> {
-  const thinkingLevel = currentThinkingLevel(pi);
-  return {
+  return buildWorkflowLaunchOptions(ctx, pi, {
     rootDir: workflowRootDirForCwd(ctx.cwd),
-    operations: options.operations,
-    sessionId: currentSessionId(ctx),
     triggerSource: options.getTriggerSource?.() ?? "manual",
-    cwd: ctx.cwd,
-    defaultModel: currentModelReference(ctx.model),
-    defaultThinkingLevel: thinkingLevel,
-    availableModels: await currentAvailableModels(ctx),
-    schedulerRunner: createPiWorkflowAgentRunner({
-      cwd: ctx.cwd,
-      model: ctx.model,
-      thinkingLevel,
-      modelRegistry: ctx.modelRegistry,
-    }),
+    operations: options.operations,
     notifyTerminal: async (notification) => {
-      await pi.sendMessage(notification, { deliverAs: "followUp", triggerTurn: true });
+      const { message, delivery } = prepareWorkflowNotification(notification);
+      await pi.sendMessage(message, delivery);
     },
-  };
+  });
 }
 
 interface WorkflowToolRenderTheme {
@@ -335,41 +325,4 @@ function formatWorkflowToolResult(
   const line = text.split("\n")[0] ?? "";
   if (context.isError === true) return theme.fg("error", `failed ${line}`);
   return theme.fg("dim", line);
-}
-
-function currentSessionId(ctx: ExtensionContext): string | undefined {
-  try {
-    return ctx.sessionManager?.getSessionId?.();
-  } catch {
-    return undefined;
-  }
-}
-
-function currentThinkingLevel(
-  pi: RegisterWorkflowToolPi,
-): WorkflowLaunchOptions["defaultThinkingLevel"] {
-  try {
-    return pi.getThinkingLevel?.();
-  } catch {
-    return undefined;
-  }
-}
-
-async function currentAvailableModels(
-  ctx: ExtensionContext,
-): Promise<WorkflowLaunchOptions["availableModels"]> {
-  try {
-    return await Promise.resolve(ctx.modelRegistry?.getAvailable?.());
-  } catch {
-    return undefined;
-  }
-}
-
-function currentModelReference(model: unknown): string | undefined {
-  if (typeof model !== "object" || model === null) return undefined;
-  const candidate = model as { readonly provider?: unknown; readonly id?: unknown };
-  if (typeof candidate.id !== "string" || candidate.id.length === 0) return undefined;
-  if (typeof candidate.provider !== "string" || candidate.provider.length === 0)
-    return candidate.id;
-  return `${candidate.provider}/${candidate.id}`;
 }

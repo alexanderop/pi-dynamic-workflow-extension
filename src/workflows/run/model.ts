@@ -37,6 +37,7 @@ export interface WorkflowRunState {
   triggerSource?: WorkflowRunTriggerSource;
   workflowName: string;
   description?: string;
+  args?: unknown;
   status: WorkflowRunStatus;
   defaultModel?: string;
   defaultThinkingLevel?: WorkflowAgentProgress["thinkingLevel"];

@@ -7,6 +7,7 @@ import {
 } from "#src/extension/tools/workflow-tool.ts";
 import { ok } from "#src/workflows/result.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import type { WorkflowTaskNotification } from "#src/workflows/launch/launcher.ts";
 import { fakePi } from "../../support.ts";
 
 interface RegisteredTool {
@@ -275,6 +276,92 @@ describe("Workflow tool", () => {
     });
   });
 
+  it("should not trigger a main-agent turn when a workflow was stopped by the user", async () => {
+    let tool: RegisteredTool | undefined;
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+      async () =>
+        ok({
+          taskId: "task_test",
+          runId: "wf_test",
+          scriptPath: "/repo/.pi/workflows/wf_test/script.js",
+          transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
+          confirmation: "Workflow launched in background. Task ID: task_test",
+          completion: Promise.resolve(ok({ runId: "wf_test" } as WorkflowRunState)),
+        }),
+    );
+    const sendMessage = vi.fn<(...args: unknown[]) => void>();
+
+    registerWorkflowTool(
+      fakePi({
+        registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+          tool = registered;
+        }),
+        sendMessage,
+      }),
+      { launchWorkflow },
+    );
+
+    await tool?.execute(
+      "tool_call_1",
+      { script: "export const meta = { name: 'demo', description: 'Demo' }\nreturn 'ok'" },
+      undefined,
+      undefined,
+      { cwd: "/repo" },
+    );
+
+    const launchOptions = launchWorkflow.mock.calls[0]?.[1];
+    await launchOptions?.notifyTerminal?.(notificationForTest("stopped"));
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("Do not rerun, resume, or replace it yourself"),
+      }),
+      { deliverAs: "followUp", triggerTurn: false },
+    );
+  });
+
+  it("should trigger a main-agent turn for completed workflow notifications", async () => {
+    let tool: RegisteredTool | undefined;
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+      async () =>
+        ok({
+          taskId: "task_test",
+          runId: "wf_test",
+          scriptPath: "/repo/.pi/workflows/wf_test/script.js",
+          transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
+          confirmation: "Workflow launched in background. Task ID: task_test",
+          completion: Promise.resolve(ok({ runId: "wf_test" } as WorkflowRunState)),
+        }),
+    );
+    const sendMessage = vi.fn<(...args: unknown[]) => void>();
+
+    registerWorkflowTool(
+      fakePi({
+        registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+          tool = registered;
+        }),
+        sendMessage,
+      }),
+      { launchWorkflow },
+    );
+
+    await tool?.execute(
+      "tool_call_1",
+      { script: "export const meta = { name: 'demo', description: 'Demo' }\nreturn 'ok'" },
+      undefined,
+      undefined,
+      { cwd: "/repo" },
+    );
+
+    const launchOptions = launchWorkflow.mock.calls[0]?.[1];
+    await launchOptions?.notifyTerminal?.(notificationForTest("completed"));
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "<task-notification />" }),
+      { deliverAs: "followUp", triggerTurn: true },
+    );
+  });
+
   it("should pass available Pi models and current thinking into workflow launch options", async () => {
     let tool: RegisteredTool | undefined;
     const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
@@ -328,3 +415,27 @@ describe("Workflow tool", () => {
     );
   });
 });
+
+function notificationForTest(
+  status: WorkflowTaskNotification["details"]["status"],
+): WorkflowTaskNotification {
+  return {
+    customType: "workflow-task-notification",
+    display: true,
+    content: "<task-notification />",
+    details: {
+      taskId: "task_test",
+      runId: "wf_test",
+      outputFile: "/repo/.pi/workflows/wf_test/output.json",
+      status,
+      summary: `Dynamic workflow ${status}`,
+      result: "",
+      usage: {
+        agentCount: 0,
+        subagentTokens: 0,
+        toolUses: 0,
+        durationMs: 0,
+      },
+    },
+  };
+}

@@ -285,6 +285,24 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen.plainText()).not.toContain("Stop workflow?");
   });
 
+  it("should ask for confirmation before resuming a stopped workflow from the overview", () => {
+    const stopped = runState({
+      runId: "wf_stopped",
+      workflowName: "stopped-workflow",
+      status: "stopped",
+      durationMs: 1000,
+    });
+
+    const screen = workflowsScreen([stopped], { now: NOW })
+      .shouldShowControls("r resume")
+      .requestResumeStoppedRun()
+      .shouldAskForConfirmation("Resume stopped workflow?")
+      .confirm()
+      .shouldHaveResumedStoppedRun("wf_stopped");
+
+    expect(screen.plainText()).not.toContain("Resume stopped workflow?");
+  });
+
   it("should cancel workflow stop confirmation without calling the stop callback", () => {
     const onStopRun = vi.fn<(runId: string) => void>();
     const component = new WorkflowsTuiComponent({

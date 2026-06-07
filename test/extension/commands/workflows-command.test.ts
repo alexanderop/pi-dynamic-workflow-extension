@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { registerWorkflowsCommand } from "#src/extension/commands/workflows-command.ts";
+import {
+  registerWorkflowsCommand,
+  type RegisterWorkflowsCommandOptions,
+} from "#src/extension/commands/workflows-command.ts";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
 import type { ShowWorkflowsTuiOptions } from "#src/extension/tui/workflows-view.ts";
 import {
@@ -11,6 +14,7 @@ import {
 } from "#src/workflows/run/control-registry.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
+import { ok } from "#src/workflows/result.ts";
 import { delay, fakePi, unwrap } from "../../support.ts";
 
 vi.mock("#src/extension/tui/workflows-view.ts", () => ({
@@ -159,6 +163,85 @@ describe("registerWorkflowsCommand", () => {
     }
   });
 
+  it("should launch a successor run when resuming a stopped workflow from the TUI", async () => {
+    await writeRunManifest(
+      tempDir,
+      runState({
+        status: "stopped",
+        scriptPath: join(tempDir, ".pi", "workflows", "wf_test", "script.js"),
+        args: { goal: "finish audit" },
+      }),
+    );
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowsCommandOptions["launchWorkflow"]>>(
+      async () =>
+        ok({
+          taskId: "task_resumed",
+          runId: "wf_resumed",
+          scriptPath: join(tempDir, ".pi", "workflows", "wf_resumed", "script.js"),
+          transcriptDir: join(tempDir, ".pi", "workflows", "wf_resumed", "transcripts"),
+          confirmation: "Workflow launched in background. Task ID: task_resumed",
+          completion: Promise.resolve(ok(runState({ runId: "wf_resumed", status: "running" }))),
+        }),
+    );
+    const command = registerCommand({ launchWorkflow });
+    const notify = vi.fn<(...args: unknown[]) => void>();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      sessionManager: { getSessionId: () => "session_current" },
+      ui: { custom: vi.fn<() => void>(), notify },
+    });
+
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as
+      | ShowWorkflowsTuiOptions
+      | undefined;
+    await tuiOptions?.onResumeStoppedRun?.("wf_test");
+
+    expect(launchWorkflow).toHaveBeenCalledWith(
+      {
+        scriptPath: join(tempDir, ".pi", "workflows", "wf_test", "script.js"),
+        resumeFromRunId: "wf_test",
+        args: { goal: "finish audit" },
+      },
+      expect.objectContaining({
+        rootDir: join(tempDir, ".pi", "workflows"),
+        cwd: tempDir,
+        sessionId: "session_current",
+        triggerSource: "manual",
+        notifyTerminal: undefined,
+        schedulerRunner: expect.any(Function),
+      }),
+    );
+    expect(notify).toHaveBeenCalledWith("Resumed workflow 'test-workflow' as wf_resumed.", "info");
+  });
+
+  it("should reject stopped-workflow resume callbacks for non-stopped runs", async () => {
+    await writeRunManifest(tempDir, runState({ status: "completed" }));
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowsCommandOptions["launchWorkflow"]>>();
+    const command = registerCommand({ launchWorkflow });
+    const notify = vi.fn<(...args: unknown[]) => void>();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      ui: { custom: vi.fn<() => void>(), notify },
+    });
+
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as
+      | ShowWorkflowsTuiOptions
+      | undefined;
+    await tuiOptions?.onResumeStoppedRun?.("wf_test");
+
+    expect(launchWorkflow).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      "Only stopped workflow runs can be resumed this way.",
+      "warning",
+    );
+  });
+
   it("should forward all visible runs to the TUI so the component decides State A versus State D", async () => {
     await writeRunManifest(tempDir, runState({ runId: "wf_running", status: "running" }));
     await writeRunManifest(
@@ -245,13 +328,14 @@ interface RegisteredCommandForTest {
   handler: (args: string, ctx: unknown) => Promise<void>;
 }
 
-function registerCommand(): RegisteredCommandForTest {
+function registerCommand(options: RegisterWorkflowsCommandOptions = {}): RegisteredCommandForTest {
   const registerCommandSpy = vi.fn<(...args: unknown[]) => void>();
 
   registerWorkflowsCommand(
     fakePi({
       registerCommand: registerCommandSpy,
     }),
+    options,
   );
 
   return registerCommandSpy.mock.calls[0]?.[1] as RegisteredCommandForTest;

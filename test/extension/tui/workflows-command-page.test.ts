@@ -11,7 +11,13 @@ describe("workflows command page test helper", () => {
 
     page
       .shouldHavePassedRunsToTui(1)
-      .shouldHaveRegisteredCallbacks("onPauseRun", "onResumeRun", "onStopRun", "onStopAgent")
+      .shouldHaveRegisteredCallbacks(
+        "onPauseRun",
+        "onResumeRun",
+        "onResumeStoppedRun",
+        "onStopRun",
+        "onStopAgent",
+      )
       .pauseRun("wf_test");
 
     await page.shouldHavePersistedRunStatus("wf_test", "paused");

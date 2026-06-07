@@ -11,6 +11,10 @@ import { createPiWorkflowAgentRunner } from "#src/workflows/agent/pi-runner.ts";
 import type { PiWorkflowAgentRunnerOptions } from "#src/workflows/agent/pi-runner.ts";
 import type { Result } from "#src/workflows/result.ts";
 import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
+import {
+  prepareWorkflowNotification,
+  type WorkflowNotificationDeliveryOptions,
+} from "#src/extension/workflow-notifications.ts";
 
 export const BUNDLED_ULTRACODE_WORKFLOW_SCRIPT = String.raw`export const meta = {
   name: "ultracode",
@@ -50,10 +54,7 @@ export interface UltracodeLaunchContext {
   ) => void | Promise<void>;
 }
 
-export interface UltracodeNotificationDeliveryOptions {
-  readonly deliverAs?: "steer" | "followUp" | "nextTurn";
-  readonly triggerTurn?: boolean;
-}
+export type UltracodeNotificationDeliveryOptions = WorkflowNotificationDeliveryOptions;
 
 export interface LaunchUltracodeWorkflowDependencies {
   readonly launchWorkflow?: (
@@ -105,10 +106,10 @@ export async function launchUltracodeWorkflow(
         ctx.sendMessage === undefined
           ? undefined
           : async (notification) => {
-              await ctx.sendMessage?.(withUltracodeContinuationPrompt(notification, goal), {
-                deliverAs: "followUp",
-                triggerTurn: true,
-              });
+              const { message, delivery } = prepareWorkflowNotification(notification, (n) =>
+                withUltracodeContinuationPrompt(n, goal),
+              );
+              await ctx.sendMessage?.(message, delivery);
             },
     },
   );

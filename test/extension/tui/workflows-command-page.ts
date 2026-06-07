@@ -139,6 +139,11 @@ export class WorkflowsCommandPage {
     return this;
   }
 
+  resumeStoppedRun(runId: string): this {
+    this.#tuiOptions().onResumeStoppedRun?.(runId);
+    return this;
+  }
+
   stopAgent(runId: string, agentId: string): this {
     this.#tuiOptions().onStopAgent?.(runId, agentId);
     return this;

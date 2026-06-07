@@ -195,6 +195,7 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
         : undefined,
       workflowName: value.workflowName,
       description: isString(value.description) ? value.description : undefined,
+      args: value.args,
       status: value.status,
       defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
       defaultThinkingLevel: isWorkflowThinkingLevel(value.defaultThinkingLevel)
@@ -251,6 +252,7 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
       : isString(snapshot.description)
         ? snapshot.description
         : undefined,
+    args: value.args,
     status: normalizeObservedStatus(value.status),
     defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
     defaultThinkingLevel: isWorkflowThinkingLevel(value.defaultThinkingLevel)
