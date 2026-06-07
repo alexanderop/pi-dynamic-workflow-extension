@@ -1,12 +1,12 @@
-# ADR 0009: Use Pi-Namespace Saved Workflow Locations With Claude-Like Files
+# ADR 0009: Use Project-Local Pi Saved Workflow Scripts
 
-Status: accepted, amended 2026-06-06
+Status: accepted, amended 2026-06-07
 
 ## Context
 
 Claude-like saved workflows are reusable JavaScript orchestration files that live
-outside run state. Observed Claude Code artifacts use plain JavaScript files under
-`<project>/.claude/workflows/*.js` and `~/.claude/workflows/*.js`.
+outside run state. Observed Claude Code project artifacts use plain JavaScript
+files under `<project>/.claude/workflows/*.js`.
 
 Observed project examples include:
 
@@ -15,58 +15,55 @@ Observed project examples include:
 <project>/.claude/workflows/vue-newsletter.js
 ```
 
-Observed personal examples include:
-
-```text
-~/.claude/workflows/deep-research2.js
-```
-
-Most observed file basenames match `meta.name`, but at least one observed
-personal file (`deep-research2.js`) declares `meta.name: "deep-research"`. That
-means command identity is best treated as `meta.name`, while filenames are a
-lookup/storage detail.
+Most observed file basenames match `meta.name`. Command identity is still best
+treated as `meta.name`, while filenames are lookup/storage details.
 
 We want Claude-like behavior and file shape, but Pi extension data should live
-under `.pi`, not `.claude`.
+under `.pi`, not `.claude`. We also want saved workflows to behave like project-local prompt/command
+templates (for example, a project may expose `deep-research.js` as a retriggerable
+`/deep-research <args>` workflow), not cross-project user-home commands.
 
 ## Decision
 
-Use Pi-namespaced saved workflow locations with Claude-like plain `.js` files:
+Use a Pi-namespaced, project/workspace-local saved workflow location with
+Claude-like plain `.js` files:
 
 ```text
 <pi-workflow-root>/*.js
-~/.pi/workflows/*.js
 ```
 
-When launching by `name`, resolve project/workspace-local workflows before
-personal workflows. The project/workspace scope is the same resolved
-`.pi/workflows` root used for run artifacts (outermost existing ancestor root,
-falling back to `ctx.cwd/.pi/workflows`). Within each scope, first check the
-conventional exact path `<name>.js`, then scan other `.js` files in that scope
-and match by exported `meta.name`.
+The project/workspace scope is the same resolved `.pi/workflows` root used for
+run artifacts (outermost existing ancestor root, falling back to
+`ctx.cwd/.pi/workflows`).
+
+When launching by `name`, resolve only this project/workspace-local saved
+workflow root. First check the conventional exact path `<name>.js`, then scan
+other `.js` files in that root and match by exported `meta.name`.
 
 The requested name must be a command name without path separators. If the exact
 `<name>.js` file exists but declares a different `meta.name`, fail clearly as an
 invalid saved workflow. Non-matching scanned files are ignored.
 
+When saving a run, copy only the run's `script.js` to
+`<pi-workflow-root>/<meta.name>.js`. The save path is derived from the executed
+script's `meta.name`; callers do not choose a separate saved name or scope.
+
 When launching by explicit `scriptPath`, read that exact file and copy it into
 the new run directory as `script.js`, just like inline launches. Do not mutate
 the original saved workflow file.
 
-Tests may inject alternate project/personal saved-workflow directories through
-launcher options so they never read or write the user's real home directory.
+Tests may inject an alternate project saved-workflow directory through launcher
+options so they never read or write the user's real project files.
 
 ## Consequences
 
 - Pi dynamic workflows do not write user/project state into Claude Code's
   `.claude` namespace.
 - Saved workflow files keep Claude Code's plain `.js` module shape.
-- Project/workspace workflows can override personal workflows predictably.
+- Saved workflows are project/workspace-local and never global user-home state.
 - Saved workflows stay separate from per-run manifests, journals, outputs, and
   transcripts even though project saved scripts share the `.pi/workflows` root
   with run directories.
 - Name lookup avoids directory traversal by construction.
 - Launch by name is a little more expensive because it may scan and parse `.js`
   files when `<name>.js` is absent.
-- The extension can later add `saveRunScript` by copying the run's `script.js`
-  into one of these saved-workflow directories.

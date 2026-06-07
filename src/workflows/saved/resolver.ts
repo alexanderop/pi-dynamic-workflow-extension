@@ -1,6 +1,5 @@
 import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { tryParseWorkflowScript, WorkflowParseError } from "#src/workflows/script/parser.ts";
@@ -8,13 +7,12 @@ import type { WorkflowMeta } from "#src/workflows/script/model.ts";
 
 export interface WorkflowSavedWorkflowLocations {
   readonly projectDir?: string;
-  readonly personalDir?: string;
 }
 
 export interface WorkflowSavedWorkflow {
   readonly name: string;
   readonly path: string;
-  readonly scope: "project" | "personal";
+  readonly scope: "project";
   readonly source: string;
   readonly meta: WorkflowMeta;
 }
@@ -54,7 +52,7 @@ export interface WorkflowSavedWorkflowInvalidError {
 
 interface WorkflowSavedWorkflowScope {
   readonly dir: string;
-  readonly scope: "project" | "personal";
+  readonly scope: "project";
 }
 
 interface WorkflowSavedWorkflowCandidate extends WorkflowSavedWorkflowScope {
@@ -64,10 +62,6 @@ interface WorkflowSavedWorkflowCandidate extends WorkflowSavedWorkflowScope {
 
 export function projectSavedWorkflowDir(rootDir: string): string {
   return join(dirname(dirname(rootDir)), ".pi", "workflows");
-}
-
-export function personalSavedWorkflowDir(): string {
-  return join(homedir(), ".pi", "workflows");
 }
 
 export function savedWorkflowPath(dir: string, name: string): string {
@@ -132,14 +126,9 @@ export async function readSavedWorkflowScriptPath(
 }
 
 function candidateScopes(locations: WorkflowSavedWorkflowLocations): WorkflowSavedWorkflowScope[] {
-  return [
-    locations.projectDir === undefined
-      ? undefined
-      : { dir: locations.projectDir, scope: "project" as const },
-    locations.personalDir === undefined
-      ? undefined
-      : { dir: locations.personalDir, scope: "personal" as const },
-  ].filter((scope): scope is WorkflowSavedWorkflowScope => scope !== undefined);
+  return locations.projectDir === undefined
+    ? []
+    : [{ dir: locations.projectDir, scope: "project" }];
 }
 
 async function scannedSavedWorkflowPaths(

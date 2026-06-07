@@ -11,7 +11,6 @@ import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
 import { formatDuration } from "#src/workflows/view/layout.ts";
-import { personalSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import type {
   WorkflowSavedWorkflow,
   WorkflowSavedWorkflowLocations,
@@ -46,7 +45,6 @@ export function registerWorkflowsCommand(pi: ExtensionAPI): void {
       const savedWorkflows = await listSavedWorkflows(
         commandCtx.savedWorkflowDirs ?? {
           projectDir: rootDir,
-          personalDir: personalSavedWorkflowDir(),
         },
       );
 

@@ -23,7 +23,7 @@ export interface WorkflowSavedWorkflowListReadError {
 
 interface WorkflowSavedWorkflowScope {
   readonly dir: string;
-  readonly scope: "project" | "personal";
+  readonly scope: "project";
 }
 
 export async function listSavedWorkflows(
@@ -113,19 +113,13 @@ async function readSavedWorkflowSource(
 }
 
 function candidateScopes(locations: WorkflowSavedWorkflowLocations): WorkflowSavedWorkflowScope[] {
-  return [
-    locations.projectDir === undefined
-      ? undefined
-      : { dir: locations.projectDir, scope: "project" as const },
-    locations.personalDir === undefined
-      ? undefined
-      : { dir: locations.personalDir, scope: "personal" as const },
-  ].filter((scope): scope is WorkflowSavedWorkflowScope => scope !== undefined);
+  return locations.projectDir === undefined
+    ? []
+    : [{ dir: locations.projectDir, scope: "project" }];
 }
 
 function resolverLocations(scope: WorkflowSavedWorkflowScope): WorkflowSavedWorkflowLocations {
-  if (scope.scope === "project") return { projectDir: scope.dir };
-  return { personalDir: scope.dir };
+  return { projectDir: scope.dir };
 }
 
 function compareSavedWorkflows(left: WorkflowSavedWorkflow, right: WorkflowSavedWorkflow): number {

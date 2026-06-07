@@ -22,12 +22,10 @@ async function writeSavedWorkflowFile(
 describe("saved workflow resolver", () => {
   let tempDir: string;
   let projectDir: string;
-  let personalDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "pi-saved-workflows-"));
     projectDir = join(tempDir, "project", ".pi", "workflows");
-    personalDir = join(tempDir, "home", ".pi", "workflows");
   });
 
   afterEach(async () => {
@@ -45,7 +43,7 @@ describe("saved workflow resolver", () => {
     });
     await writeSavedWorkflow(projectDir, "review", source);
 
-    const result = unwrap(await resolveSavedWorkflowByName("review", { projectDir, personalDir }));
+    const result = unwrap(await resolveSavedWorkflowByName("review", { projectDir }));
 
     expect(result).toMatchObject({
       name: "review",
@@ -75,71 +73,35 @@ describe("saved workflow resolver", () => {
     }
   });
 
-  it("should resolve a personal saved workflow when the project workflow is absent", async () => {
-    const source = workflowScript({ meta: { name: "review" }, body: "return 'personal';" });
-    await writeSavedWorkflow(personalDir, "review", source);
-
-    const result = unwrap(await resolveSavedWorkflowByName("review", { projectDir, personalDir }));
-
-    expect(result).toMatchObject({
-      name: "review",
-      path: savedWorkflowPath(personalDir, "review"),
-      scope: "personal",
-      source,
-    });
-  });
-
-  it("should prefer the project saved workflow on name conflict", async () => {
-    const projectSource = workflowScript({ meta: { name: "review" }, body: "return 'project';" });
-    const personalSource = workflowScript({ meta: { name: "review" }, body: "return 'personal';" });
-    await writeSavedWorkflow(projectDir, "review", projectSource);
-    await writeSavedWorkflow(personalDir, "review", personalSource);
-
-    const result = unwrap(await resolveSavedWorkflowByName("review", { projectDir, personalDir }));
-
-    expect(result).toMatchObject({
-      path: savedWorkflowPath(projectDir, "review"),
-      scope: "project",
-      source: projectSource,
-    });
-  });
-
   it("should resolve a saved workflow by meta name when the file basename differs", async () => {
     const source = workflowScript({ meta: { name: "deep-research" }, body: "return 'found';" });
-    await writeSavedWorkflowFile(personalDir, "deep-research2.js", source);
+    await writeSavedWorkflowFile(projectDir, "deep-research2.js", source);
 
-    const result = unwrap(
-      await resolveSavedWorkflowByName("deep-research", { projectDir, personalDir }),
-    );
+    const result = unwrap(await resolveSavedWorkflowByName("deep-research", { projectDir }));
 
     expect(result).toMatchObject({
       name: "deep-research",
-      path: join(personalDir, "deep-research2.js"),
-      scope: "personal",
+      path: join(projectDir, "deep-research2.js"),
+      scope: "project",
       source,
     });
   });
 
-  it("should return a not-found error with searched paths for missing saved workflows", async () => {
-    const result = await resolveSavedWorkflowByName("missing", { projectDir, personalDir });
+  it("should return a not-found error with searched project paths for missing saved workflows", async () => {
+    const result = await resolveSavedWorkflowByName("missing", { projectDir });
 
     expect(result).toMatchObject({
       status: "error",
       error: {
         _tag: "WorkflowSavedWorkflowNotFoundError",
         name: "missing",
-        searchedPaths: [
-          savedWorkflowPath(projectDir, "missing"),
-          join(projectDir, "*.js"),
-          savedWorkflowPath(personalDir, "missing"),
-          join(personalDir, "*.js"),
-        ],
+        searchedPaths: [savedWorkflowPath(projectDir, "missing"), join(projectDir, "*.js")],
       },
     });
   });
 
   it("should reject saved workflow names that would escape the workflow directory", async () => {
-    const result = await resolveSavedWorkflowByName("../escape", { projectDir, personalDir });
+    const result = await resolveSavedWorkflowByName("../escape", { projectDir });
 
     expect(result).toMatchObject({
       status: "error",
@@ -154,7 +116,7 @@ describe("saved workflow resolver", () => {
       workflowScript({ meta: { name: "other" }, body: "return 'wrong';" }),
     );
 
-    const result = await resolveSavedWorkflowByName("review", { projectDir, personalDir });
+    const result = await resolveSavedWorkflowByName("review", { projectDir });
 
     expect(result).toMatchObject({
       status: "error",
@@ -173,7 +135,7 @@ describe("saved workflow resolver", () => {
       invalidWorkflowScript({ metaSource: "{ name: buildName() }", body: "return null;" }),
     );
 
-    const result = await resolveSavedWorkflowByName("review", { projectDir, personalDir });
+    const result = await resolveSavedWorkflowByName("review", { projectDir });
 
     expect(result).toMatchObject({
       status: "error",

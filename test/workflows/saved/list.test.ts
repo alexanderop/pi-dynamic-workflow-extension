@@ -23,45 +23,43 @@ async function writeSavedWorkflowFile(
 describe("saved workflow listing", () => {
   let tempDir: string;
   let projectDir: string;
-  let personalDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "pi-saved-workflow-list-"));
     projectDir = join(tempDir, "project", ".pi", "workflows");
-    personalDir = join(tempDir, "home", ".pi", "workflows");
   });
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("should list project and personal saved workflows with user-facing metadata", async () => {
-    const projectSource = workflowScript({
+  it("should list project saved workflows with user-facing metadata", async () => {
+    const reviewSource = workflowScript({
       meta: {
         name: "review",
         description: "Review source files",
         whenToUse: "Use before merging code changes",
       },
-      body: "return 'project';",
+      body: "return 'review';",
     });
-    const personalSource = workflowScript({
+    const researchSource = workflowScript({
       meta: {
         name: "deep-research",
         description: "Research a topic",
         whenToUse: "Use when a question needs broad exploration",
       },
-      body: "return 'personal';",
+      body: "return 'research';",
     });
-    await writeSavedWorkflow(projectDir, "review", projectSource);
-    await writeSavedWorkflow(personalDir, "deep-research", personalSource);
+    await writeSavedWorkflow(projectDir, "review", reviewSource);
+    await writeSavedWorkflow(projectDir, "deep-research", researchSource);
 
-    const workflows = unwrap(await listSavedWorkflows({ projectDir, personalDir }));
+    const workflows = unwrap(await listSavedWorkflows({ projectDir }));
 
     expect(workflows).toMatchObject([
       {
         name: "deep-research",
-        scope: "personal",
-        path: savedWorkflowPath(personalDir, "deep-research"),
+        scope: "project",
+        path: savedWorkflowPath(projectDir, "deep-research"),
         meta: {
           description: "Research a topic",
           whenToUse: "Use when a question needs broad exploration",
@@ -75,29 +73,6 @@ describe("saved workflow listing", () => {
           description: "Review source files",
           whenToUse: "Use before merging code changes",
         },
-      },
-    ]);
-  });
-
-  it("should prefer the project saved workflow when project and personal names conflict", async () => {
-    await writeSavedWorkflow(
-      projectDir,
-      "review",
-      workflowScript({ meta: { name: "review" }, body: "return 'project';" }),
-    );
-    await writeSavedWorkflow(
-      personalDir,
-      "review",
-      workflowScript({ meta: { name: "review" }, body: "return 'personal';" }),
-    );
-
-    const workflows = unwrap(await listSavedWorkflows({ projectDir, personalDir }));
-
-    expect(workflows).toMatchObject([
-      {
-        name: "review",
-        scope: "project",
-        path: savedWorkflowPath(projectDir, "review"),
       },
     ]);
   });
@@ -120,7 +95,7 @@ describe("saved workflow listing", () => {
     await writeSavedWorkflowFile(projectDir, "aaa-review-copy.js", fallbackSource);
     await writeSavedWorkflow(projectDir, "review", exactSource);
 
-    const workflows = unwrap(await listSavedWorkflows({ projectDir, personalDir }));
+    const workflows = unwrap(await listSavedWorkflows({ projectDir }));
 
     expect(workflows).toMatchObject([
       {
@@ -143,7 +118,7 @@ describe("saved workflow listing", () => {
       workflowScript({ meta: { name: "review" }, body: "return 'fallback';" }),
     );
 
-    const result = await listSavedWorkflows({ projectDir, personalDir });
+    const result = await listSavedWorkflows({ projectDir });
 
     expect(result).toMatchObject({
       status: "error",
@@ -166,7 +141,7 @@ describe("saved workflow listing", () => {
       invalidWorkflowScript({ metaSource: "{ name: buildName() }", body: "return null;" }),
     );
 
-    const workflows = unwrap(await listSavedWorkflows({ projectDir, personalDir }));
+    const workflows = unwrap(await listSavedWorkflows({ projectDir }));
 
     expect(workflows).toMatchObject([{ name: "review", scope: "project" }]);
   });

@@ -57,9 +57,7 @@ return { result };
     );
     unwrap(await firstLaunch.completion);
 
-    const saved = unwrap(
-      await saveRunScript({ runId: "wf_source", name: "review", scope: "project" }, { rootDir }),
-    );
+    const saved = unwrap(await saveRunScript({ runId: "wf_source" }, { rootDir }));
 
     expect(saved).toMatchObject({
       runId: "wf_source",
@@ -101,10 +99,7 @@ return { result };
   });
 
   it("should reject saving a run that does not exist", async () => {
-    const result = await saveRunScript(
-      { runId: "wf_missing", name: "review", scope: "project" },
-      { rootDir },
-    );
+    const result = await saveRunScript({ runId: "wf_missing" }, { rootDir });
 
     expect(result).toMatchObject({
       status: "error",
@@ -115,9 +110,9 @@ return { result };
     });
   });
 
-  it("should reject saving a run under a name that does not match meta.name", async () => {
+  it("should reject saving a run whose meta.name is not a safe command name", async () => {
     const script = workflowScript({
-      meta: { name: "review" },
+      meta: { name: "../audit" },
       body: `return await agent("review src", { label: "review-agent" });`,
     });
     const agents = setupAgentMock(
@@ -136,21 +131,16 @@ return { result };
     );
     unwrap(await launch.completion);
 
-    const result = await saveRunScript(
-      { runId: "wf_review", name: "audit", scope: "project" },
-      { rootDir },
-    );
+    const result = await saveRunScript({ runId: "wf_review" }, { rootDir });
 
     expect(result).toMatchObject({
       status: "error",
       error: {
-        _tag: "WorkflowSaveRunScriptInvalidWorkflowError",
-        message: expect.stringContaining("meta.name"),
+        _tag: "WorkflowSavedWorkflowInvalidNameError",
+        name: "../audit",
       },
     });
-    expect(await pathExists(savedWorkflowPath(projectSavedWorkflowDir(rootDir), "audit"))).toBe(
-      false,
-    );
+    expect(await pathExists(join(projectSavedWorkflowDir(rootDir), "..", "audit.js"))).toBe(false);
     agents.expectNoUnhandledAgents();
   });
 

@@ -5,7 +5,6 @@ import { WorkflowRunStore, type WorkflowRunStoreError } from "#src/workflows/run
 import { tryParseWorkflowScript } from "#src/workflows/script/parser.ts";
 import type { WorkflowParseError } from "#src/workflows/script/parser.ts";
 import {
-  personalSavedWorkflowDir,
   projectSavedWorkflowDir,
   savedWorkflowPath,
   validateSavedWorkflowName,
@@ -15,8 +14,6 @@ import {
 
 export interface WorkflowSaveRunScriptRequest {
   readonly runId: string;
-  readonly name: string;
-  readonly scope: "project" | "personal";
 }
 
 export interface WorkflowSaveRunScriptOptions {
@@ -27,24 +24,17 @@ export interface WorkflowSaveRunScriptOptions {
 export interface WorkflowSavedRunScript {
   readonly runId: string;
   readonly name: string;
-  readonly scope: "project" | "personal";
+  readonly scope: "project";
   readonly path: string;
 }
 
 export type WorkflowSaveRunScriptError =
   | WorkflowSavedWorkflowInvalidNameError
-  | WorkflowSaveRunScriptInvalidScopeError
   | WorkflowSaveRunScriptRunReadError
   | WorkflowSaveRunScriptInvalidRunStatusError
   | WorkflowSaveRunScriptReadError
   | WorkflowSaveRunScriptInvalidWorkflowError
   | WorkflowSaveRunScriptWriteError;
-
-export interface WorkflowSaveRunScriptInvalidScopeError {
-  readonly _tag: "WorkflowSaveRunScriptInvalidScopeError";
-  readonly message: string;
-  readonly scope: unknown;
-}
 
 export interface WorkflowSaveRunScriptRunReadError {
   readonly _tag: "WorkflowSaveRunScriptRunReadError";
@@ -85,12 +75,6 @@ export async function saveRunScript(
   request: WorkflowSaveRunScriptRequest,
   options: WorkflowSaveRunScriptOptions,
 ): Promise<Result<WorkflowSavedRunScript, WorkflowSaveRunScriptError>> {
-  const name = validateSavedWorkflowName(request.name);
-  if (name.status === "error") return name;
-
-  const target = targetSavedWorkflowPath(request, options);
-  if (target.status === "error") return target;
-
   const run = await new WorkflowRunStore({ rootDir: options.rootDir }).readRun(request.runId);
   if (run.status === "error") {
     return err({
@@ -132,54 +116,35 @@ export async function saveRunScript(
     });
   }
 
-  if (parsed.value.meta.name !== request.name) {
-    return err({
-      _tag: "WorkflowSaveRunScriptInvalidWorkflowError",
-      message: `Saved workflow name must match script meta.name; requested '${request.name}', got '${parsed.value.meta.name}'.`,
-      path: run.value.scriptPath,
-    });
-  }
+  const name = validateSavedWorkflowName(parsed.value.meta.name);
+  if (name.status === "error") return name;
+
+  const target = targetSavedWorkflowPath(parsed.value.meta.name, options);
 
   try {
-    await mkdir(dirname(target.value.path), { recursive: true });
-    await writeFile(target.value.path, source, "utf8");
+    await mkdir(dirname(target.path), { recursive: true });
+    await writeFile(target.path, source, "utf8");
   } catch (cause) {
     return err({
       _tag: "WorkflowSaveRunScriptWriteError",
-      message: `Could not write saved workflow script at '${target.value.path}'.`,
-      path: target.value.path,
+      message: `Could not write saved workflow script at '${target.path}'.`,
+      path: target.path,
       cause,
     });
   }
 
   return ok({
     runId: request.runId,
-    name: request.name,
-    scope: target.value.scope,
-    path: target.value.path,
+    name: parsed.value.meta.name,
+    scope: target.scope,
+    path: target.path,
   });
 }
 
 function targetSavedWorkflowPath(
-  request: WorkflowSaveRunScriptRequest,
+  name: string,
   options: WorkflowSaveRunScriptOptions,
-): Result<
-  { readonly scope: "project" | "personal"; readonly path: string },
-  WorkflowSaveRunScriptInvalidScopeError
-> {
-  if (request.scope === "project") {
-    const dir = options.savedWorkflowDirs?.projectDir ?? projectSavedWorkflowDir(options.rootDir);
-    return ok({ scope: "project", path: savedWorkflowPath(dir, request.name) });
-  }
-
-  if (request.scope === "personal") {
-    const dir = options.savedWorkflowDirs?.personalDir ?? personalSavedWorkflowDir();
-    return ok({ scope: "personal", path: savedWorkflowPath(dir, request.name) });
-  }
-
-  return err({
-    _tag: "WorkflowSaveRunScriptInvalidScopeError",
-    message: "Saved workflow scope must be 'project' or 'personal'.",
-    scope: request.scope,
-  });
+): { readonly scope: "project"; readonly path: string } {
+  const dir = options.savedWorkflowDirs?.projectDir ?? projectSavedWorkflowDir(options.rootDir);
+  return { scope: "project", path: savedWorkflowPath(dir, name) };
 }

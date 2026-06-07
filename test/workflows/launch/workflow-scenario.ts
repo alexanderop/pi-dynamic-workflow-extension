@@ -65,8 +65,6 @@ export class WorkflowScenario {
   #scriptPathSource?: { readonly path: string; readonly source?: string };
   #args?: unknown;
   #projectSavedWorkflows: SavedWorkflowSource[] = [];
-  #personalSavedWorkflows: SavedWorkflowSource[] = [];
-  #personalDir?: string;
   #agents: AgentMockServer = setupAgentMock();
   #launchOptions: Partial<WorkflowLaunchOptions> = {};
   #notifications: WorkflowTaskNotification[] = [];
@@ -157,11 +155,6 @@ export class WorkflowScenario {
 
   withSavedWorkflow(name: string, source: string): this {
     this.#projectSavedWorkflows = [...this.#projectSavedWorkflows, { name, source }];
-    return this;
-  }
-
-  withPersonalWorkflow(name: string, source: string): this {
-    this.#personalSavedWorkflows = [...this.#personalSavedWorkflows, { name, source }];
     return this;
   }
 
@@ -370,15 +363,6 @@ export class WorkflowScenario {
     return this;
   }
 
-  async shouldHaveUsedPersonalSavedWorkflow(name: string): Promise<this> {
-    const source = this.#personalSavedWorkflows.find((workflow) => workflow.name === name)?.source;
-    if (source === undefined) {
-      throw new Error(`No personal saved workflow named '${name}' was configured.`);
-    }
-    await this.shouldHaveWrittenScriptCopy(source);
-    return this;
-  }
-
   async shouldNotHaveCreatedRunStorage(): Promise<this> {
     expect(await pathExists(join(this.rootDir, this.runId))).toBe(false);
     return this;
@@ -420,14 +404,9 @@ export class WorkflowScenario {
     if (this.#rootDir === undefined) {
       this.#rootDir = join(this.#tempDir, ".pi", "workflows");
     }
-    this.#personalDir ??= join(this.#tempDir, "home", ".pi", "workflows");
-
     await Promise.all([
       ...this.#projectSavedWorkflows.map(({ name, source }) =>
         writeSavedWorkflow(projectSavedWorkflowDir(this.rootDir), name, source),
-      ),
-      ...this.#personalSavedWorkflows.map(({ name, source }) =>
-        writeSavedWorkflow(this.#personalDir!, name, source),
       ),
       this.#scriptPathSource?.source === undefined
         ? Promise.resolve()
@@ -450,7 +429,6 @@ export class WorkflowScenario {
       },
       savedWorkflowDirs: {
         projectDir: projectSavedWorkflowDir(this.rootDir),
-        personalDir: this.#personalDir,
         ...this.#launchOptions.savedWorkflowDirs,
       },
     };

@@ -54,8 +54,6 @@ export class WorkflowsCommandPage {
   #ownsTempDir = false;
   #runs: WorkflowRunState[] = [];
   #projectWorkflows: Array<{ readonly name: string; readonly source: string }> = [];
-  #personalWorkflows: Array<{ readonly name: string; readonly source: string }> = [];
-  #personalDir?: string;
   #stdout = "";
   #stdoutSpy?: ReturnType<typeof vi.spyOn>;
   #stderrSpy?: ReturnType<typeof vi.spyOn>;
@@ -103,11 +101,6 @@ export class WorkflowsCommandPage {
 
   withSavedWorkflow(name: string, source: string): this {
     this.#projectWorkflows = [...this.#projectWorkflows, { name, source }];
-    return this;
-  }
-
-  withPersonalWorkflow(name: string, source: string): this {
-    this.#personalWorkflows = [...this.#personalWorkflows, { name, source }];
     return this;
   }
 
@@ -229,7 +222,6 @@ export class WorkflowsCommandPage {
       hasUI: mode === "tui" || mode === "rpc",
       savedWorkflowDirs: {
         projectDir: this.rootDir,
-        personalDir: this.#personalDir,
       },
       ui: {
         custom: vi.fn<() => void>(),
@@ -244,16 +236,12 @@ export class WorkflowsCommandPage {
       this.#ownsTempDir = true;
     }
     this.#rootDir ??= join(this.#tempDir, ".pi", "workflows");
-    this.#personalDir ??= join(this.#tempDir, "home", ".pi", "workflows");
 
     const store = new WorkflowRunStore({ rootDir: this.rootDir });
     await Promise.all([
       ...this.#runs.map((run) => store.writeRun(run)),
       ...this.#projectWorkflows.map(({ name, source }) =>
         writeSavedWorkflow(this.rootDir, name, source),
-      ),
-      ...this.#personalWorkflows.map(({ name, source }) =>
-        writeSavedWorkflow(this.#personalDir!, name, source),
       ),
     ]);
 
