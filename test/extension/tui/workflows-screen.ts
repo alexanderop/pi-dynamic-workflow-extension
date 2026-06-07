@@ -25,6 +25,7 @@ export interface WorkflowsScreenOptions {
   readonly onResumeStoppedRun?: (runId: string) => void | Promise<void>;
   readonly onStopRun?: (runId: string) => void;
   readonly onStopAgent?: (runId: string, agentId: string) => void;
+  readonly onSaveRun?: (runId: string) => void;
 }
 
 export function workflowsScreen(
@@ -42,6 +43,7 @@ export class WorkflowsScreen {
     resumeStoppedRun: vi.fn<(runId: string) => void | Promise<void>>(),
     stopRun: vi.fn<(runId: string) => void>(),
     stopAgent: vi.fn<(runId: string, agentId: string) => void>(),
+    saveRun: vi.fn<(runId: string) => void>(),
   };
 
   #width = DEFAULT_WIDTH;
@@ -57,6 +59,7 @@ export class WorkflowsScreen {
       resumeStoppedRun: vi.fn<(runId: string) => void | Promise<void>>(options.onResumeStoppedRun),
       stopRun: vi.fn<(runId: string) => void>(options.onStopRun),
       stopAgent: vi.fn<(runId: string, agentId: string) => void>(options.onStopAgent),
+      saveRun: vi.fn<(runId: string) => void>(options.onSaveRun),
     };
     this.#component = new WorkflowsTuiComponent({
       runs,
@@ -69,6 +72,7 @@ export class WorkflowsScreen {
       onResumeStoppedRun: this.#spies.resumeStoppedRun,
       onStopRun: this.#spies.stopRun,
       onStopAgent: this.#spies.stopAgent,
+      onSaveRun: this.#spies.saveRun,
     });
   }
 
@@ -148,6 +152,10 @@ export class WorkflowsScreen {
 
   requestResumeStoppedRun(): this {
     return this.press("r");
+  }
+
+  saveRun(): this {
+    return this.press("s");
   }
 
   shouldShowText(textOrPattern: string | RegExp): this {
@@ -274,6 +282,14 @@ export class WorkflowsScreen {
     this.#assert(
       this.#spies.stopAgent.mock.calls.some((call) => call[1] === agentId),
       `Expected stop-agent callback for ${agentId}.`,
+    );
+    return this;
+  }
+
+  shouldHaveSavedRun(runId: string): this {
+    this.#assert(
+      this.#spies.saveRun.mock.calls.some((call) => call[0] === runId),
+      `Expected save-run callback for ${runId}.`,
     );
     return this;
   }

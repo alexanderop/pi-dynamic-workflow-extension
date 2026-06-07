@@ -3,8 +3,8 @@ title: Align With Pi Author Conventions
 status: partial
 priority: P7
 last_audited: 2026-06-07
-implementation: "W1 docs/process items are largely present: AGENTS.md has Git rules, CHANGELOG.md has Unreleased, and ADR 0013/0014 statuses are normalized; later structural workstreams remain planned."
-next: "Continue with the remaining W2-W6 workstreams only when convention alignment is the active goal."
+implementation: "W1 (docs/process) done, W2 (parser `any` removal) done, and W3 (the 9 dotted-infix test files renamed behavior-first) done; structural workstreams W4-W6 remain planned."
+next: "Continue with the remaining W4-W6 workstreams only when convention alignment is the active goal."
 ---
 
 # Refactor plan: align with pi author conventions
@@ -64,7 +64,7 @@ with issue links, before it rolls into a version:
 ## [0.78.1] - 2026-06-04
 ```
 
-## W2 — Remove `any` from the parser  (effort: M, risk: low)
+## W2 — Remove `any` from the parser  (effort: M, risk: low) — DONE
 
 `src/workflows/script/parser.ts` — drop both `any` casts (line 24) in favor of
 acorn's real types: type the parse result as acorn `Program`, and narrow helpers
@@ -92,13 +92,23 @@ const program: Program = parse(source, { … });            // no cast
 function isMetaExport(node: AnyNode): boolean { … }        // narrow on node.type
 ```
 
-## W3 — Behavior-first test naming  (effort: S + M, risk: low)
+## W3 — Behavior-first test naming  (effort: S + M, risk: low) — DONE (dotted-infix renames)
 
 pi names tests by behavior (`agent-session-branching.test.ts`), not by source
 file, and uses single-hyphen names — never dotted infixes.
 
-- `git mv` the **9 dotted-infix** test files to hyphenated names (mechanical).
-- Rename module-mirrored tests to behavior-first
+- DONE: `git mv` the **9 dotted-infix** test files to behavior-first hyphenated
+  names. The renames landed as (directory carries the domain, so no domain prefix):
+  `agent/scheduler.property` → `agent/scheduler-caps`,
+  `journal/key.property` → `journal/key-canonicalization`,
+  `run/state-machine.graph` → `run/transition-graph`,
+  `run/state-machine.property` → `run/state-machine-replay`,
+  `saved/resolver.property` → `saved/resolver-command-naming`,
+  `script/parser.property` → `script/parser-literal-metadata`,
+  `script/runtime.property` → `script/runtime-parallel-pipeline`,
+  `view/layout.property` → `view/layout-width-contract`,
+  `view/navigation.property` → `view/navigation-clamping`.
+- STILL PLANNED: rename the remaining module-mirrored unit tests to behavior-first
   (e.g. `parser.test.ts` → `workflow-script-parsing.test.ts`).
 
 The `src` alias means imports do not move, so this is rename-only.
@@ -211,10 +221,10 @@ packages/coding-agent/src/utils/…
 
 ## Quick wins (high value, S effort)
 
-1. W1: `AGENTS.md` Git section + commit-format rule.
-2. W3: rename the 9 dotted-infix test files.
-3. W1: normalize ADR `Status:` headers (0013/0014).
-4. W1: add the `## [Unreleased]` changelog section.
+1. W1: `AGENTS.md` Git section + commit-format rule. — DONE
+2. W3: rename the 9 dotted-infix test files. — DONE
+3. W1: normalize ADR `Status:` headers (0013/0014). — DONE
+4. W1: add the `## [Unreleased]` changelog section. — DONE
 
 ## Out of scope / deliberately skipped
 

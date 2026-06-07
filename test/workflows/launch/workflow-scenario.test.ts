@@ -54,6 +54,12 @@ return await agent("review src", { label: "review-agent", phase: "Review" });
     });
     await scenario.shouldHaveJournalEvent("started");
     await scenario.shouldHaveJournalEvent("result", { result: "ok" });
+
+    await scenario.journal.shouldHaveEvents(["started", "result"]);
+    await scenario.journal.shouldLinkStartedAndResult("review-agent");
+    await scenario.journal.shouldHaveAgentResult("review-agent", "ok");
+    await scenario.journal.shouldNotHaveInvalidatedEvents();
+
     scenario.agents.expectNoUnhandledAgents();
   });
 

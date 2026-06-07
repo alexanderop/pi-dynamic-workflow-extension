@@ -50,4 +50,10 @@ describe("workflows screen test helper", () => {
     expect(screen.plainText()).toContain("audit");
     screen.confirm().shouldHaveStoppedRun("wf_audit");
   });
+
+  it("should report the save-run callback from the overview", () => {
+    const run = workflowRun.running("audit", { runId: "wf_audit" });
+
+    workflowsScreen([run]).saveRun().shouldHaveSavedRun("wf_audit");
+  });
 });

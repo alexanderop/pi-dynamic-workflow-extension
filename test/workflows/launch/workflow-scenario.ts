@@ -1,5 +1,3 @@
-/* eslint-disable vitest/no-standalone-expect */
-
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,7 +16,7 @@ import {
   type WorkflowTerminalOutput,
 } from "#src/workflows/launch/launcher.ts";
 import type { WorkflowJournalEvent } from "#src/workflows/journal/model.ts";
-import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import type { WorkflowProgressEntry, WorkflowRunState } from "#src/workflows/run/model.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { projectSavedWorkflowDir, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import type { Result } from "#src/workflows/result.ts";
@@ -27,6 +25,11 @@ import {
   type AgentMockHandler,
   type AgentMockServer,
 } from "../agent/agent-mock.ts";
+import {
+  workflowJournalAssertions,
+  type JournalAgentIdentity,
+  type WorkflowJournalAssertions,
+} from "../journal/journal-assertions.ts";
 import { pathExists, unwrap } from "../../support.ts";
 
 export interface WorkflowScenarioOptions {
@@ -124,6 +127,12 @@ export class WorkflowScenario {
 
   get notifications(): readonly WorkflowTaskNotification[] {
     return this.#notifications;
+  }
+
+  get journal(): WorkflowJournalAssertions {
+    return workflowJournalAssertions(this.journalPath, {
+      identities: agentIdentities(this.#completed?.workflowProgress),
+    });
   }
 
   withNow(valueOrFn: number | (() => number)): this {
@@ -477,6 +486,15 @@ export class WorkflowScenario {
     }
     return this.#completed;
   }
+}
+
+function agentIdentities(progress?: readonly WorkflowProgressEntry[]): JournalAgentIdentity[] {
+  if (progress === undefined) return [];
+  return progress
+    .filter((entry): entry is Extract<WorkflowProgressEntry, { type: "workflow_agent" }> => {
+      return entry.type === "workflow_agent" && entry.agentId.length > 0;
+    })
+    .map((entry) => ({ label: entry.label, agentId: entry.agentId }));
 }
 
 async function writeSavedWorkflow(dir: string, name: string, source: string): Promise<void> {

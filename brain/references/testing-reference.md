@@ -191,14 +191,14 @@ import { array, assert, integer, property } from "fast-check";
 
 Current property-test coverage:
 
-- `test/workflows/view/layout.property.test.ts` protects the Pi TUI width contract for truncation, padding, headers, two-pane boxes, and wrapping.
-- `test/workflows/view/navigation.property.test.ts` protects monitor navigation clamping and prevents agent-only screens when there are no agents.
-- `test/workflows/journal/key.property.test.ts` protects canonical JSON idempotence, insertion-order independence, stable schema keying, and rejection of cyclic/non-finite values.
-- `test/workflows/run/state-machine.property.test.ts` protects terminal-state behavior and replay equivalence.
-- `test/workflows/script/parser.property.test.ts` protects literal metadata parsing and deterministic primitive rejection.
-- `test/workflows/saved/resolver.property.test.ts` protects saved-workflow command-name validation and path construction.
-- `test/workflows/script/runtime.property.test.ts` protects `parallel()` and `pipeline()` helper semantics.
-- `test/workflows/agent/scheduler.property.test.ts` protects generated concurrency and total-agent caps.
+- `test/workflows/view/layout-width-contract.test.ts` protects the Pi TUI width contract for truncation, padding, headers, two-pane boxes, and wrapping.
+- `test/workflows/view/navigation-clamping.test.ts` protects monitor navigation clamping and prevents agent-only screens when there are no agents.
+- `test/workflows/journal/key-canonicalization.test.ts` protects canonical JSON idempotence, insertion-order independence, stable schema keying, and rejection of cyclic/non-finite values.
+- `test/workflows/run/state-machine-replay.test.ts` protects terminal-state behavior and replay equivalence.
+- `test/workflows/script/parser-literal-metadata.test.ts` protects literal metadata parsing and deterministic primitive rejection.
+- `test/workflows/saved/resolver-command-naming.test.ts` protects saved-workflow command-name validation and path construction.
+- `test/workflows/script/runtime-parallel-pipeline.test.ts` protects `parallel()` and `pipeline()` helper semantics.
+- `test/workflows/agent/scheduler-caps.test.ts` protects generated concurrency and total-agent caps.
 
 Good targets for future property tests:
 

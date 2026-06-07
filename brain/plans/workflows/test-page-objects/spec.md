@@ -3,8 +3,8 @@ title: Testing DSL And Page-Object Specification
 status: partial
 priority: P1
 last_audited: 2026-06-07
-implementation: "Builders, workflowScenario, workflowsCommandPage, workflowsScreen, and related page-object tests exist; restartAgent screen actions, saved-workflow-scenario, and richer journal assertions remain."
-next: "Finish the remaining page-object helpers before broadening monitor/live-feedback tests."
+implementation: "Builders, workflowScenario (with a journal namespace), workflowsCommandPage, workflowsScreen (incl. save-run action), saved-workflow-scenario, journal-assertions, and their page-object tests exist. No production TUI restart-agent callback exists, so restartAgent screen actions are intentionally not wired; `r` resume-stopped-run is covered instead."
+next: "Slice 6 opportunistic refactor: migrate remaining noisy launcher/component tests onto the harnesses where it improves clarity."
 ---
 
 # Testing DSL And Page-Object Specification
@@ -387,6 +387,22 @@ screen.shouldHaveRestartedAgent(agentId)
 screen.shouldHaveSavedRun(runId)
 ```
 
+### Implementation Note: Restart Agent
+
+`restartAgent()` / `onRestartAgent` / `shouldHaveRestartedAgent(agentId)` describe
+an aspirational action. The production `WorkflowsTuiComponent` exposes no
+per-agent restart callback: the `r` key maps to resume-stopped-run, which the
+screen object already covers via `requestResumeStoppedRun()` and
+`shouldHaveResumedStoppedRun(runId)`. The restart-agent concept survives only at
+the journal layer as the `invalidated` (`reason: "restart-agent"`) event, which
+the journal assertions exercise through
+`shouldUseLatestNonInvalidatedResult(...)`. Wire the screen action only after a
+production restart-agent callback exists; do not add a dead spy before then.
+
+The save-run action (`saveRun()` → `s` key, `shouldHaveSavedRun(runId)`) and the
+matching `onSaveRun` callback are wired, mirroring the production `onSaveRun`
+handler.
+
 ### Raw-Key Escape Hatch
 
 Some tests should explicitly protect keybindings. The screen object must allow
@@ -701,12 +717,22 @@ extract them to `test/workflows/journal/journal-assertions.ts`.
 Target examples:
 
 ```ts
-scenario.journal.shouldHaveEvents(["started", "result"]);
-scenario.journal.shouldHaveAgentResult("review-agent", "ok");
-scenario.journal.shouldNotHaveInvalidEvents();
-scenario.journal.shouldLinkStartedAndResult("review-agent");
-scenario.journal.shouldUseLatestNonInvalidatedResult("review-agent");
+await scenario.journal.shouldHaveEvents(["started", "result"]);
+await scenario.journal.shouldHaveAgentResult("review-agent", "ok");
+await scenario.journal.shouldNotHaveInvalidatedEvents();
+await scenario.journal.shouldLinkStartedAndResult("review-agent");
+await scenario.journal.shouldUseLatestNonInvalidatedResult("review-agent", "ok");
 ```
+
+The journal namespace lives in `test/workflows/journal/journal-assertions.ts` and
+is exposed as `scenario.journal`. Each method is async (it reads the JSONL
+journal on demand). Agent arguments accept either a label — resolved to the
+recorded `agentId` via the completed run's `workflowProgress` — or a raw
+`agentId`. `shouldHaveAgentResult` and `shouldUseLatestNonInvalidatedResult` are
+keyed by the journal key and read the cache-winning result through the
+production `buildWorkflowJournalResultCache`, so duplicate `started`/`result`
+events from resume/retry/invalidation resolve to the latest non-invalidated
+result.
 
 Keep journal assertions grounded in `spec.md` and ADR 0008:
 

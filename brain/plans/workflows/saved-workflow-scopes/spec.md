@@ -273,7 +273,7 @@ Numbered, file-by-file. Each item: what / where / why.
 - T-R11 (empty/throwing homedir — RULE 3.2a): When the injected home resolves empty (or `homedir()` would throw), assert resolution proceeds with project scope only and `searchedPaths` has 2 entries (project) on not-found.
 - T-R12 (injected home never touches real `~`): Assert the user scope honors an injected home root and the suite never reads the developer's real `~/.pi/workflows` (RULE 3.2c).
 
-### Resolver property tests (`test/workflows/saved/resolver.property.test.ts`)
+### Resolver property tests (`test/workflows/saved/resolver-command-naming.test.ts`)
 
 - T-R-PROP: AUDIT AND UPDATE this existing property-test file (referenced in `brain/contracts/spec-coverage.md:24`) for the dual-scope model. Widening `WorkflowSavedWorkflowLocations` to two scopes and changing `searchedPaths`/precedence will affect its invariants — in particular: (a) round-trip name-resolution invariants must hold across both scopes; (b) the not-found `searchedPaths` cardinality is now 4 (two-scope) or 2 (collapsed/absent), and ordered project-first (RULE 5.6); (c) precedence invariant: when a name exists in both scopes the resolved `scope` is `"project"`. Update generators/assertions accordingly so the build does not silently regress.
 
@@ -304,7 +304,7 @@ Numbered, file-by-file. Each item: what / where / why.
 
 ### Coverage tracking
 
-- T-C1: Update `brain/contracts/spec-coverage.md` §15 row to point at the dual-scope owners (`src/workflows/saved/resolver.ts`, `list.ts`, `save-run-script.ts`) and their tests, explicitly listing `test/workflows/saved/resolver.property.test.ts` among the coverage owners (it is updated by T-R-PROP). Replace the §15 "Recheck … project-local scope before changing lookup behavior" note with the dual-scope precedence + dedupe status.
+- T-C1: Update `brain/contracts/spec-coverage.md` §15 row to point at the dual-scope owners (`src/workflows/saved/resolver.ts`, `list.ts`, `save-run-script.ts`) and their tests, explicitly listing `test/workflows/saved/resolver-command-naming.test.ts` among the coverage owners (it is updated by T-R-PROP). Replace the §15 "Recheck … project-local scope before changing lookup behavior" note with the dual-scope precedence + dedupe status.
 
 ## 12. ADR Impact
 
