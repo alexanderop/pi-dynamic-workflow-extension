@@ -7,18 +7,19 @@ import {
 } from "#src/extension/tools/workflow-tool.ts";
 import { ok } from "#src/workflows/result.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
+import { fakePi } from "../../support.ts";
 
 interface RegisteredTool {
   readonly name: string;
   readonly label: string;
   readonly description: string;
-  readonly parameters: any;
+  readonly parameters: unknown;
   execute(
     toolCallId: string,
     params: unknown,
     signal: AbortSignal | undefined,
     onUpdate: ((update: unknown) => void) | undefined,
-    ctx: any,
+    ctx: unknown,
   ): Promise<{ content: Array<{ type: "text"; text: string }>; details: unknown }>;
   renderCall(
     args: unknown,
@@ -48,7 +49,7 @@ describe("Workflow tool", () => {
       sendMessage: vi.fn<(...args: unknown[]) => void>(),
     };
 
-    registerWorkflowTool(pi as any);
+    registerWorkflowTool(fakePi(pi));
 
     expect(tool).toEqual(
       expect.objectContaining({
@@ -69,8 +70,14 @@ describe("Workflow tool", () => {
         description: { type: "string" },
       },
     });
-    expect(tool?.parameters.required).toBeUndefined();
-    expect(tool?.parameters.properties.args.type).toBeUndefined();
+    const parameters = tool?.parameters as
+      | {
+          readonly required?: unknown;
+          readonly properties: { readonly args: { readonly type?: unknown } };
+        }
+      | undefined;
+    expect(parameters?.required).toBeUndefined();
+    expect(parameters?.properties.args.type).toBeUndefined();
     expect(tool?.description).toContain("phases must be an array of objects");
     expect(tool?.description).toContain('never strings such as ["Generate"]');
     expect(tool?.description).toContain("opts.schema");
@@ -97,7 +104,7 @@ describe("Workflow tool", () => {
       bold: (text) => text,
     };
 
-    registerWorkflowTool(pi as any);
+    registerWorkflowTool(fakePi(pi));
 
     expect(
       tool?.renderCall({ scriptPath: "/repo/workflow.js" }, theme).render(120).join("\n"),
@@ -130,7 +137,7 @@ describe("Workflow tool", () => {
       bold: (text) => text,
     };
 
-    registerWorkflowTool(pi as any);
+    registerWorkflowTool(fakePi(pi));
 
     const validScript = [
       "export const meta = { name: 'audit', description: 'Audit the code', phases: [{ title: 'Inspect' }, { title: 'Verify' }] }",
@@ -191,10 +198,10 @@ describe("Workflow tool", () => {
       sendMessage,
     };
 
-    registerWorkflowTool(pi as any, {
+    registerWorkflowTool(fakePi(pi), {
       getTriggerSource: () => "ultracode",
       launchWorkflow,
-      operations: "operations" as any,
+      operations: "operations" as unknown as NonNullable<RegisterWorkflowToolOptions["operations"]>,
     });
 
     const onUpdate = vi.fn<(update: unknown) => void>();
@@ -211,8 +218,8 @@ describe("Workflow tool", () => {
       {
         cwd: "/repo/subdir",
         sessionManager: { getSessionId: () => "session_test" },
-        model: { provider: "anthropic", id: "claude-sonnet-4-6" } as any,
-        modelRegistry: "registry" as any,
+        model: { provider: "anthropic", id: "claude-sonnet-4-6" },
+        modelRegistry: "registry",
       },
     );
 
@@ -293,7 +300,9 @@ describe("Workflow tool", () => {
       getThinkingLevel: vi.fn<() => string>(() => "high"),
     };
 
-    registerWorkflowTool(pi as any, { launchWorkflow });
+    registerWorkflowTool(fakePi(pi), {
+      launchWorkflow,
+    });
 
     await tool?.execute(
       "tool_call_1",
@@ -302,10 +311,10 @@ describe("Workflow tool", () => {
       undefined,
       {
         cwd: "/repo",
-        model: { provider: "openai-codex", id: "gpt-5.5" } as any,
+        model: { provider: "openai-codex", id: "gpt-5.5" },
         modelRegistry: {
           getAvailable: () => availableModels,
-        } as any,
+        },
       },
     );
 

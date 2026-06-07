@@ -68,7 +68,7 @@ return "done";
             { title: "Scout", model: "openai-codex/gpt-5.4-mini", thinkingLevel: "low" },
             { title: "Synthesize", model: "openai-codex/gpt-5.5", thinkingLevel: "high" },
           ],
-        } as any,
+        },
       }),
     );
 
@@ -90,7 +90,7 @@ return "done";
           model: "openai-codex/gpt-5.55",
           thinkingLevel: "hihg",
           phases: [{ title: "Review", model: "not-a-real-model", thinkingLevel: "very-high" }],
-        } as any,
+        },
       }),
     );
 

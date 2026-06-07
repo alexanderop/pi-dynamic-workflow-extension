@@ -49,11 +49,11 @@ describe("setupAgentMock", () => {
   it("should reject arrays of handlers with a spread hint", () => {
     const handler = agent.any(() => AgentResponse.text("ok"));
 
-    expect(() => setupAgentMock([handler] as any)).toThrow(/forget to spread/);
+    expect(() => setupAgentMock([handler] as never)).toThrow(/forget to spread/);
 
     const agents = setupAgentMock();
-    expect(() => agents.use([handler] as any)).toThrow(/forget to spread/);
-    expect(() => agents.resetHandlers([handler] as any)).toThrow(/forget to spread/);
+    expect(() => agents.use([handler] as never)).toThrow(/forget to spread/);
+    expect(() => agents.resetHandlers([handler] as never)).toThrow(/forget to spread/);
   });
 
   it("should reset handlers and recorded calls", async () => {

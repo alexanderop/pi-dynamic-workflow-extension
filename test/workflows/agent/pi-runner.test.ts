@@ -157,7 +157,7 @@ describe("createPiWorkflowAgentRunner", () => {
 
     await runner(
       requestForTest({
-        options: { label: "test-agent", thinkingLevel: "hihg" } as any,
+        options: { label: "test-agent", thinkingLevel: "hihg" },
       }),
     );
 

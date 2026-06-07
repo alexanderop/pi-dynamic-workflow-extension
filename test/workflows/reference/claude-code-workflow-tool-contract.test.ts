@@ -8,17 +8,22 @@ import {
 } from "#src/workflows/script/runtime.ts";
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { invalidWorkflowScript, workflowScript } from "../script/workflow-factory.ts";
+import { fakePi } from "../../support.ts";
 
 describe("Claude Code Workflow tool reference contract", () => {
   it("should keep the model-facing parameter schema aligned with the captured Workflow contract", () => {
-    let tool: { readonly parameters: any } | undefined;
+    let tool: { readonly parameters: unknown } | undefined;
 
-    registerWorkflowTool({
-      registerTool: vi.fn<(registered: { readonly parameters: any }) => void>((registered) => {
-        tool = registered;
+    registerWorkflowTool(
+      fakePi({
+        registerTool: vi.fn<(registered: { readonly parameters: unknown }) => void>(
+          (registered) => {
+            tool = registered;
+          },
+        ),
+        sendMessage: vi.fn<(...args: unknown[]) => void>(),
       }),
-      sendMessage: vi.fn<(...args: unknown[]) => void>(),
-    } as any);
+    );
 
     expect(tool?.parameters).toMatchObject({
       type: "object",
@@ -33,8 +38,14 @@ describe("Claude Code Workflow tool reference contract", () => {
         description: { type: "string" },
       },
     });
-    expect(tool?.parameters.required).toBeUndefined();
-    expect(tool?.parameters.properties.args.type).toBeUndefined();
+    const parameters = tool?.parameters as
+      | {
+          readonly required?: unknown;
+          readonly properties: { readonly args: { readonly type?: unknown } };
+        }
+      | undefined;
+    expect(parameters?.required).toBeUndefined();
+    expect(parameters?.properties.args.type).toBeUndefined();
   });
 
   it("should require literal meta.name and meta.description while accepting optional model", () => {

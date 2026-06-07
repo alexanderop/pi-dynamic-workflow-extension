@@ -18,6 +18,9 @@ export interface WorkflowAgentProgress {
   agentType: string;
   model: string;
   thinkingLevel?: string;
+  requestedModel?: string;
+  requestedThinkingLevel?: string;
+  modelFallbackReason?: string;
   state: "queued" | "running" | "done" | "failed" | "stopped";
   queuedAt: number;
   attempt: number;

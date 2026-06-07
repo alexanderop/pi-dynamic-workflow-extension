@@ -87,7 +87,7 @@ describe("workflow runtime helper properties", () => {
       asyncProperty(array(integer(), { minLength: 1, maxLength: 20 }), async (values) => {
         const startedPromises = values.map((value) => Promise.resolve(value));
 
-        await expect(parallel(startedPromises as any)).rejects.toThrow(/thunks/);
+        await expect(parallel(startedPromises as unknown as [])).rejects.toThrow(/thunks/);
       }),
       propertyRuns,
     );

@@ -314,7 +314,7 @@ return await agent("scan src", { label: "scan-agent" });
         name: "meta-thinking-default",
         description: "Apply workflow thinking metadata",
         thinkingLevel: "low",
-      } as any,
+      },
       body: `
 return await agent("scan src", { label: "scan-agent" });
 `,
@@ -360,7 +360,7 @@ return await agent("scan src", { label: "scan-agent" });
             ],
           },
         ],
-      } as any,
+      },
       body: `
 return await agent("review src", { label: "review-agent", phase: "Review" });
 `,

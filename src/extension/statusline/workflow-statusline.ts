@@ -64,7 +64,7 @@ export function createWorkflowStatuslineController(
 }
 
 export function registerWorkflowStatusline(
-  pi: ExtensionAPI,
+  pi: Pick<ExtensionAPI, "on">,
   options: RegisterWorkflowStatuslineOptions = {},
 ): void {
   let active: { readonly dispose: () => void } | undefined;

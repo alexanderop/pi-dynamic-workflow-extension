@@ -47,6 +47,15 @@ export function unwrap<T, E>(result: Result<T, E>): T {
   throw new Error(`Expected Result to be ok, got error: ${JSON.stringify(result.error)}`);
 }
 
+/**
+ * Cast a partial test mock to the SDK type a registrar expects. The mock only
+ * implements the fields under test; the target type is inferred from the call
+ * context (e.g. `registerUltracode(fakePi(pi))`).
+ */
+export function fakePi<T>(mock: object): T {
+  return mock as unknown as T;
+}
+
 /** True when a filesystem path exists. */
 export async function pathExists(path: string): Promise<boolean> {
   try {

@@ -142,7 +142,7 @@ return await agent("scan src", { label: "scan-agent", model: "sonnet" });
           description: "Use workflow-level thinking default",
           model: "openai-codex/gpt-5.4-mini",
           thinkingLevel: "low",
-        } as any,
+        },
         body: `
 return await agent("scan src", { label: "scan-agent" });
 `,
@@ -182,7 +182,7 @@ return await agent("scan src", { label: "scan-agent" });
           description: "Treat typos as soft hints",
           model: "openai-codex/gpt-5.4-mini",
           thinkingLevel: "low",
-        } as any,
+        },
         body: `
 await agent("scan src", {
   label: "scan-agent",
@@ -202,7 +202,7 @@ return "done";
         defaultThinkingLevel: "high",
         availableModels: [{ provider: "openai-codex", id: "gpt-5.5" }],
         schedulerRunner: agents.schedulerRunner,
-      } as any,
+      },
     );
 
     expect(state.result).toBe("done");
@@ -503,7 +503,7 @@ describe("parallel", () => {
   });
 
   it("should reject already-started promises when parallel receives non-thunk inputs", async () => {
-    await expect(parallel([Promise.resolve("started") as any])).rejects.toThrow(/thunks/);
+    await expect(parallel([Promise.resolve("started")] as unknown as [])).rejects.toThrow(/thunks/);
   });
 
   it("should reject more than 4096 thunks", async () => {

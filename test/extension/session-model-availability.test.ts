@@ -1,18 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import {
   formatSessionModelAvailability,
   registerSessionModelAvailability,
 } from "#src/extension/session-model-availability.ts";
+import { fakePi } from "../support.ts";
 
 describe("session model availability", () => {
   it("should notify on session start with auth-configured models and thinking modes", () => {
     const on = vi.fn<(...args: unknown[]) => void>();
     const getThinkingLevel = vi.fn<() => "high">(() => "high");
-    registerSessionModelAvailability({ on, getThinkingLevel } as any);
+    registerSessionModelAvailability(
+      fakePi({
+        on,
+        getThinkingLevel,
+      }),
+    );
 
     const sessionStart = on.mock.calls.find(([event]) => event === "session_start")?.[1] as
-      | ((event: unknown, ctx: any) => void)
+      | ((event: unknown, ctx: unknown) => void)
       | undefined;
     expect(sessionStart).toBeDefined();
 
@@ -61,9 +67,13 @@ describe("session model availability", () => {
 
   it("should not notify in headless modes", () => {
     const on = vi.fn<(...args: unknown[]) => void>();
-    registerSessionModelAvailability({ on } as any);
+    registerSessionModelAvailability(
+      fakePi({
+        on,
+      }),
+    );
     const sessionStart = on.mock.calls.find(([event]) => event === "session_start")?.[1] as
-      | ((event: unknown, ctx: any) => void)
+      | ((event: unknown, ctx: unknown) => void)
       | undefined;
     const notify = vi.fn<(...args: unknown[]) => void>();
 
@@ -80,7 +90,7 @@ describe("session model availability", () => {
   });
 });
 
-function model(overrides: Partial<Model<any>> = {}): Model<any> {
+function model(overrides: Partial<Model<Api>> = {}): Model<Api> {
   const id = overrides.id ?? "claude-test";
   return {
     id,

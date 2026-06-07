@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   handleUltracodeBeforeAgentStart,
   handleUltracodeInput,
@@ -7,6 +8,7 @@ import {
 } from "#src/extension/ultracode/register-ultracode.ts";
 import { createUltracodeModeEntryData } from "#src/extension/ultracode/session-mode-store.ts";
 import type { UltracodeModeState } from "#src/extension/ultracode/mode-state-machine.ts";
+import { fakePi } from "../../support.ts";
 
 describe("registerUltracode", () => {
   it("should register the Workflow tool plus session editor lifecycle, input, and before-agent handlers", () => {
@@ -16,7 +18,7 @@ describe("registerUltracode", () => {
       registerTool: vi.fn<(...args: unknown[]) => void>(),
     };
 
-    registerUltracode(pi as any);
+    registerUltracode(fakePi(pi));
 
     expect(pi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
@@ -37,7 +39,7 @@ describe("registerUltracode", () => {
       registerTool: vi.fn<(...args: unknown[]) => void>(),
     };
 
-    registerUltracode(pi as any);
+    registerUltracode(fakePi(pi));
 
     const result = await handlers.get("tool_call")?.({
       type: "tool_call",
@@ -60,7 +62,7 @@ describe("registerUltracode", () => {
     };
     const ctx = contextForTest({ sessionId: "session_current" });
 
-    registerUltracode(pi as any);
+    registerUltracode(fakePi(pi));
     await handlers.get("input")?.(
       { type: "input", text: "ultracode audit repo", source: "interactive" },
       ctx,
@@ -113,7 +115,7 @@ describe("handleUltracodeToolCall", () => {
       registerTool: vi.fn<(...args: unknown[]) => void>(),
     };
 
-    registerUltracode(pi as any);
+    registerUltracode(fakePi(pi));
 
     handlers.get("session_start")?.(
       { type: "session_start", reason: "resume" },
@@ -226,7 +228,7 @@ describe("handleUltracodeInput", () => {
     };
     const ctx = contextForTest({ sessionId: "session_current" });
 
-    registerUltracode(pi as any);
+    registerUltracode(fakePi(pi));
 
     const result = await handlers.get("input")?.(
       { type: "input", text: "ultracode audit repo", source: "interactive" },
@@ -276,11 +278,11 @@ describe("handleUltracodeBeforeAgentStart", () => {
   });
 });
 
-type RegisteredHandler = (...args: any[]) => unknown;
+type RegisteredHandler = (...args: unknown[]) => unknown;
 
 function contextForTest(
   options: { cwd?: string; sessionId?: string; entries?: readonly unknown[] } = {},
-) {
+): ExtensionContext {
   return {
     cwd: options.cwd ?? "/tmp/project",
     sessionManager: {
@@ -292,7 +294,7 @@ function contextForTest(
       setEditorComponent: vi.fn<(...args: unknown[]) => void>(),
       setWorkingMessage: vi.fn<(...args: unknown[]) => void>(),
     },
-  } as any;
+  } as unknown as ExtensionContext;
 }
 
 function workflowToolCallEvent() {
@@ -301,7 +303,7 @@ function workflowToolCallEvent() {
     toolCallId: "call_1",
     toolName: "Workflow",
     input: {},
-  } as any;
+  } as never;
 }
 
 function beforeAgentEvent() {
@@ -310,5 +312,5 @@ function beforeAgentEvent() {
     prompt: "audit auth",
     systemPrompt: "base prompt",
     systemPromptOptions: {},
-  } as any;
+  } as never;
 }

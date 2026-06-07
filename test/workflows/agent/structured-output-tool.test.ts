@@ -19,7 +19,7 @@ describe("createWorkflowStructuredOutputTool", () => {
 
     const tool = createWorkflowStructuredOutputTool(schema, capture);
     const params = { source: "vue-blog", items: ["Vue 3.5"] };
-    const result = await tool.execute("tool_1", params, undefined, undefined, {} as any);
+    const result = await tool.execute("tool_1", params, undefined, undefined, {} as never);
 
     expect(tool).toMatchObject({
       name: "structured_output",

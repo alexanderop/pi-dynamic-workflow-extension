@@ -1,8 +1,12 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 
-export function registerSessionModelAvailability(pi: ExtensionAPI): void {
+type AnyPiModel = Model<Api>;
+
+export function registerSessionModelAvailability(
+  pi: Pick<ExtensionAPI, "on" | "getThinkingLevel">,
+): void {
   pi.on("session_start", (_event, ctx) => {
     if (ctx.hasUI === false) return;
     const message = formatSessionModelAvailability({
@@ -16,8 +20,8 @@ export function registerSessionModelAvailability(pi: ExtensionAPI): void {
 }
 
 export interface SessionModelAvailabilitySummary {
-  readonly models: readonly Model<any>[];
-  readonly currentModel?: Model<any>;
+  readonly models: readonly AnyPiModel[];
+  readonly currentModel?: AnyPiModel;
   readonly currentThinkingLevel?: ModelThinkingLevel;
   readonly loadError?: string;
 }
@@ -58,17 +62,17 @@ function formatCurrentThinking(level: ModelThinkingLevel | undefined): string {
   return ` · current thinking: ${level}`;
 }
 
-function formatModelReference(model: Model<any>): string {
+function formatModelReference(model: AnyPiModel): string {
   const reference = `${model.provider}/${model.id}`;
   if (model.name === model.id || model.name.length === 0) return reference;
   return `${reference} (${model.name})`;
 }
 
-function formatThinkingModes(model: Model<any>): string {
+function formatThinkingModes(model: AnyPiModel): string {
   return getSupportedThinkingLevels(model).join(", ");
 }
 
-function compareModels(left: Model<any>, right: Model<any>): number {
+function compareModels(left: AnyPiModel, right: AnyPiModel): number {
   const provider = left.provider.localeCompare(right.provider);
   if (provider !== 0) return provider;
   return left.id.localeCompare(right.id);

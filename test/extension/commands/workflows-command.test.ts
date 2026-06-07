@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerWorkflowsCommand } from "#src/extension/commands/workflows-command.ts";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
+import type { ShowWorkflowsTuiOptions } from "#src/extension/tui/workflows-view.ts";
 import {
   registerWorkflowRunControl,
   unregisterWorkflowRunControl,
 } from "#src/workflows/run/control-registry.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
-import { delay, unwrap } from "../../support.ts";
+import { delay, fakePi, unwrap } from "../../support.ts";
 
 vi.mock("#src/extension/tui/workflows-view.ts", () => ({
   showWorkflowsTui: vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined),
@@ -91,7 +92,9 @@ describe("registerWorkflowsCommand", () => {
         ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
       });
 
-      const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as any;
+      const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as
+        | ShowWorkflowsTuiOptions
+        | undefined;
       tuiOptions?.onStopRun?.("wf_test");
       await waitForRunStatus(store, "wf_test", "stopped");
 
@@ -143,9 +146,11 @@ describe("registerWorkflowsCommand", () => {
         ui: { custom: vi.fn<() => void>(), notify: vi.fn<() => void>() },
       });
 
-      const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as any;
+      const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as
+        | ShowWorkflowsTuiOptions
+        | undefined;
       expect(tuiOptions?.onStopAgent).toEqual(expect.any(Function));
-      tuiOptions.onStopAgent("wf_test", "agent_0");
+      tuiOptions?.onStopAgent?.("wf_test", "agent_0");
       await waitForAgentStatus(store, "wf_test", "agent_0", "stopped");
 
       expect(stopAgent).toHaveBeenCalledWith("agent_0");
@@ -237,15 +242,17 @@ describe("registerWorkflowsCommand", () => {
 });
 
 interface RegisteredCommandForTest {
-  handler: (args: string, ctx: any) => Promise<void>;
+  handler: (args: string, ctx: unknown) => Promise<void>;
 }
 
 function registerCommand(): RegisteredCommandForTest {
   const registerCommandSpy = vi.fn<(...args: unknown[]) => void>();
 
-  registerWorkflowsCommand({
-    registerCommand: registerCommandSpy,
-  } as any);
+  registerWorkflowsCommand(
+    fakePi({
+      registerCommand: registerCommandSpy,
+    }),
+  );
 
   return registerCommandSpy.mock.calls[0]?.[1] as RegisteredCommandForTest;
 }

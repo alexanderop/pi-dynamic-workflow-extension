@@ -123,7 +123,7 @@ describe("WorkflowRunStore", () => {
               },
             ],
           },
-        ] as any,
+        ],
       }),
     );
 
@@ -160,7 +160,7 @@ describe("WorkflowRunStore", () => {
             requestedModel: "openai-codex/gpt-5.55",
             requestedThinkingLevel: "hihg",
             modelFallbackReason: "Requested model is unavailable; using current Pi model.",
-          } as any),
+          }),
         ],
         agentCount: 1,
       }),

@@ -61,6 +61,7 @@ Use these like wiki links when orienting:
 - [[docs/backlog.md]] — incremental backlog for building the dynamic workflow epic through tested slices.
 - [[docs/chunks/README.md]] — agent-ready task chunks split out from broad backlog slices.
 - [[docs/spec-coverage.md]] — spec-to-code ownership map showing production files, tests, status, and next gaps by spec area.
+- [[docs/workflows-live-feedback-spec.md]] — planned product/technical spec for live workflow activity feedback, truthful running/idle labels, and bounded telemetry persistence.
 - [[docs/learning/README.md]] — guided onboarding path for learning Pi, dynamic workflows, and the current implementation.
 - [[docs/error-handling.md]] — project-local Result pattern and workflow error-handling conventions.
 - [[docs/adr/README.md]] — how to record architecture decisions for this project.

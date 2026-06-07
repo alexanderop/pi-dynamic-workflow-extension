@@ -19,10 +19,16 @@ import {
 } from "./session-mode-store.ts";
 import { isEmptyUltracodeInput, parseUltracodeInput } from "./input-trigger.ts";
 import { UltracodeEditor } from "./rainbow-editor.ts";
-import { registerWorkflowTool, WORKFLOW_TOOL_NAME } from "#src/extension/tools/workflow-tool.ts";
+import {
+  registerWorkflowTool,
+  WORKFLOW_TOOL_NAME,
+  type RegisterWorkflowToolPi,
+} from "#src/extension/tools/workflow-tool.ts";
 import { ultracodeBeforeAgentSystemPrompt, ultracodePolicyMessage } from "./system-reminder.ts";
 
-export function registerUltracode(pi: ExtensionAPI): void {
+type RegisterUltracodePi = Pick<ExtensionAPI, "on" | "appendEntry"> & RegisterWorkflowToolPi;
+
+export function registerUltracode(pi: RegisterUltracodePi): void {
   let activeEditor: UltracodeEditor | undefined;
   let mode: UltracodeModeState = { state: "off" };
 

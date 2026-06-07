@@ -1,6 +1,26 @@
-import { parse } from "acorn";
+import {
+  parse,
+  type AnyNode,
+  type ExportNamedDeclaration,
+  type Identifier,
+  type ObjectExpression,
+  type Program,
+  type VariableDeclaration,
+  type VariableDeclarator,
+} from "acorn";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowMeta, WorkflowPhase, WorkflowPlannedAgent } from "./model.ts";
+
+type MetaDeclarator = VariableDeclarator & {
+  id: Identifier;
+  init: ObjectExpression;
+};
+
+type MetaExportDeclaration = ExportNamedDeclaration & {
+  declaration: VariableDeclaration & {
+    declarations: [MetaDeclarator];
+  };
+};
 
 export interface ParsedWorkflowScript {
   meta: WorkflowMeta;
@@ -16,12 +36,12 @@ export class WorkflowParseError extends Error {
 
 export function parseWorkflowScript(source: string): ParsedWorkflowScript {
   assertNoForbiddenDeterminismSubstrings(source);
-  const program = parse(source, {
+  const program: Program = parse(source, {
     ecmaVersion: "latest",
     sourceType: "module",
     allowReturnOutsideFunction: true,
     ranges: true,
-  } as any) as any;
+  });
 
   const first = program.body[0];
   if (!isMetaExport(first)) {
@@ -53,7 +73,7 @@ function toWorkflowParseError(cause: unknown): WorkflowParseError {
   return new WorkflowParseError(String(cause));
 }
 
-function isMetaExport(node: any): boolean {
+function isMetaExport(node: AnyNode | undefined): node is MetaExportDeclaration {
   if (node?.type !== "ExportNamedDeclaration") return false;
   const declaration = node.declaration;
   if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") return false;
@@ -67,12 +87,12 @@ function isMetaExport(node: any): boolean {
   );
 }
 
-function literalValue(node: any, path: string): unknown {
+function literalValue(node: AnyNode | null | undefined, path: string): unknown {
   switch (node?.type) {
     case "ObjectExpression":
       return objectValue(node, path);
     case "ArrayExpression":
-      return node.elements.map((element: any, index: number) => {
+      return node.elements.map((element, index) => {
         if (!element) throw new WorkflowParseError(`${path}[${index}] must not be empty.`);
         return literalValue(element, `${path}[${index}]`);
       });
@@ -85,7 +105,7 @@ function literalValue(node: any, path: string): unknown {
   }
 }
 
-function objectValue(node: any, path: string): Record<string, unknown> {
+function objectValue(node: ObjectExpression, path: string): Record<string, unknown> {
   const value: Record<string, unknown> = {};
 
   for (const property of node.properties) {
@@ -106,7 +126,7 @@ function objectValue(node: any, path: string): Record<string, unknown> {
   return value;
 }
 
-function propertyKey(node: any): string {
+function propertyKey(node: AnyNode): string {
   if (node.type === "Identifier") return node.name;
   if (node.type === "Literal" && typeof node.value === "string") return node.value;
   throw new WorkflowParseError("Workflow meta keys must be identifiers or string literals.");
@@ -209,7 +229,7 @@ function assertNoForbiddenDeterminismSubstrings(source: string): void {
   }
 }
 
-function assertDeterministic(nodes: any[]): void {
+function assertDeterministic(nodes: AnyNode[]): void {
   for (const node of nodes) {
     walk(node, (current) => {
       if (isMemberCall(current, "Date", "now")) {
@@ -236,29 +256,37 @@ function assertDeterministic(nodes: any[]): void {
   }
 }
 
-function isMemberCall(node: any, objectName: string, propertyName: string): boolean {
+function isMemberCall(node: AnyNode, objectName: string, propertyName: string): boolean {
   return (
     node.type === "CallExpression" &&
-    node.callee?.type === "MemberExpression" &&
+    node.callee.type === "MemberExpression" &&
     !node.callee.computed &&
-    node.callee.object?.type === "Identifier" &&
+    node.callee.object.type === "Identifier" &&
     node.callee.object.name === objectName &&
-    node.callee.property?.type === "Identifier" &&
+    node.callee.property.type === "Identifier" &&
     node.callee.property.name === propertyName
   );
 }
 
-function walk(node: any, visit: (node: any) => void): void {
-  if (!node || typeof node !== "object") return;
+function walk(node: AnyNode, visit: (node: AnyNode) => void): void {
   visit(node);
 
-  for (const key of Object.keys(node)) {
+  for (const [key, child] of Object.entries(node as unknown as Record<string, unknown>)) {
     if (key === "parent") continue;
-    const child = node[key];
     if (Array.isArray(child)) {
-      for (const item of child) walk(item, visit);
-    } else if (child && typeof child === "object" && typeof child.type === "string") {
+      for (const item of child) {
+        if (isAcornNode(item)) walk(item, visit);
+      }
+    } else if (isAcornNode(child)) {
       walk(child, visit);
     }
   }
+}
+
+function isAcornNode(value: unknown): value is AnyNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { type?: unknown }).type === "string"
+  );
 }

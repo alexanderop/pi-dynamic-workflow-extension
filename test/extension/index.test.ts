@@ -7,6 +7,7 @@ import type { WorkflowsComponentTheme } from "#src/extension/tui/workflows-compo
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import { savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { workflowScript } from "../workflows/script/workflow-factory.ts";
+import { fakePi } from "../support.ts";
 
 describe("dynamicWorkflowExtension", () => {
   let tempDir: string;
@@ -24,11 +25,13 @@ describe("dynamicWorkflowExtension", () => {
     const registerTool = vi.fn<(...args: unknown[]) => void>();
     const on = vi.fn<(...args: unknown[]) => void>();
 
-    dynamicWorkflowExtension({
-      registerCommand,
-      registerTool,
-      on,
-    } as any);
+    dynamicWorkflowExtension(
+      fakePi({
+        registerCommand,
+        registerTool,
+        on,
+      }),
+    );
 
     expect(registerCommand).toHaveBeenCalledWith(
       "workflows",
@@ -267,7 +270,7 @@ const testTheme: WorkflowsComponentTheme = {
 };
 
 interface RegisteredCommandForTest {
-  handler: (args: string, ctx: any) => Promise<void>;
+  handler: (args: string, ctx: unknown) => Promise<void>;
 }
 
 function registerWorkflowsCommand(): RegisteredCommandForTest {
@@ -275,11 +278,13 @@ function registerWorkflowsCommand(): RegisteredCommandForTest {
   const registerTool = vi.fn<(...args: unknown[]) => void>();
   const on = vi.fn<(...args: unknown[]) => void>();
 
-  dynamicWorkflowExtension({
-    registerCommand,
-    registerTool,
-    on,
-  } as any);
+  dynamicWorkflowExtension(
+    fakePi({
+      registerCommand,
+      registerTool,
+      on,
+    }),
+  );
 
   return registerCommand.mock.calls[0]?.[1] as RegisteredCommandForTest;
 }

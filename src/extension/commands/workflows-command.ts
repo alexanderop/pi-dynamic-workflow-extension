@@ -23,7 +23,7 @@ type WorkflowCommandContext = ExtensionCommandContext & {
   savedWorkflowDirs?: WorkflowSavedWorkflowLocations;
 };
 
-export function registerWorkflowsCommand(pi: ExtensionAPI): void {
+export function registerWorkflowsCommand(pi: Pick<ExtensionAPI, "registerCommand">): void {
   pi.registerCommand("workflows", {
     description: "Show dynamic workflow runs",
     handler: async (_args, ctx) => {

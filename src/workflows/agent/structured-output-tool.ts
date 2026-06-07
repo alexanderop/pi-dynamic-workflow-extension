@@ -1,4 +1,5 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { TSchema } from "typebox";
 
 export class WorkflowAgentSchemaError extends Error {
   readonly variant = "schema";
@@ -12,7 +13,7 @@ export class WorkflowAgentSchemaError extends Error {
 export function createWorkflowStructuredOutputTool(
   schema: unknown,
   capture: (value: unknown) => void,
-): ToolDefinition<any, unknown> {
+): ToolDefinition<TSchema, unknown, unknown> {
   assertToolParameterSchema(schema);
 
   return defineTool({
@@ -24,7 +25,7 @@ export function createWorkflowStructuredOutputTool(
       "Use structured_output as the final action when a workflow agent requests structured output.",
       "Do not answer with prose instead of calling structured_output when structured output is required.",
     ],
-    parameters: schema as any,
+    parameters: schema as TSchema,
     async execute(_toolCallId, params) {
       const result = structuredClone(params);
       capture(result);

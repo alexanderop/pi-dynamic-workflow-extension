@@ -101,8 +101,12 @@ export interface RegisterWorkflowToolOptions {
   ) => Promise<Result<WorkflowLaunch, WorkflowLaunchError>>;
 }
 
+/** The slice of the host API that registering the Workflow tool actually depends on. */
+export type RegisterWorkflowToolPi = Pick<ExtensionAPI, "registerTool" | "sendMessage"> &
+  Partial<Pick<ExtensionAPI, "getThinkingLevel">>;
+
 export function registerWorkflowTool(
-  pi: ExtensionAPI,
+  pi: RegisterWorkflowToolPi,
   options: RegisterWorkflowToolOptions = {},
 ): void {
   pi.registerTool({
@@ -184,7 +188,7 @@ function toLaunchRequest(params: WorkflowToolParams): WorkflowLaunchRequest {
 
 async function toLaunchOptions(
   ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  pi: RegisterWorkflowToolPi,
   options: RegisterWorkflowToolOptions,
 ): Promise<WorkflowLaunchOptions> {
   const thinkingLevel = currentThinkingLevel(pi);
@@ -341,9 +345,11 @@ function currentSessionId(ctx: ExtensionContext): string | undefined {
   }
 }
 
-function currentThinkingLevel(pi: ExtensionAPI): WorkflowLaunchOptions["defaultThinkingLevel"] {
+function currentThinkingLevel(
+  pi: RegisterWorkflowToolPi,
+): WorkflowLaunchOptions["defaultThinkingLevel"] {
   try {
-    return (pi as Partial<Pick<ExtensionAPI, "getThinkingLevel">>).getThinkingLevel?.();
+    return pi.getThinkingLevel?.();
   } catch {
     return undefined;
   }
