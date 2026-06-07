@@ -12,6 +12,7 @@ export function computeWorkflowAgentKey(input: WorkflowAgentKeyInput): WorkflowJ
     phase: input.phase ?? null,
     agentType: input.agentType,
     model: input.model,
+    thinkingLevel: input.thinkingLevel ?? null,
     cwd: input.cwd,
   });
   const digest = createHash("sha256").update(preimage).digest("hex");

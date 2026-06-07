@@ -22,15 +22,16 @@ Use a Pi footer status entry keyed as `dynamic-workflows` for the passive active
 workflow strip.
 
 The extension owns a statusline controller that projects manifest-backed
-`WorkflowRunState` values into compact text:
+`WorkflowRunState` values into compact, footer-capped text:
 
 ```text
-○ workflow-name  2/3 agents · 4m 18s · phase Verify · agent verify-api · ↓ 832.6k tokens  optional descript…
+○ workflow-name  2/3 · 4m18s · Verify · verify-api · ↓832.6k
 ```
 
-The status keeps the active-run metrics, elapsed time, phase, and active agent
-before the optional description. The description is truncated so Pi's footer-level
-line truncation does not hide the live progress context.
+The status keeps only the active-run metrics, elapsed time, phase, active agent,
+and compact token usage. It intentionally omits verbose labels and workflow
+descriptions so Pi's footer stays a lightweight cue instead of becoming a second
+workflow monitor.
 
 The controller selects the newest active run in the current Pi session when a
 session id is available, updates elapsed time on a timer, and clears the status

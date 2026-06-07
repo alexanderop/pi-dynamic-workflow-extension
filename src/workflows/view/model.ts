@@ -1,12 +1,20 @@
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type { WorkflowRunStatus } from "#src/workflows/run/model.ts";
 
+export interface MonitorPlannedAgentRow {
+  label: string;
+  modelLabel?: string;
+  agentType?: string;
+}
+
 export interface MonitorAgentRow {
   glyph: string;
   label: string;
   agentId: string;
   state: WorkflowAgentProgress["state"];
   modelLabel?: string;
+  thinkingLevelLabel?: string;
+  thinkingLevel?: WorkflowAgentProgress["thinkingLevel"];
   tokens?: number;
   toolCalls?: number;
   idleMs?: number;
@@ -19,8 +27,12 @@ export interface MonitorAgentRow {
 
 export interface MonitorPhaseRow {
   title: string;
+  detail?: string;
+  modelLabel?: string;
   doneAgents: number;
   totalAgents: number;
+  plannedAgents: MonitorPlannedAgentRow[];
+  remainingPlannedAgents: number;
 }
 
 export interface MonitorViewModel {

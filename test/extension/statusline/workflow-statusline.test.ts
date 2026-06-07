@@ -24,7 +24,7 @@ describe("workflow statusline controller", () => {
 
     expect(setStatus).toHaveBeenCalledWith(
       "dynamic-workflows",
-      "○ review  1/2 agents · 3s · phase Verify · agent verify",
+      "○ review  1/2 · 3s · Verify · verify",
     );
   });
 
@@ -54,7 +54,7 @@ describe("workflow statusline controller", () => {
       }),
     ]);
 
-    expect(setStatus).toHaveBeenLastCalledWith("dynamic-workflows", "○ newer  0/0 agents · 2s");
+    expect(setStatus).toHaveBeenLastCalledWith("dynamic-workflows", "○ newer  0/0 · 2s");
   });
 
   it("should clear the footer status when no active workflows remain", () => {
@@ -82,7 +82,7 @@ describe("workflow statusline controller", () => {
     now = WORKFLOW_NOW + 61_000;
     controller.tick();
 
-    expect(setStatus).toHaveBeenLastCalledWith("dynamic-workflows", "○ review  0/0 agents · 1m 1s");
+    expect(setStatus).toHaveBeenLastCalledWith("dynamic-workflows", "○ review  0/0 · 1m1s");
   });
 
   it("should clear the footer status when disposed", () => {

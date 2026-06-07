@@ -25,11 +25,11 @@ Use Workflow only when the user explicitly opted into multi-agent orchestration,
 
 Workflow accepts one of script, scriptPath, or name. Precedence is scriptPath > script > name. Every launch persists the script under the workflow run directory and returns the path in the tool result. To iterate, edit that persisted script file and relaunch with scriptPath instead of resending the full script.
 
-A workflow script must begin with a pure literal export const meta = { ... } block: no variables, function calls, computed keys, spreads, or template interpolation. meta.name and meta.description are required. meta.phases must be an array of objects such as [{ title: "Generate" }, { title: "Select" }], never strings such as ["Generate"]. Phase titles must match phase() calls exactly.
+A workflow script must begin with a pure literal export const meta = { ... } block: no variables, function calls, computed keys, spreads, or template interpolation. meta.name and meta.description are required. meta.phases must be an array of objects such as [{ title: "Generate", detail: "Draft candidates", model: "default", agentCount: 4, agents: [{ label: "generate:angle-a" }] }, { title: "Select", agentCount: 1 }], never strings such as ["Generate"]. Phase titles must match phase() calls exactly. Include phase detail/model/agentCount/agents only when the planned fan-out is known before execution.
 
 The script body is plain JavaScript, not TypeScript. Use top-level await. Do not use filesystem, Node.js APIs, Date.now(), Math.random(), or argument-less new Date(). Pass timestamps through args and vary work by stable item indexes.
 
-Available workflow globals: args, budget, agent(prompt, opts?), pipeline(items, ...stages), parallel(thunks), phase(title), and log(message). agent() spawns one subagent; without opts.schema it returns final text, and with opts.schema it returns the validated structured object. opts.schema must be a plain JSON object schema suitable for Pi tool parameters, such as { type: 'object', properties: ..., required: ... }. Other opts may include label, phase, model, isolation: 'worktree', and agentType. pipeline() has no cross-item barrier; each item advances through stages as soon as it can. Stage callbacks receive (prevResult, originalItem, index); for the first stage, prevResult === originalItem. parallel() is a barrier over thunks and returns null for failed thunks.
+Available workflow globals: args, budget, agent(prompt, opts?), pipeline(items, ...stages), parallel(thunks), phase(title), and log(message). agent() spawns one subagent; without opts.schema it returns final text, and with opts.schema it returns the validated structured object. opts.schema must be a plain JSON object schema suitable for Pi tool parameters, such as { type: 'object', properties: ..., required: ... }. Other opts may include label, phase, model, thinkingLevel, isolation: 'worktree', and agentType. pipeline() has no cross-item barrier; each item advances through stages as soon as it can. Stage callbacks receive (prevResult, originalItem, index); for the first stage, prevResult === originalItem. parallel() is a barrier over thunks and returns null for failed thunks.
 
 Default to pipeline() for multi-stage work. Use a parallel() barrier only when a stage genuinely needs all earlier results together, such as deduplication, global merge, zero-count early exit, or cross-item comparison. Filter null results defensively after parallel() or pipeline() stages that may fail. A single parallel() or pipeline() call accepts at most 4096 items.
 
@@ -41,7 +41,7 @@ const WorkflowToolParameters = Type.Object(
       Type.String({
         maxLength: WORKFLOW_SCRIPT_MAX_LENGTH,
         description:
-          'Self-contained workflow script. Must begin with a pure literal `export const meta = { ... }` block. Use `phases: [{ title: "Phase" }]`, not string phases like `["Phase"]`, followed by the script body using agent()/parallel()/pipeline()/phase().',
+          'Self-contained workflow script. Must begin with a pure literal `export const meta = { ... }` block. Use `phases: [{ title: "Phase", detail: "What this phase does", model: "default", agentCount: 3, agents: [{ label: "phase:one" }] }]` when planned context is known, not string phases like `["Phase"]`, followed by the script body using agent()/parallel()/pipeline()/phase().',
       }),
     ),
     scriptPath: Type.Optional(
@@ -113,7 +113,7 @@ export function registerWorkflowTool(
     promptGuidelines: [
       "Use Workflow only after explicit multi-agent opt-in, such as ultracode, a user request to use a workflow, or a skill that instructs workflow orchestration.",
       "When using Workflow, pass exactly one effective source: prefer scriptPath when iterating, otherwise script for a new self-contained workflow, otherwise name for a saved workflow.",
-      'Workflow scripts must begin with a pure literal `export const meta = { ... }` block; `meta.phases` must be objects like `{ title: "Phase" }`, never bare strings, and scripts must use pipeline() rather than parallel() unless a true barrier is needed.',
+      'Workflow scripts must begin with a pure literal `export const meta = { ... }` block; `meta.phases` must be objects like `{ title: "Phase", detail: "...", model: "default", agentCount: 3, agents: [{ label: "phase:one" }] }` when planned context is known, never bare strings, and scripts must use pipeline() rather than parallel() unless a true barrier is needed.',
     ],
     parameters: WorkflowToolParameters,
     async execute(_toolCallId, params, _signal, onUpdate, ctx) {
@@ -187,6 +187,7 @@ function toLaunchOptions(
   pi: ExtensionAPI,
   options: RegisterWorkflowToolOptions,
 ): WorkflowLaunchOptions {
+  const thinkingLevel = currentThinkingLevel(pi);
   return {
     rootDir: workflowRootDirForCwd(ctx.cwd),
     operations: options.operations,
@@ -194,9 +195,11 @@ function toLaunchOptions(
     triggerSource: options.getTriggerSource?.() ?? "manual",
     cwd: ctx.cwd,
     defaultModel: currentModelReference(ctx.model),
+    defaultThinkingLevel: thinkingLevel,
     schedulerRunner: createPiWorkflowAgentRunner({
       cwd: ctx.cwd,
       model: ctx.model,
+      thinkingLevel,
       modelRegistry: ctx.modelRegistry,
     }),
     notifyTerminal: async (notification) => {
@@ -291,7 +294,11 @@ function inlineScriptDetails(
     return [theme.fg("error", `  invalid before launch: ${parsed.error.message}`)];
   }
 
-  const phases = parsed.value.meta.phases?.map((phase) => phase.title).join(" → ");
+  const phases = parsed.value.meta.phases
+    ?.map((phase) =>
+      phase.agentCount === undefined ? phase.title : `${phase.title} (${phase.agentCount})`,
+    )
+    .join(" → ");
   const lines = [
     theme.fg("dim", `  ${parsed.value.meta.name} · ${size}`),
     theme.fg("dim", `  ${parsed.value.meta.description}`),
@@ -328,6 +335,14 @@ function formatWorkflowToolResult(
 function currentSessionId(ctx: ExtensionContext): string | undefined {
   try {
     return ctx.sessionManager?.getSessionId?.();
+  } catch {
+    return undefined;
+  }
+}
+
+function currentThinkingLevel(pi: ExtensionAPI): WorkflowLaunchOptions["defaultThinkingLevel"] {
+  try {
+    return (pi as Partial<Pick<ExtensionAPI, "getThinkingLevel">>).getThinkingLevel?.();
   } catch {
     return undefined;
   }

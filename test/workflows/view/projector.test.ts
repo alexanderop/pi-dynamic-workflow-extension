@@ -57,6 +57,18 @@ describe("buildMonitorView", () => {
     expect(view.header.totalAgents).toBe(3);
   });
 
+  it("should expose the agent thinking level as a compact display label", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      workflowProgress: [agent({ state: "running", thinkingLevel: "high" })],
+    });
+
+    const [row] = buildMonitorView(run, { selectedPhaseIndex: 0 }).selectedPhaseAgents;
+
+    expect(row?.thinkingLevel).toBe("high");
+    expect(row?.thinkingLevelLabel).toBe("thinking high");
+  });
+
   it("should omit model and metric fields when agent data is missing", () => {
     const run = runState({
       phases: [{ title: "Review" }],
@@ -105,6 +117,98 @@ describe("buildMonitorView", () => {
     const view = buildMonitorView(run, { selectedPhaseIndex: 1 });
 
     expect(view.selectedPhaseAgents.map((row) => row.label)).toEqual(["author:a"]);
+  });
+
+  it("should use planned phase agent counts before agent labels exist", () => {
+    const run = runState({
+      phases: [
+        { title: "Discover public sources", agentCount: 6 },
+        { title: "Extract evidence-backed claims", agentCount: 6 },
+      ],
+      workflowProgress: [],
+    });
+
+    const view = buildMonitorView(run, { selectedPhaseIndex: 0 });
+
+    expect(view.header).toMatchObject({ doneAgents: 0, totalAgents: 12 });
+    expect(
+      view.phases.map(({ title, doneAgents, totalAgents }) => ({ title, doneAgents, totalAgents })),
+    ).toEqual([
+      { title: "Discover public sources", doneAgents: 0, totalAgents: 6 },
+      { title: "Extract evidence-backed claims", doneAgents: 0, totalAgents: 6 },
+    ]);
+    expect(view.selectedPhaseAgents).toEqual([]);
+  });
+
+  it("should expose phase metadata and planned agents before queued rows exist", () => {
+    const run = runState({
+      defaultModel: "openai-codex/gpt-5.5",
+      phases: [
+        {
+          title: "Adversarially verify claims",
+          detail: "Check claims against independent evidence",
+          model: "openai-codex/gpt-5.5-high",
+          agentCount: 3,
+          agents: [
+            { label: "verify-official-personal-sites", model: "openai-codex/gpt-5.5" },
+            { label: "verify-professional-work", agentType: "researcher" },
+          ],
+        },
+      ],
+      workflowProgress: [],
+    });
+
+    const [phase] = buildMonitorView(run, { selectedPhaseIndex: 0 }).phases;
+
+    expect(phase).toMatchObject({
+      title: "Adversarially verify claims",
+      detail: "Check claims against independent evidence",
+      modelLabel: "openai-codex/gpt-5.5-high",
+      doneAgents: 0,
+      totalAgents: 3,
+      remainingPlannedAgents: 1,
+      plannedAgents: [
+        { label: "verify-official-personal-sites", modelLabel: "openai-codex/gpt-5.5" },
+        {
+          label: "verify-professional-work",
+          modelLabel: "openai-codex/gpt-5.5-high",
+          agentType: "researcher",
+        },
+      ],
+    });
+  });
+
+  it("should hide planned placeholders once matching real agent rows are queued", () => {
+    const run = runState({
+      phases: [
+        {
+          title: "Verify",
+          agentCount: 2,
+          agents: [{ label: "verify-official" }, { label: "verify-professional" }],
+        },
+      ],
+      workflowProgress: [agent({ index: 0, label: "verify-official", phaseTitle: "Verify" })],
+    });
+
+    const [phase] = buildMonitorView(run, { selectedPhaseIndex: 0 }).phases;
+
+    expect(phase?.plannedAgents.map((row) => row.label)).toEqual(["verify-professional"]);
+    expect(phase?.remainingPlannedAgents).toBe(0);
+  });
+
+  it("should let actual agent rows exceed the planned phase count", () => {
+    const run = runState({
+      phases: [{ title: "Review", agentCount: 1 }],
+      workflowProgress: [
+        agent({ index: 0, label: "review:a", phaseTitle: "Review" }),
+        agent({ index: 1, label: "review:b", phaseTitle: "Review" }),
+      ],
+    });
+
+    const view = buildMonitorView(run, { selectedPhaseIndex: 0 });
+
+    expect(view.header.totalAgents).toBe(2);
+    expect(view.phases[0]).toMatchObject({ doneAgents: 0, totalAgents: 2 });
   });
 
   it("should keep unphased agents visible when declared phases have no matching agents", () => {

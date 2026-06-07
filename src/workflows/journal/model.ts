@@ -53,6 +53,7 @@ export interface WorkflowAgentKeyInput {
   readonly phase?: string;
   readonly agentType: string;
   readonly model: string;
+  readonly thinkingLevel?: string;
   readonly cwd: string;
 }
 

@@ -1,6 +1,6 @@
 import { parse } from "acorn";
 import { err, ok, type Result } from "#src/workflows/result.ts";
-import type { WorkflowMeta, WorkflowPhase } from "./model.ts";
+import type { WorkflowMeta, WorkflowPhase, WorkflowPlannedAgent } from "./model.ts";
 
 export interface ParsedWorkflowScript {
   meta: WorkflowMeta;
@@ -140,7 +140,30 @@ function validatePhases(value: unknown): WorkflowPhase[] {
       validated.detail = requireString(phase.detail, `meta.phases[${index}].detail`);
     if (phase.model !== undefined)
       validated.model = requireString(phase.model, `meta.phases[${index}].model`);
+    if (phase.agentCount !== undefined)
+      validated.agentCount = requireNonNegativeInteger(
+        phase.agentCount,
+        `meta.phases[${index}].agentCount`,
+      );
+    if (phase.agents !== undefined)
+      validated.agents = validatePlannedAgents(phase.agents, `meta.phases[${index}].agents`);
     return validated;
+  });
+}
+
+function validatePlannedAgents(value: unknown, path: string): WorkflowPhase["agents"] {
+  if (!Array.isArray(value)) throw new WorkflowParseError(`Workflow ${path} must be an array.`);
+  return value.map((agent, index) => {
+    if (!isRecord(agent))
+      throw new WorkflowParseError(`Workflow ${path}[${index}] must be an object.`);
+    const planned: WorkflowPlannedAgent = {
+      label: requireNonEmptyString(agent.label, `${path}[${index}].label`),
+    };
+    if (agent.model !== undefined)
+      planned.model = requireString(agent.model, `${path}[${index}].model`);
+    if (agent.agentType !== undefined)
+      planned.agentType = requireString(agent.agentType, `${path}[${index}].agentType`);
+    return planned;
   });
 }
 
@@ -154,6 +177,13 @@ function requireNonEmptyString(value: unknown, path: string): string {
   if (text.length === 0)
     throw new WorkflowParseError(`Workflow ${path} must be a non-empty string.`);
   return text;
+}
+
+function requireNonNegativeInteger(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new WorkflowParseError(`Workflow ${path} must be a non-negative integer.`);
+  }
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

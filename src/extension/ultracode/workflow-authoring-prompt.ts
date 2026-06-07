@@ -19,9 +19,12 @@ State, in 3-5 lines:
 - The script MUST begin with a pure literal \`export const meta = { ... }\` block.
   \`meta\` is a PURE LITERAL - no variables, function calls, spreads, or template
   strings inside it. \`meta.phases\` MUST be an array of objects, for example
-  \`phases: [{ title: "Generate jokes" }, { title: "Select best joke" }]\`.
-  NEVER use string phases like \`phases: ["Generate jokes"]\`; that fails validation
-  with \`Workflow meta.phases[0] must be an object.\` Phase titles in \`meta.phases\`
+  \`phases: [{ title: "Generate jokes", detail: "Draft independent candidates", model: "default", agentCount: 4, agents: [{ label: "joke:animals" }] }, { title: "Select best joke", agentCount: 1 }]\`.
+  Include \`detail\`, \`model\`, \`agentCount\`, and known \`agents: [{ label, model?, agentType? }]\`
+  when the phase fan-out is known up front so \`/workflows\` can show useful planned
+  context before runtime agent labels exist. Omit them for open-ended or
+  result-dependent phases. NEVER use string phases like \`phases: ["Generate jokes"]\`;
+  that fails validation with \`Workflow meta.phases[0] must be an object.\` Phase titles in \`meta.phases\`
   must match \`phase()\` calls exactly.
 - It is JavaScript, NOT TypeScript. No type annotations, interfaces, or generics.
 - FORBIDDEN: \`Date.now()\`, \`Math.random()\`, argless \`new Date()\` - they throw.
@@ -36,7 +39,7 @@ State, in 3-5 lines:
   \`opts.schema\` must be a plain JSON object schema suitable for tool parameters
   (\`{ type: 'object', properties: ..., required: ... }\`); define it as a normal
   JavaScript object in the workflow script.
-  opts: \`{ label, phase, model, isolation: 'worktree', agentType, schema }\`.
+  opts: \`{ label, phase, model, thinkingLevel, isolation: 'worktree', agentType, schema }\`.
   Returns \`null\` if the agent is skipped or a non-schema agent dies -
   \`.filter(Boolean)\` defensively for arrays of nullable results. Schema failures throw.
 - \`pipeline(items, stage1, stage2, ...)\` -> each item flows through all stages

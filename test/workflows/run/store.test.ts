@@ -73,6 +73,36 @@ describe("WorkflowRunStore", () => {
     });
   });
 
+  it("should preserve planned phase metadata when reading a run", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({
+        runId: "wf_planned_counts",
+        phases: [
+          {
+            title: "Discover public sources",
+            detail: "Check official sites",
+            model: "openai-codex/gpt-5.5",
+            agentCount: 6,
+            agents: [{ label: "verify-official", model: "openai-codex/gpt-5.5" }],
+          },
+        ],
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_planned_counts");
+
+    expect(unwrap(result).phases).toEqual([
+      {
+        title: "Discover public sources",
+        detail: "Check official sites",
+        model: "openai-codex/gpt-5.5",
+        agentCount: 6,
+        agents: [{ label: "verify-official", model: "openai-codex/gpt-5.5" }],
+      },
+    ]);
+  });
+
   it("should preserve session ownership metadata when reading a run", async () => {
     await writeRunManifest(
       rootDir,

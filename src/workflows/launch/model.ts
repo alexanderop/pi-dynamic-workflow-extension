@@ -40,6 +40,7 @@ export interface WorkflowLaunchOptions {
   readonly maxTotalAgents?: number;
   readonly budgetTotal?: number | null;
   readonly defaultModel?: WorkflowRuntimeOptions["defaultModel"];
+  readonly defaultThinkingLevel?: WorkflowRuntimeOptions["defaultThinkingLevel"];
   readonly onRuntimeControlReady?: WorkflowRuntimeOptions["onControlReady"];
   readonly notifyTerminal?: WorkflowTerminalNotifier;
   readonly onRunStateChange?: WorkflowRunStateObserver;

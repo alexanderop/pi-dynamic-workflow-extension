@@ -348,7 +348,10 @@ Spec coverage:
 Status: implemented as a first stateful `/workflows` monitor. One run opens an
 overview monitor, multiple runs open a chooser, left-arrow opens structured
 agent detail, enter opens the selected agent prompt reader, escape steps back
-through states, and render tests protect the TUI width contract.
+through states, and render tests protect the TUI width contract. The overview
+also supports optional `meta.phases[]` planning hints (`detail`, `model`,
+`agentCount`, and planned `agents`) so phase context, totals, and known labels can
+be shown before runtime agent rows are queued.
 
 ### Slice 1.5: Active Workflow Footer Statusline
 
@@ -366,16 +369,17 @@ Scope:
 
 Tests:
 
-- Pure projector formats name, done/total agent progress, elapsed time, current
-  phase, active agent, token usage, truncated description, and active-run
-  selection.
+- Pure projector formats a footer-capped cue with name, done/total progress,
+  elapsed time, current phase, active agent, compact token usage, and active-run
+  selection without description text.
 - Launcher observer receives initial, live, and terminal states without affecting
   execution when it throws.
 - Extension controller sets, refreshes, and clears the Pi footer status.
 
 Status: implemented with `formatWorkflowStatusline`, `onRunStateChange`, and a
 session-scoped `dynamic-workflows` footer status controller. ADR 0013 records why
-this slice uses a passive Pi status entry rather than an interactive strip.
+this slice uses a passive, compact Pi status entry rather than an interactive
+strip or descriptive monitor.
 
 ## Epic 2: Pure Workflow Runtime Semantics
 

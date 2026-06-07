@@ -15,7 +15,18 @@ describe("parseWorkflowScript", () => {
           description: "Inspect the project",
           whenToUse: "When orientation is needed",
           model: "opus",
-          phases: [{ title: "Scan", detail: "Read files", model: "fast" }],
+          phases: [
+            {
+              title: "Scan",
+              detail: "Read files",
+              model: "fast",
+              agentCount: 3,
+              agents: [
+                { label: "scan:docs", model: "fast", agentType: "researcher" },
+                { label: "scan:code" },
+              ],
+            },
+          ],
         },
         body: `
 phase("Scan");
@@ -29,7 +40,18 @@ return "done";
       description: "Inspect the project",
       whenToUse: "When orientation is needed",
       model: "opus",
-      phases: [{ title: "Scan", detail: "Read files", model: "fast" }],
+      phases: [
+        {
+          title: "Scan",
+          detail: "Read files",
+          model: "fast",
+          agentCount: 3,
+          agents: [
+            { label: "scan:docs", model: "fast", agentType: "researcher" },
+            { label: "scan:code" },
+          ],
+        },
+      ],
     });
     expect(parsed.body).not.toContain("export const meta");
     expect(parsed.body).toContain('phase("Scan")');
@@ -98,6 +120,46 @@ const name = "dynamic";
     expect(() =>
       parseWorkflowScript(invalidWorkflowScript({ metaSource: "{ name: `templated` }" })),
     ).toThrow(/literal/);
+  });
+
+  it("should reject invalid planned phase agent counts", () => {
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource:
+            '{ name: "invalid-count", description: "Invalid count", phases: [{ title: "Scan", agentCount: "six" }] }',
+        }),
+      ),
+    ).toThrow(/agentCount.*non-negative integer/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource:
+            '{ name: "fractional-count", description: "Fractional count", phases: [{ title: "Scan", agentCount: 1.5 }] }',
+        }),
+      ),
+    ).toThrow(/agentCount.*non-negative integer/);
+  });
+
+  it("should reject invalid planned phase agent rows", () => {
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource:
+            '{ name: "invalid-agent", description: "Invalid agent", phases: [{ title: "Scan", agents: [{ model: "fast" }] }] }',
+        }),
+      ),
+    ).toThrow(/agents\[0\]\.label.*string/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource:
+            '{ name: "invalid-agents", description: "Invalid agents", phases: [{ title: "Scan", agents: "scan" }] }',
+        }),
+      ),
+    ).toThrow(/agents.*array/);
   });
 
   it("should reject nondeterministic workflow primitives when parsing script body", () => {

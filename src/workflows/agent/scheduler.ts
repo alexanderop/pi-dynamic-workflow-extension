@@ -28,6 +28,7 @@ export interface WorkflowAgentSchedulerOptions {
   readonly createAgentId?: () => string;
   readonly defaultAgentType?: string;
   readonly defaultModel?: string;
+  readonly defaultThinkingLevel?: AgentOptions["thinkingLevel"];
   readonly cwd?: string;
   readonly journal?: WorkflowAgentJournal;
   readonly replayCache?: WorkflowAgentReplayCache;
@@ -53,6 +54,7 @@ export class WorkflowAgentScheduler {
   readonly #createAgentId: () => string;
   readonly #defaultAgentType: string;
   readonly #defaultModel: string;
+  readonly #defaultThinkingLevel?: AgentOptions["thinkingLevel"];
   readonly #cwd: string;
   readonly #journal?: WorkflowAgentJournal;
   readonly #replayCache?: WorkflowAgentReplayCache;
@@ -75,6 +77,7 @@ export class WorkflowAgentScheduler {
     this.#createAgentId = options.createAgentId ?? randomAgentId;
     this.#defaultAgentType = options.defaultAgentType ?? "general-purpose";
     this.#defaultModel = options.defaultModel ?? "default";
+    this.#defaultThinkingLevel = options.defaultThinkingLevel;
     this.#cwd = options.cwd ?? process.cwd();
     this.#journal = options.journal;
     this.#replayCache = options.replayCache;
@@ -100,7 +103,11 @@ export class WorkflowAgentScheduler {
     const agentId = this.#createAgentId();
     const agentType = options.agentType ?? this.#defaultAgentType;
     const model = options.model ?? this.#defaultModel;
-    const effectiveOptions: AgentOptions = { ...options, label, agentType, model };
+    const thinkingLevel = options.thinkingLevel ?? this.#defaultThinkingLevel;
+    const effectiveOptions: AgentOptions =
+      thinkingLevel === undefined
+        ? { ...options, label, agentType, model }
+        : { ...options, label, agentType, model, thinkingLevel };
     const journalKey =
       this.#journal === undefined && this.#replayCache === undefined
         ? undefined
@@ -111,6 +118,7 @@ export class WorkflowAgentScheduler {
             phase: effectiveOptions.phase,
             agentType,
             model,
+            thinkingLevel,
             cwd: this.#cwd,
           });
 
@@ -121,6 +129,7 @@ export class WorkflowAgentScheduler {
       agentId,
       agentType,
       model,
+      ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
       state: "queued",
       queuedAt: this.#now(),
       attempt: 1,

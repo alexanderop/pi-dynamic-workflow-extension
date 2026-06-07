@@ -30,6 +30,12 @@ const ansiTheme: WorkflowsComponentTheme = {
         border: 37,
         borderAccent: 35,
         borderMuted: 90,
+        thinkingOff: 90,
+        thinkingMinimal: 36,
+        thinkingLow: 36,
+        thinkingMedium: 34,
+        thinkingHigh: 35,
+        thinkingXhigh: 95,
       }[color] ?? 37;
     return `\u001b[${code}m${text}\u001b[39m`;
   },
@@ -177,6 +183,71 @@ describe("WorkflowsTuiComponent State A overview", () => {
     const screen = make([hardeningRun()]).render(120).join("\n");
 
     expect(screen).toContain("Slice the spec into TDD plans and author a pipeline workflow");
+  });
+
+  it("should call out planned phase agent counts before names are known", () => {
+    const run = runState({
+      workflowName: "profile_research",
+      status: "running",
+      phases: [
+        { title: "Discover public sources", agentCount: 6 },
+        { title: "Extract evidence-backed claims", agentCount: 6 },
+      ],
+      workflowProgress: [],
+    });
+
+    const screen = make([run]).render(120).join("\n");
+
+    expect(screen).toMatch(/0\/12 agents/);
+    expect(screen).toContain("› 1 Discover public sources");
+    expect(screen).toContain("0/6");
+    expect(screen).toContain("Discover public sources · 6 agents");
+    expect(screen).toContain("6 agents expected; names appear after enqueue.");
+  });
+
+  it("should render phase detail, model hints, and planned agent labels before enqueue", () => {
+    const run = runState({
+      workflowName: "profile_research",
+      status: "running",
+      defaultModel: "openai-codex/gpt-5.5",
+      phases: [
+        {
+          title: "Adversarially verify claims",
+          detail: "Check claims against independent evidence",
+          model: "openai-codex/gpt-5.5-high",
+          agentCount: 3,
+          agents: [
+            { label: "verify-official-personal-sites", model: "openai-codex/gpt-5.5" },
+            { label: "verify-professional-work", agentType: "researcher" },
+          ],
+        },
+      ],
+      workflowProgress: [],
+    });
+
+    const screen = make([run]).render(120).join("\n");
+
+    expect(screen).toContain("Check claims against independent evidence");
+    expect(screen).toContain("model openai-codex/gpt-5.5-high");
+    expect(screen).toContain("○ verify-official-personal-sites openai-codex/gpt-5.5");
+    expect(screen).toContain("○ verify-professional-work openai-codex/gpt-5.5-high · researcher");
+    expect(screen).toContain("1 more agents expected; names appear after enqueue.");
+  });
+
+  it("should show the requested thinking level beside the model in overview and detail rows", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      agentCount: 1,
+      workflowProgress: [agent({ state: "running", thinkingLevel: "high" })],
+    });
+    const component = make([run]);
+
+    const overview = component.render(120).join("\n");
+    component.handleInput("\x1b[C");
+    const detail = component.render(120).join("\n");
+
+    expect(overview).toContain("Opus 4.8 (1M context) · thinking high");
+    expect(detail).toContain("Running · Opus 4.8 (1M context) · thinking high");
   });
 
   it("should omit absent model and metric fields in overview agent rows", () => {

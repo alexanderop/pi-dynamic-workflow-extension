@@ -14,6 +14,20 @@ export type WorkflowRunStatus =
   | "stopping"
   | "stopped";
 
+export interface WorkflowRunPlannedAgent {
+  label: string;
+  model?: string;
+  agentType?: string;
+}
+
+export interface WorkflowRunPhase {
+  title: string;
+  detail?: string;
+  model?: string;
+  agentCount?: number;
+  agents?: WorkflowRunPlannedAgent[];
+}
+
 export interface WorkflowRunState {
   runId: string;
   taskId: string;
@@ -23,9 +37,10 @@ export interface WorkflowRunState {
   description?: string;
   status: WorkflowRunStatus;
   defaultModel?: string;
+  defaultThinkingLevel?: WorkflowAgentProgress["thinkingLevel"];
   script: string;
   scriptPath: string;
-  phases: Array<{ title: string }>;
+  phases: WorkflowRunPhase[];
   logs: string[];
   workflowProgress: WorkflowProgressEntry[];
   agentCount: number;

@@ -263,7 +263,8 @@ describe("handleUltracodeBeforeAgentStart", () => {
     expect(result?.systemPrompt).toContain("base prompt");
     expect(result?.systemPrompt).toContain("Token cost is not a constraint");
     expect(result?.systemPrompt).toContain("Task: Launch a Workflow");
-    expect(result?.systemPrompt).toContain('phases: [{ title: "Generate jokes" }');
+    expect(result?.systemPrompt).toContain('phases: [{ title: "Generate jokes", detail:');
+    expect(result?.systemPrompt).toContain('agents: [{ label: "joke:animals" }]');
     expect(result?.systemPrompt).toContain(
       'NEVER use string phases like `phases: ["Generate jokes"]`',
     );

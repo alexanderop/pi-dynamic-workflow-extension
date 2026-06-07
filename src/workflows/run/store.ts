@@ -7,6 +7,8 @@ import type {
   WorkflowFailure,
   WorkflowPhaseProgress,
   WorkflowProgressEntry,
+  WorkflowRunPhase,
+  WorkflowRunPlannedAgent,
   WorkflowRunState,
   WorkflowRunStatus,
 } from "./model.ts";
@@ -195,6 +197,9 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
       description: isString(value.description) ? value.description : undefined,
       status: value.status,
       defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
+      defaultThinkingLevel: isWorkflowThinkingLevel(value.defaultThinkingLevel)
+        ? value.defaultThinkingLevel
+        : undefined,
       script: value.script,
       scriptPath: value.scriptPath,
       phases: normalizePhases(value.phases),
@@ -248,6 +253,9 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
         : undefined,
     status: normalizeObservedStatus(value.status),
     defaultModel: isString(value.defaultModel) ? value.defaultModel : undefined,
+    defaultThinkingLevel: isWorkflowThinkingLevel(value.defaultThinkingLevel)
+      ? value.defaultThinkingLevel
+      : undefined,
     script: value.script,
     scriptPath: value.scriptPath,
     phases,
@@ -277,10 +285,37 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
   };
 }
 
-function normalizePhases(phases: unknown[]): Array<{ title: string }> {
+function normalizePhases(phases: unknown[]): WorkflowRunPhase[] {
   return phases
-    .map((phase) => (isRecord(phase) && isString(phase.title) ? { title: phase.title } : undefined))
-    .filter((phase): phase is { title: string } => phase !== undefined);
+    .map((phase): WorkflowRunPhase | undefined => {
+      if (!isRecord(phase) || !isString(phase.title)) return undefined;
+      return normalizedPhaseFromRecord(phase);
+    })
+    .filter((phase): phase is WorkflowRunPhase => phase !== undefined);
+}
+
+function normalizedPhaseFromRecord(phase: Record<string, unknown>): WorkflowRunPhase {
+  const normalized: WorkflowRunPhase = { title: String(phase.title) };
+  if (isString(phase.detail)) normalized.detail = phase.detail;
+  if (isString(phase.model)) normalized.model = phase.model;
+  if (isNonNegativeInteger(phase.agentCount)) normalized.agentCount = phase.agentCount;
+  const agents = normalizePlannedAgents(phase.agents);
+  if (agents !== undefined) normalized.agents = agents;
+  return normalized;
+}
+
+function normalizePlannedAgents(value: unknown): WorkflowRunPlannedAgent[] | undefined {
+  if (!isArray(value)) return undefined;
+  const agents = value
+    .map((agent): WorkflowRunPlannedAgent | undefined => {
+      if (!isRecord(agent) || !isString(agent.label) || agent.label.length === 0) return undefined;
+      const planned: WorkflowRunPlannedAgent = { label: agent.label };
+      if (isString(agent.model)) planned.model = agent.model;
+      if (isString(agent.agentType)) planned.agentType = agent.agentType;
+      return planned;
+    })
+    .filter((agent): agent is WorkflowRunPlannedAgent => agent !== undefined);
+  return agents.length === 0 ? undefined : agents;
 }
 
 function normalizeProgress(progress: unknown[]): WorkflowProgressEntry[] {
@@ -293,11 +328,15 @@ function normalizeFailures(value: unknown): WorkflowFailure[] | undefined {
   return failures.length === 0 ? undefined : failures;
 }
 
-function normalizeObservedPhases(value: unknown): Array<{ title: string }> {
+function normalizeObservedPhases(value: unknown): WorkflowRunPhase[] {
   if (!isArray(value)) return [];
   return value
-    .map((phase) => (isString(phase) ? { title: phase } : undefined))
-    .filter((phase): phase is { title: string } => phase !== undefined);
+    .map((phase): WorkflowRunPhase | undefined => {
+      if (isString(phase)) return { title: phase };
+      if (!isRecord(phase) || !isString(phase.title)) return undefined;
+      return normalizedPhaseFromRecord(phase);
+    })
+    .filter((phase): phase is WorkflowRunPhase => phase !== undefined);
 }
 
 function normalizeObservedAgents(value: unknown): WorkflowAgentProgress[] {
@@ -315,6 +354,9 @@ function normalizeObservedAgents(value: unknown): WorkflowAgentProgress[] {
         agentId: isString(agent.agentId) ? agent.agentId : `agent_${String(agent.id ?? index)}`,
         agentType: isString(agent.agentType) ? agent.agentType : "unknown",
         model: isString(agent.model) ? agent.model : "unknown",
+        thinkingLevel: isWorkflowThinkingLevel(agent.thinkingLevel)
+          ? agent.thinkingLevel
+          : undefined,
         state: normalizeObservedAgentStatus(agent.status),
         queuedAt: startedAt ?? 0,
         startedAt,
@@ -353,6 +395,19 @@ function normalizeObservedAgentStatus(status: unknown): WorkflowAgentProgress["s
     return status;
   }
   return "failed";
+}
+
+function isWorkflowThinkingLevel(
+  value: unknown,
+): value is NonNullable<WorkflowRunState["defaultThinkingLevel"]> {
+  return (
+    value === "off" ||
+    value === "minimal" ||
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  );
 }
 
 function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
@@ -432,6 +487,10 @@ function isString(value: unknown): value is string {
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return isNumber(value) && Number.isInteger(value) && value >= 0;
 }
 
 function isNodeError(value: unknown): value is NodeJS.ErrnoException {

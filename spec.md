@@ -146,11 +146,31 @@ Requirements:
 - `meta.model` MAY name a default workflow model. The Pi extension parser
   preserves this field and the runtime applies it as the default model for
   `agent()` calls that omit `options.model`.
+- `meta.requiredTools` MAY declare external Pi tools that must be available to
+  workflow subagents before the run starts. Each entry MUST be an object with a
+  non-empty `name` string and MAY include a `purpose` string. This is a Pi
+  extension field, not an observed Claude Code field. The field declares tool
+  names only; it MUST NOT make this package depend on, import, or bundle those
+  tools. Example:
+
+  ```js
+  requiredTools: [
+    { name: "web_search", purpose: "Find source candidates" },
+    { name: "fetch_content", purpose: "Read source pages" },
+  ]
+  ```
+
 - `meta.phases` SHOULD define expected progress phases. Each entry has a `title`;
   titles MUST match the strings passed to `phase()`/`agent({ phase })` exactly.
   An entry MAY carry a `detail` string describing what the phase does (observed in
   real saved workflows) and MAY carry a `model` field documenting a per-phase
   model override (part of the API; not exercised by the reference artifacts).
+  This Pi extension also accepts optional planning hints for phases whose fan-out
+  is known before execution: `agentCount` (a non-negative integer planned total)
+  and `agents` (an array of `{ label, model?, agentType? }` planned rows). These
+  are not observed Claude Code fields. `/workflows` uses them to show phase totals,
+  model hints, details, and known agent labels before runtime agent rows have been
+  queued. Omit them for open-ended or result-dependent phases.
 - A workflow MAY use top-level `await`.
 - The runtime MUST capture the script return value as the run result.
 - A workflow MAY read global `args` for invocation input.
@@ -226,6 +246,7 @@ interface AgentOptions {
   phase?: string;
   agentType?: string;
   model?: string;
+  thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   schema?: JsonSchema;
   isolation?: "worktree";
 }
@@ -327,6 +348,12 @@ Launch rules:
   journal per §14: unchanged `agent()` calls return cached results and only
   edited or new calls execute. Resume is same-session only and the prior run
   MUST be stopped first.
+- The Pi extension launch adapter MUST preflight `meta.requiredTools` before
+  creating or scheduling the run. A required tool is satisfied only when Pi has a
+  tool with that exact name and it is active for the launching session. Missing
+  or disabled required tools MUST reject the launch with an actionable error
+  that lists missing names and explains that the workflow package does not bundle
+  those external capabilities.
 - The launcher MUST reject a script that calls nondeterministic primitives at
   launch. The reference runtime rejected one launch with
   `Workflow scripts must be deterministic: Date.now()/Math.random()/new Date()
@@ -344,6 +371,7 @@ Initial run state MUST include:
 - `status: "running"`
 - `script`
 - `scriptPath`
+- `requiredTools`, when declared by workflow metadata
 - `phases`
 - `logs: []`
 - `workflowProgress: []`
@@ -360,7 +388,16 @@ Each `agent()` call MUST create a fresh sidechain session with:
 - Same project cwd as the workflow run.
 - Selected `agentType`, if provided.
 - Selected model or runtime default model.
+- Selected Pi thinking level / provider reasoning-effort level when available.
 - Normal tool permission policy for background work.
+- If the workflow declares `meta.requiredTools`, those tools MUST be available to
+  every subagent session that may need them. The runner MAY do this by sharing
+  selected external tool definitions from the launching Pi session or by loading
+  the relevant external extensions, but it MUST NOT bundle those tools in this
+  workflow package. If the runner cannot provide the required tools to
+  subagents, the launch MUST fail before spending subagent tokens. Loading
+  external tools for this purpose MUST NOT recursively expose the `Workflow` tool
+  to subagents unless a future nested-workflow design explicitly requires it.
 - Transcript path:
   `subagents/workflows/<runId>/agent-<agentId>.jsonl`
 - Metadata path:
@@ -447,19 +484,27 @@ interface WorkflowRunState {
   runId: string;
   taskId: string;
   sessionId?: string;
-  triggerSource?: "ultracode" | "manual" | "saved" | "unknown";
+  triggerSource?: "ultracode" | "skill" | "manual" | "saved" | "unknown";
   workflowName: string;
   status: WorkflowRunStatus;
   summary?: string;
   script: string;
   scriptPath: string;
-  phases: Array<{ title: string }>;
+  requiredTools?: Array<{ name: string; purpose?: string }>;
+  phases: Array<{
+    title: string;
+    detail?: string;
+    model?: string;
+    agentCount?: number;
+    agents?: Array<{ label: string; model?: string; agentType?: string }>;
+  }>;
   logs: string[];
   startTime: number;
   timestamp?: string;
   durationMs?: number;
   outputPath?: string;
   defaultModel?: string;
+  defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   agentCount: number;
   totalTokens: number;
   totalToolCalls: number;
@@ -494,6 +539,7 @@ interface WorkflowAgentProgress {
   agentId: string;
   agentType: string;
   model: string;
+  thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   state: "queued" | "running" | "done" | "failed" | "stopped";
   queuedAt: number;
   startedAt?: number;
@@ -569,6 +615,7 @@ The stable `key` MUST represent the effective agent call. Include at least:
 - Phase
 - Agent type
 - Model
+- Pi thinking level / provider reasoning effort, when available
 - Project cwd
 - Runtime version or key version
 
@@ -807,12 +854,13 @@ session-scoped view. Saved workflow scripts are not session-scoped.
 
 The Pi extension SHOULD also expose a passive active-workflow status line through
 `ctx.ui.setStatus("dynamic-workflows", text)`. This status line is a compact cue,
-not the full monitor: it selects the newest active run in the current session,
-formats workflow name, done/total agent count, elapsed runtime, current phase,
-current active agent, token usage, and a truncated optional description. Essential
-live fields SHOULD appear before the description so Pi footer truncation preserves
-elapsed time, phase, and agent context. The status line clears itself when no
-active run remains. Because Pi footer statuses are non-interactive, arrow-key
+not the full monitor: it selects the newest active run in the current session and
+caps the rendered text to a short footer-friendly width. It formats workflow
+name, done/total agent count, elapsed runtime, current phase, current active
+agent, and compact token usage without verbose labels such as `agents`, `phase`,
+`agent`, or `tokens`. It SHOULD omit the workflow description entirely; the
+`/workflows` monitor owns descriptive context. The status line clears itself when
+no active run remains. Because Pi footer statuses are non-interactive, arrow-key
 selection and `Enter` handling belong to a future below-editor widget or the
 `/workflows` TUI rather than this passive status entry.
 
@@ -848,6 +896,63 @@ not the primary Pi behavior.
 Terminal workflow notifications for ultracode-launched runs SHOULD use
 `pi.sendMessage(..., { triggerTurn: true })`, not `pi.sendUserMessage(...)`, so
 the main agent is re-invoked with the result without creating a new user message.
+
+### 19.1 Pi Skill-Packaged Workflow Policy
+
+This section is a Pi integration decision for making reusable workflows available
+through normal Pi skills. It is not an observed Claude Code contract.
+
+A Pi skill MAY act as a lightweight front door for one or more workflow scripts
+bundled next to `SKILL.md`. In this pattern the skill owns the user-facing
+routing policy and the workflow script owns the multi-agent orchestration.
+
+Recommended package shape:
+
+```text
+skills/deep-research/
+  SKILL.md
+  workflows/
+    deep-research.js
+```
+
+The skill SHOULD invoke the model-facing `Workflow` tool with `scriptPath` and
+`args`, not paste the workflow source into assistant text and not copy the script
+into `.pi/workflows` as a saved workflow unless the user explicitly asks to save
+it. The skill resolves the bundled workflow script to an absolute path and calls:
+
+```js
+Workflow({
+  scriptPath: "/absolute/path/to/skills/deep-research/workflows/deep-research.js",
+  args: refinedResearchQuestion,
+})
+```
+
+This makes skills a reusable distribution mechanism for workflows while keeping
+saved workflows (§15) as a separate user/project command mechanism.
+
+Skill front doors SHOULD perform task gating before launching expensive
+multi-agent work. For a `deep-research` skill, the expected gate is:
+
+- simple factual, definitional, or one-step questions: answer directly and do
+  not launch `Workflow`;
+- unclear or underspecified research requests: ask 2-3 clarifying questions and
+  do not launch yet;
+- substantive research requests needing multiple sources, citations,
+  comparisons, or adversarial claim verification: launch the bundled workflow
+  with the refined question in `args`.
+
+Invoking `Workflow` from a skill is explicit multi-agent opt-in. The Workflow
+permission gate therefore SHOULD allow a launch when the active skill
+instructions explicitly call for `Workflow({ scriptPath, args })`, even if
+`ultracode` mode is not active. Runs launched this way SHOULD use
+`triggerSource: "skill"` when that provenance is available.
+
+Skill-packaged workflows may depend on external tools, but those tools MUST
+remain external to this project. For example, `deep-research` may require
+`web_search` and `fetch_content` supplied by a separate Pi web package. The
+workflow declares those requirements through `meta.requiredTools`; the extension
+preflights them and fails fast with install/enable guidance instead of silently
+running a web research workflow without web tools.
 
 ## 20. Security Requirements
 
@@ -900,6 +1005,12 @@ An implementation is complete when these scenarios pass:
    caps and budget, and throws when nested more than one level deep.
 23. `Date.now()`, `Math.random()`, and argument-less `new Date()` throw inside a
    workflow script.
+24. `meta.requiredTools` rejects launch before run creation when required
+   external tools are missing or inactive, and the error explains that the
+   workflow package does not bundle those tools.
+25. A Pi skill can package a workflow script and launch it by passing
+   `scriptPath` plus `args` to `Workflow`; this skill-driven launch is treated as
+   explicit multi-agent opt-in without requiring `ultracode`.
 
 ## 22. Observed Reference Run
 
@@ -1329,6 +1440,12 @@ Overview behavior:
 - Left pane lists workflow phases.
 - Right pane lists agents for the selected phase.
 - The selected phase row owns the `›` cursor.
+- If a phase declares planning hints, the phase row and selected phase pane title
+  use those hints before any `workflow_agent` rows exist, so the UI can say `0/6`,
+  `Phase · 6 agents`, show the phase `detail`, show the planned/default `model`,
+  and list known planned agent labels. Once matching actual queued agent rows
+  appear, real rows replace planned placeholders; when actual queued rows exceed
+  the planned count, the actual count wins.
 - Agent rows show, in order:
   1. status glyph,
   2. agent label,
@@ -1543,7 +1660,8 @@ current exploratory `/workflows` component. In particular:
 - The monitor header must include the workflow description. If no description is
   available, omit the description line rather than showing a placeholder.
 - The right-aligned summary must count terminal-success agents as done and use
-  the number of visible workflow-agent rows as the denominator.
+  the larger of visible workflow-agent rows, declared planned phase counts, and
+  declared planned agent rows as the denominator.
 - Agent rows should use available manifest/read-model data only. Omit missing
   model, token, tool-call, or idle fields instead of rendering `unknown`,
   `default`, `0`, or `No metrics yet` placeholders.

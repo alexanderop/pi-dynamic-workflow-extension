@@ -200,6 +200,49 @@ return { result };
     scenario.agents.expectNoUnhandledAgents();
   });
 
+  it("should persist planned phase metadata from workflow metadata", async () => {
+    const scan = agent.pending({ prompt: "scan src", label: "scan-agent", phase: "Scan" });
+    const agents = setupAgentMock(scan);
+    const script = workflowScript({
+      meta: {
+        name: "planned-counts",
+        description: "Plan phase totals",
+        phases: [
+          {
+            title: "Scan",
+            detail: "Read project files",
+            model: "fast-model",
+            agentCount: 3,
+            agents: [{ label: "scan-agent", model: "fast-model", agentType: "reader" }],
+          },
+        ],
+      },
+      body: `
+return await agent("scan src", { label: "scan-agent", phase: "Scan" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow({ script }, launchOptions({ schedulerRunner: agents.schedulerRunner })),
+    );
+    await scan.waitUntilStarted();
+
+    const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun(launch.runId));
+    expect(manifest.phases).toEqual([
+      {
+        title: "Scan",
+        detail: "Read project files",
+        model: "fast-model",
+        agentCount: 3,
+        agents: [{ label: "scan-agent", model: "fast-model", agentType: "reader" }],
+      },
+    ]);
+
+    scan.resolve(AgentResponse.text("ok"));
+    unwrap(await launch.completion);
+    agents.expectNoUnhandledAgents();
+  });
+
   it("should persist meta.model as the run default model and apply it to agents", async () => {
     const agents = setupAgentMock(
       agent.call({ label: "scan-agent", model: "opus" }, () => AgentResponse.text("model result")),
@@ -228,6 +271,41 @@ return await agent("scan src", { label: "scan-agent" });
     });
     const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
     expect(manifest.defaultModel).toBe("opus");
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should persist the default thinking level and apply it to agents", async () => {
+    const agents = setupAgentMock(
+      agent.call({ label: "scan-agent", thinkingLevel: "high" }, () =>
+        AgentResponse.text("thinking result"),
+      ),
+    );
+    const script = workflowScript({
+      meta: {
+        name: "thinking-default",
+        description: "Apply current Pi thinking level",
+      },
+      body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({ schedulerRunner: agents.schedulerRunner, defaultThinkingLevel: "high" }),
+      ),
+    );
+    now = 150;
+    const completed = unwrap(await launch.completion);
+
+    expect(completed).toMatchObject({
+      status: "completed",
+      defaultThinkingLevel: "high",
+      workflowProgress: [{ type: "workflow_agent", label: "scan-agent", thinkingLevel: "high" }],
+    });
+    const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+    expect(manifest.defaultThinkingLevel).toBe("high");
     agents.expectNoUnhandledAgents();
   });
 

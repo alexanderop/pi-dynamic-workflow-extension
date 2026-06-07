@@ -28,6 +28,7 @@ export interface AgentCallMatcher {
   readonly phase?: AgentValueMatcher<string>;
   readonly agentType?: AgentValueMatcher<string>;
   readonly model?: AgentValueMatcher<string>;
+  readonly thinkingLevel?: AgentValueMatcher<NonNullable<AgentOptions["thinkingLevel"]>>;
   readonly schema?: AgentValueMatcher<unknown>;
 }
 
@@ -753,6 +754,7 @@ function matchesCall(matcher: AgentCallMatcher, prompt: string, options: AgentOp
     matchesValue(matcher.phase, options.phase) &&
     matchesValue(matcher.agentType, options.agentType) &&
     matchesValue(matcher.model, options.model) &&
+    matchesValue(matcher.thinkingLevel, options.thinkingLevel) &&
     matchesValue(matcher.schema, options.schema)
   );
 }
@@ -960,9 +962,13 @@ function formatCall(call: AgentMockCall): string {
       : ` agentType=${JSON.stringify(call.options.agentType)}`;
   const model =
     call.options.model === undefined ? "" : ` model=${JSON.stringify(call.options.model)}`;
+  const thinkingLevel =
+    call.options.thinkingLevel === undefined
+      ? ""
+      : ` thinkingLevel=${JSON.stringify(call.options.thinkingLevel)}`;
   const schema =
     call.options.schema === undefined ? "" : ` schema=${formatValue(call.options.schema)}`;
-  return `agent(${JSON.stringify(call.prompt)}${label}${phase}${agentType}${model}${schema})`;
+  return `agent(${JSON.stringify(call.prompt)}${label}${phase}${agentType}${model}${thinkingLevel}${schema})`;
 }
 
 function formatValue(value: unknown): string {

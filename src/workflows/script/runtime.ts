@@ -42,6 +42,7 @@ async function executeWorkflowScript(
     maxConcurrent: options.maxConcurrentAgents,
     maxTotalAgents: options.maxTotalAgents,
     defaultModel: parsed.meta.model ?? options.defaultModel,
+    defaultThinkingLevel: options.defaultThinkingLevel,
     cwd: options.cwd,
     journal: options.journal,
     replayCache: options.replayCache,

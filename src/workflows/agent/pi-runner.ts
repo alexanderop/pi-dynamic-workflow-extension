@@ -38,6 +38,7 @@ export type PiWorkflowAgentSessionFactory = (
 export interface PiWorkflowAgentRunnerOptions {
   readonly cwd: string;
   readonly model?: CreateAgentSessionOptions["model"];
+  readonly thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   readonly modelRegistry?: CreateAgentSessionOptions["modelRegistry"];
   readonly sessionFactory?: PiWorkflowAgentSessionFactory;
 }
@@ -68,6 +69,7 @@ async function runPiWorkflowAgent(
   const { session } = await (options.sessionFactory ?? defaultSessionFactory)({
     cwd: options.cwd,
     model: resolveRequestedModel(request.options.model, options.model, options.modelRegistry),
+    thinkingLevel: request.options.thinkingLevel ?? options.thinkingLevel,
     modelRegistry: options.modelRegistry,
     sessionManager: SessionManager.inMemory(options.cwd),
     customTools: structuredOutputTool === undefined ? undefined : [structuredOutputTool],

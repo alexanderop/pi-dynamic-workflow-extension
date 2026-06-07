@@ -108,9 +108,16 @@ export async function launchWorkflow(
     description: parsed.value.meta.description ?? request.description,
     status: "running",
     defaultModel: parsed.value.meta.model ?? options.defaultModel,
+    defaultThinkingLevel: options.defaultThinkingLevel,
     script: source.value.script,
     scriptPath,
-    phases: (parsed.value.meta.phases ?? []).map((phase) => ({ title: phase.title })),
+    phases: (parsed.value.meta.phases ?? []).map((phase) => ({
+      title: phase.title,
+      ...(phase.detail === undefined ? {} : { detail: phase.detail }),
+      ...(phase.model === undefined ? {} : { model: phase.model }),
+      ...(phase.agentCount === undefined ? {} : { agentCount: phase.agentCount }),
+      ...(phase.agents === undefined ? {} : { agents: phase.agents }),
+    })),
     logs: [],
     workflowProgress: [],
     agentCount: 0,
@@ -149,6 +156,7 @@ export async function launchWorkflow(
       maxTotalAgents: options.maxTotalAgents,
       budgetTotal: options.budgetTotal,
       defaultModel: options.defaultModel,
+      defaultThinkingLevel: options.defaultThinkingLevel,
       onControlReady: (control) => {
         unregisterRuntimeControl = registerWorkflowRunControl(runId, control);
         options.onRuntimeControlReady?.(control);

@@ -6,7 +6,12 @@ import {
   type Component,
 } from "@earendil-works/pi-tui";
 import type { WorkflowRunState, WorkflowRunStatus } from "#src/workflows/run/model.ts";
-import type { MonitorAgentRow, MonitorViewModel } from "#src/workflows/view/model.ts";
+import type {
+  MonitorAgentRow,
+  MonitorPhaseRow,
+  MonitorPlannedAgentRow,
+  MonitorViewModel,
+} from "#src/workflows/view/model.ts";
 import {
   formatIdle,
   formatTokens,
@@ -47,7 +52,13 @@ export interface WorkflowsComponentTheme {
       | "warning"
       | "border"
       | "borderAccent"
-      | "borderMuted",
+      | "borderMuted"
+      | "thinkingOff"
+      | "thinkingMinimal"
+      | "thinkingLow"
+      | "thinkingMedium"
+      | "thinkingHigh"
+      | "thinkingXhigh",
     text: string,
   ): string;
   bold(text: string): string;
@@ -231,13 +242,40 @@ export class WorkflowsTuiComponent implements Component {
       );
       return `${cursor}${marker} ${title}  ${progress}`;
     });
-    const selectedPhaseTitle = view.phases[this.#nav.selectedPhaseIndex]?.title ?? "";
-    const rightTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${view.selectedPhaseAgents.length} agents`)}`;
+    const selectedPhase = view.phases[this.#nav.selectedPhaseIndex];
+    const selectedPhaseTitle = selectedPhase?.title ?? "";
+    const rightTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${selectedPhase?.totalAgents ?? view.selectedPhaseAgents.length} agents`)}`;
     const leftWidth = clampLeftWidth(phaseRows, width);
     const { rightWidth } = paneInnerWidths(width, leftWidth);
     const agentRows = view.selectedPhaseAgents.map((agent) =>
       this.#overviewAgentRow(agent, rightWidth),
     );
+    const plannedRows =
+      selectedPhase?.plannedAgents.map((agent) => this.#plannedAgentRow(agent)) ?? [];
+    if ((selectedPhase?.remainingPlannedAgents ?? 0) > 0) {
+      const remaining = selectedPhase?.remainingPlannedAgents ?? 0;
+      const message =
+        agentRows.length > 0 || plannedRows.length > 0
+          ? `${remaining} more agents expected; names appear after enqueue.`
+          : `${remaining} agents expected; names appear after enqueue.`;
+      plannedRows.push(this.#theme.fg("dim", message));
+    } else if (
+      agentRows.length === 0 &&
+      (selectedPhase?.totalAgents ?? 0) > 0 &&
+      plannedRows.length === 0
+    ) {
+      plannedRows.push(
+        this.#theme.fg(
+          "dim",
+          `${selectedPhase?.totalAgents ?? 0} agents expected; names appear after enqueue.`,
+        ),
+      );
+    }
+    const rightLines = [
+      ...this.#phaseMetadataRows(selectedPhase),
+      ...(agentRows.length > 0 && plannedRows.length > 0 ? [...agentRows, ""] : agentRows),
+      ...plannedRows,
+    ];
 
     return [
       ...header,
@@ -245,7 +283,7 @@ export class WorkflowsTuiComponent implements Component {
         leftTitle: this.#theme.fg("accent", "Phases"),
         rightTitle,
         leftLines: phaseRows,
-        rightLines: agentRows,
+        rightLines,
         leftWidth,
         width,
         styleBorder: (text) => this.#theme.fg("borderMuted", text),
@@ -261,8 +299,9 @@ export class WorkflowsTuiComponent implements Component {
     const agents = view.selectedPhaseAgents;
     const selected = agents[this.#nav.selectedAgentIndex];
 
-    const selectedPhaseTitle = view.phases[this.#nav.selectedPhaseIndex]?.title ?? "";
-    const leftTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${agents.length} agents`)}`;
+    const selectedPhase = view.phases[this.#nav.selectedPhaseIndex];
+    const selectedPhaseTitle = selectedPhase?.title ?? "";
+    const leftTitle = `${this.#theme.fg("accent", selectedPhaseTitle)} · ${this.#theme.fg("muted", `${selectedPhase?.totalAgents ?? agents.length} agents`)}`;
     const agentRows = agents.map((agent, index) => {
       const cursor = index === this.#nav.selectedAgentIndex ? this.#theme.fg("accent", "› ") : "  ";
       return `${cursor}${this.#agentGlyph(agent)} ${agent.label}`;
@@ -286,7 +325,11 @@ export class WorkflowsTuiComponent implements Component {
   }
 
   #detailSections(agent: MonitorAgentRow): string[] {
-    const status = `${this.#agentGlyph(agent)} ${this.#stateLabel(agent)}${agent.modelLabel ? ` · ${this.#theme.fg("muted", agent.modelLabel)}` : ""}`;
+    const statusParts = [`${this.#agentGlyph(agent)} ${this.#stateLabel(agent)}`];
+    if (agent.modelLabel !== undefined) statusParts.push(this.#theme.fg("muted", agent.modelLabel));
+    const thinkingLabel = this.#thinkingLabel(agent);
+    if (thinkingLabel !== undefined) statusParts.push(thinkingLabel);
+    const status = statusParts.join(" · ");
     const metricsParts: string[] = [];
     if (agent.tokens !== undefined) metricsParts.push(`${formatTokens(agent.tokens)} tok`);
     if (agent.toolCalls !== undefined) metricsParts.push(`${agent.toolCalls} tool calls`);
@@ -397,11 +440,35 @@ export class WorkflowsTuiComponent implements Component {
     return lines;
   }
 
+  #phaseMetadataRows(phase: MonitorPhaseRow | undefined): string[] {
+    if (phase === undefined) return [];
+    const rows: string[] = [];
+    if (phase.detail !== undefined && phase.detail.length > 0) {
+      rows.push(this.#theme.fg("muted", phase.detail));
+    }
+    if (phase.modelLabel !== undefined && phase.modelLabel.length > 0) {
+      rows.push(this.#theme.fg("dim", `model ${phase.modelLabel}`));
+    }
+    if (rows.length > 0) rows.push("");
+    return rows;
+  }
+
+  #plannedAgentRow(agent: MonitorPlannedAgentRow): string {
+    const details = [agent.modelLabel, agent.agentType]
+      .filter((part): part is string => part !== undefined && part.length > 0)
+      .join(" · ");
+    const suffix = details.length === 0 ? "" : ` ${this.#theme.fg("dim", details)}`;
+    return `${this.#theme.fg("dim", "○")} ${this.#theme.fg("muted", agent.label)}${suffix}`;
+  }
+
   #overviewAgentRow(agent: MonitorAgentRow, innerWidth: number): string {
-    const model =
-      agent.modelLabel === undefined ? "" : ` ${this.#theme.fg("muted", agent.modelLabel)}`;
+    const detailParts: string[] = [];
+    if (agent.modelLabel !== undefined) detailParts.push(this.#theme.fg("muted", agent.modelLabel));
+    const thinkingLabel = this.#thinkingLabel(agent);
+    if (thinkingLabel !== undefined) detailParts.push(thinkingLabel);
+    const details = detailParts.length === 0 ? "" : ` ${detailParts.join(" · ")}`;
     const label = agent.state === "done" ? this.#theme.fg("muted", agent.label) : agent.label;
-    const left = `${this.#agentGlyph(agent)} ${label}${model}`;
+    const left = `${this.#agentGlyph(agent)} ${label}${details}`;
     const metricParts: string[] = [];
     if (agent.tokens !== undefined) metricParts.push(`${formatTokens(agent.tokens)} tok`);
     if (agent.toolCalls !== undefined) metricParts.push(`${agent.toolCalls} tools`);
@@ -425,6 +492,11 @@ export class WorkflowsTuiComponent implements Component {
 
   #runGlyph(row: { readonly glyph: string; readonly status: WorkflowRunStatus }): string {
     return this.#theme.fg(runColor(row.status), row.glyph);
+  }
+
+  #thinkingLabel(agent: MonitorAgentRow): string | undefined {
+    if (agent.thinkingLevelLabel === undefined) return undefined;
+    return this.#theme.fg(thinkingColor(agent.thinkingLevel), agent.thinkingLevelLabel);
   }
 
   #footerText(): string {
@@ -629,6 +701,16 @@ function agentColor(state: AgentState): ThemeColor {
   if (state === "stopped") return "warning";
   if (state === "running") return "accent";
   return "dim";
+}
+
+function thinkingColor(thinkingLevel: MonitorAgentRow["thinkingLevel"]): ThemeColor {
+  if (thinkingLevel === "off") return "thinkingOff";
+  if (thinkingLevel === "minimal") return "thinkingMinimal";
+  if (thinkingLevel === "low") return "thinkingLow";
+  if (thinkingLevel === "medium") return "thinkingMedium";
+  if (thinkingLevel === "high") return "thinkingHigh";
+  if (thinkingLevel === "xhigh") return "thinkingXhigh";
+  return "muted";
 }
 
 function runColor(status: WorkflowRunStatus): ThemeColor {

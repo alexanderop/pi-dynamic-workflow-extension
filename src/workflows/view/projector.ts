@@ -1,7 +1,16 @@
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
-import type { WorkflowRunState, WorkflowRunStatus } from "#src/workflows/run/model.ts";
+import type {
+  WorkflowRunPhase,
+  WorkflowRunState,
+  WorkflowRunStatus,
+} from "#src/workflows/run/model.ts";
 import { formatDuration } from "./layout.ts";
-import type { ChooserViewModel, MonitorAgentRow, MonitorViewModel } from "./model.ts";
+import type {
+  ChooserViewModel,
+  MonitorAgentRow,
+  MonitorPlannedAgentRow,
+  MonitorViewModel,
+} from "./model.ts";
 
 export interface BuildMonitorViewOptions {
   readonly selectedPhaseIndex: number;
@@ -14,13 +23,25 @@ export function buildMonitorView(
 ): MonitorViewModel {
   const now = options.now ?? Date.now();
   const agents = run.workflowProgress.filter(isWorkflowAgentProgress);
-  const titles = uniquePhaseTitles(run, agents);
-  const phases = titles.map((title) => {
-    const phaseAgents = agentsForPhase(agents, title);
+  const phaseMetadata = uniquePhaseMetadata(run, agents);
+  const phases = phaseMetadata.map((phase) => {
+    const phaseAgents = agentsForPhase(agents, phase.title);
+    const plannedAgents = plannedAgentsForPhase(phase, phaseAgents, run.defaultModel);
     return {
-      title,
-      totalAgents: phaseAgents.length,
+      title: phase.title,
+      detail: phase.detail,
+      modelLabel: phase.model ?? run.defaultModel,
+      totalAgents: Math.max(
+        phaseAgents.length + plannedAgents.length,
+        phase.agentCount ?? 0,
+        phase.agents?.length ?? 0,
+      ),
       doneAgents: phaseAgents.filter((agent) => agent.state === "done").length,
+      plannedAgents,
+      remainingPlannedAgents: Math.max(
+        0,
+        (phase.agentCount ?? phase.agents?.length ?? 0) - phaseAgents.length - plannedAgents.length,
+      ),
     };
   });
 
@@ -35,7 +56,7 @@ export function buildMonitorView(
       workflowName: run.workflowName,
       description: run.description,
       doneAgents: agents.filter((agent) => agent.state === "done").length,
-      totalAgents: agents.length,
+      totalAgents: Math.max(agents.length, plannedAgentCount(run)),
       elapsedLabel: liveDurationLabel(run, now),
     },
     phases,
@@ -60,6 +81,8 @@ function toAgentRow(agent: WorkflowAgentProgress, now: number): MonitorAgentRow 
     agentId: agent.agentId,
     state: agent.state,
     modelLabel: hasModel ? agent.model : undefined,
+    thinkingLevelLabel: formatThinkingLevelLabel(agent.thinkingLevel),
+    thinkingLevel: agent.thinkingLevel,
     tokens: agent.tokens !== undefined && agent.tokens > 0 ? agent.tokens : undefined,
     toolCalls: agent.toolCalls !== undefined && agent.toolCalls > 0 ? agent.toolCalls : undefined,
     idleMs,
@@ -95,6 +118,13 @@ export function buildChooserView(
       status: run.status,
     })),
   };
+}
+
+function formatThinkingLevelLabel(
+  thinkingLevel: WorkflowAgentProgress["thinkingLevel"],
+): string | undefined {
+  if (thinkingLevel === undefined) return undefined;
+  return `thinking ${thinkingLevel}`;
 }
 
 export function isActiveRun(status: WorkflowRunStatus): boolean {
@@ -143,16 +173,57 @@ function chooserGlyph(status: WorkflowRunStatus): string {
   return "●";
 }
 
-function uniquePhaseTitles(run: WorkflowRunState, agents: WorkflowAgentProgress[]): string[] {
-  const titles = new Set<string>();
-  for (const phase of run.phases) titles.add(phase.title);
+function uniquePhaseMetadata(
+  run: WorkflowRunState,
+  agents: WorkflowAgentProgress[],
+): WorkflowRunPhase[] {
+  const phases = new Map<string, WorkflowRunPhase>();
+  for (const phase of run.phases) addPhase(phases, phase);
   for (const progress of run.workflowProgress) {
-    if (progress.type === "workflow_phase") titles.add(progress.title);
+    if (progress.type === "workflow_phase") addPhase(phases, { title: progress.title });
   }
   for (const agent of agents) {
-    if (agent.phaseTitle !== undefined) titles.add(agent.phaseTitle);
+    if (agent.phaseTitle !== undefined) addPhase(phases, { title: agent.phaseTitle });
   }
-  return Array.from(titles);
+  return Array.from(phases.values());
+}
+
+function addPhase(phases: Map<string, WorkflowRunPhase>, phase: WorkflowRunPhase): void {
+  const current = phases.get(phase.title);
+  if (current === undefined) {
+    phases.set(phase.title, phase);
+    return;
+  }
+  phases.set(phase.title, {
+    ...phase,
+    ...current,
+    detail: current.detail ?? phase.detail,
+    model: current.model ?? phase.model,
+    agentCount: current.agentCount ?? phase.agentCount,
+    agents: current.agents ?? phase.agents,
+  });
+}
+
+function plannedAgentsForPhase(
+  phase: WorkflowRunPhase,
+  actualAgents: WorkflowAgentProgress[],
+  defaultModel: string | undefined,
+): MonitorPlannedAgentRow[] {
+  const actualLabels = new Set(actualAgents.map((agent) => agent.label));
+  return (phase.agents ?? [])
+    .filter((agent) => !actualLabels.has(agent.label))
+    .map((agent) => ({
+      label: agent.label,
+      modelLabel: agent.model ?? phase.model ?? defaultModel,
+      agentType: agent.agentType,
+    }));
+}
+
+function plannedAgentCount(run: WorkflowRunState): number {
+  return run.phases.reduce(
+    (sum, phase) => sum + Math.max(phase.agentCount ?? 0, phase.agents?.length ?? 0),
+    0,
+  );
 }
 
 function agentsForPhase(agents: WorkflowAgentProgress[], title: string): WorkflowAgentProgress[] {

@@ -1,8 +1,11 @@
+export type WorkflowThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export interface AgentOptions {
   label?: string;
   phase?: string;
   agentType?: string;
   model?: string;
+  thinkingLevel?: WorkflowThinkingLevel;
   schema?: unknown;
   isolation?: "worktree";
 }
@@ -14,6 +17,7 @@ export interface WorkflowAgentProgress {
   agentId: string;
   agentType: string;
   model: string;
+  thinkingLevel?: WorkflowThinkingLevel;
   state: "queued" | "running" | "done" | "failed" | "stopped";
   queuedAt: number;
   attempt: number;
