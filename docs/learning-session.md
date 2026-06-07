@@ -23,7 +23,7 @@ A running checklist of what to understand. We go in order, confirming mastery (h
 - [x] Script runtime: VM sandbox (only injected globals), the hooks (`phase/log/agent/parallel/pipeline`, null-on-failure fan-out), determinism guards (runtime layer), default runner = echo, 1s sync timeout nuance
 - [x] Scheduler: bounded worker-pool drain loop, cache-hit short-circuit, pause stops new starts (not in-flight → explains 'pausing'), abort via AbortSignal
 - [ ] Launch flow: background execution, resume-from-runId
-- [ ] Saved workflows: project vs personal scope, resolve & save
+- [ ] Saved workflows: project-local scope, resolve & save
 - [ ] View layer (pure projection/navigation) vs TUI rendering — separation of concerns
 - [ ] The monitor states: chooser / overview / agentDetail / promptReader
 - [ ] Key edge cases (width safety, prompt truncation vs full prompt, omit-missing-fields)

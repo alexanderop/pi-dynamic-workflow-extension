@@ -87,16 +87,16 @@ Remaining gaps: controller-driven resume of an existing paused/stopped run is st
 ### Saved workflow discovery
 
 Implemented for fake-agent launches. Name lookup uses Pi-namespaced paths with
-Claude-like plain `.js` files:
+Claude-like plain `.js` files and only checks the project/workspace-local workflow
+root:
 
 ```text
 <project>/.pi/workflows/*.js
-~/.pi/workflows/*.js
 ```
 
-Project workflows win over personal workflows. The resolver checks `<name>.js`
-first, then scans other `.js` files by exported `meta.name` to support observed
-Claude artifacts where the filename and `meta.name` differ.
+The resolver checks `<name>.js` first, then scans other `.js` files by exported
+`meta.name` to support observed Claude artifacts where the filename and
+`meta.name` differ.
 
 ### Launch by script path (and by name)
 

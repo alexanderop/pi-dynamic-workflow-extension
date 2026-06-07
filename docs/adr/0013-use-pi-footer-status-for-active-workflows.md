@@ -1,8 +1,6 @@
 # ADR 0013: Use Pi Footer Status For Active Workflow Runs
 
-## Status
-
-Accepted
+Status: accepted
 
 ## Context
 

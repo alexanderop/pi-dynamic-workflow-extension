@@ -166,7 +166,9 @@ This is why workflow scripts must be deterministic.
 
 ## Saved workflow
 
-A saved workflow is reusable orchestration JavaScript.
+A saved workflow is reusable orchestration JavaScript. It behaves like a
+project-local prompt/command template that can be retriggered by name with new
+arguments.
 
 It should contain:
 
@@ -180,11 +182,11 @@ It should not contain:
 - transcripts
 - final results
 
-Saved workflow paths use the Pi namespace with Claude-like plain `.js` files:
+Saved workflow paths use the Pi namespace with Claude-like plain `.js` files,
+and are project/workspace-local only:
 
 ```text
 <project>/.pi/workflows/*.js
-~/.pi/workflows/*.js
 ```
 
 ## `/workflows`

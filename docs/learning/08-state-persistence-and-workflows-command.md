@@ -47,8 +47,7 @@ Additional paths from the storage layout in [`spec.md` §18](../../spec.md):
 ```text
 .pi/workflows/<runId>/journal.jsonl    # resume/cache journal
 .pi/workflows/<runId>/output.json      # full terminal result
-<project>/.pi/workflows/*.js           # project saved workflows
-~/.pi/workflows/*.js                   # personal saved workflows
+<project>/.pi/workflows/*.js           # project/workspace-local saved workflows
 ```
 
 ## Manifest as read model

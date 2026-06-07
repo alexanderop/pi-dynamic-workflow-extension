@@ -1,8 +1,6 @@
 # ADR 0014: Use Terminating Pi Tool For Structured Output
 
-## Status
-
-Accepted
+Status: accepted
 
 ## Context
 

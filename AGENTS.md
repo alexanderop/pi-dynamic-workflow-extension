@@ -45,6 +45,13 @@ For code changes, prefer `pnpm run verify` before reporting completion unless th
 
 The Oxfmt scripts intentionally do not target the whole repository. Do not format `spec.md`, ADRs, or exploratory docs unless the task is specifically about formatting those documents.
 
+## Git
+
+- Commit message format: `{feat,fix,docs}[(scope)]: <message>`. Scope is the domain module touched (`workflows`, `ultracode`, `extension`, `tui`). Keep the message concise and imperative.
+- Stage explicit paths (`git add <path>`); do not `git add -A` / `git add .`.
+- No emojis in commits, PRs, or code. Technical prose only.
+- Do not commit unless asked.
+
 ## Docs index
 
 Use these like wiki links when orienting:

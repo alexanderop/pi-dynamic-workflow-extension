@@ -793,13 +793,13 @@ User value: users can run named reusable workflows.
 Scope:
 
 - Decide Pi-native saved workflow locations and document mapping from `.claude/workflows`.
-- Resolve project before personal on name conflict.
+- Resolve saved workflow names from the project/workspace-local `.pi/workflows` root only.
 - Load saved workflow source by name.
 
 Tests:
 
-- Project workflow wins conflict.
-- Personal workflow is used when no project workflow exists.
+- Project workflow is resolved by command name.
+- Cross-project/user-home workflow directories are not consulted.
 - Missing workflow gives clear error.
 
 Dependencies:
@@ -813,16 +813,15 @@ Spec coverage:
 - §21 acceptance criterion 2.
 
 Status: implemented for fake-agent launches. Saved workflow name lookup resolves
-Pi-namespaced project workflows under `<project>/.pi/workflows/*.js` before
-personal workflows under `~/.pi/workflows/*.js`, rejects path-traversal names,
-checks the conventional `<name>.js` path first, then scans other `.js` files by
-`meta.name` for observed Claude filename/meta-name mismatches, and copies the
-resolved script into the new run directory before executing it. Explicit
-`scriptPath` launches now read, copy, and execute the referenced script. Saved
-workflow listing reads project and personal script metadata, prefers project
-workflows on conflicts, ignores unrelated invalid `.js` files during scans, and
-surfaces saved workflows in `/workflows` with `description` and `whenToUse` as
-user-facing guidance. ADR 0009 documents the locations and precedence.
+Pi-namespaced project/workspace-local workflows under `.pi/workflows/*.js`,
+rejects path-traversal names, checks the conventional `<name>.js` path first,
+then scans other `.js` files by `meta.name` for observed Claude filename/meta-name
+mismatches, and copies the resolved script into the new run directory before
+executing it. Explicit `scriptPath` launches now read, copy, and execute the
+referenced script. Saved workflow listing reads project-local script metadata,
+ignores unrelated invalid `.js` files during scans, and surfaces saved workflows
+in `/workflows` with `description` and `whenToUse` as user-facing guidance. ADR
+0009 documents the project-only location and lookup behavior.
 
 ### Slice 5.2: Save Run Script
 
@@ -830,14 +829,15 @@ User value: users can turn a successful run script into a reusable workflow.
 
 Scope:
 
-- Copy only the run script to selected saved workflow location.
+- Copy only the run script to the project/workspace-local saved workflow location.
+- Derive the saved filename from the script's `meta.name`.
 - Do not copy run JSON, journal, transcripts, or result.
 
 Tests:
 
 - Saved file matches run script.
 - No run-state files are copied.
-- Invalid scope fails clearly.
+- Unsafe `meta.name` fails clearly.
 
 Dependencies:
 
@@ -849,9 +849,9 @@ Spec coverage:
 - §21 acceptance criterion 15.
 
 Status: implemented as a core saved-workflow helper. `saveRunScript()` reads a
-completed run manifest, copies only that run's `script.js` to the selected
-project or personal saved-workflow path, validates that the requested saved name
-matches `meta.name`, and leaves manifest, journal, transcripts, and output files
+completed run manifest, copies only that run's `script.js` to the project-local
+saved-workflow path derived from `meta.name`, validates that `meta.name` is a
+safe command name, and leaves manifest, journal, transcripts, and output files
 behind. UI/controller wiring for the `/workflows` save action remains future
 work.
 

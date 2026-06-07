@@ -473,10 +473,7 @@ export function handleUltracodeToolCall(event, mode) {
 │  ├─ <span class="f">output.json</span>             <span class="c">full terminal result</span>
 │  └─ <span class="d">transcripts/</span>            <span class="c">agent-&lt;id&gt;.jsonl + .meta.json ×34</span>
 │
-└─ <span class="f">webfetch-quality-audit.js</span>  <span class="c">a saved, reusable workflow (no run state)</span>
-
-~/.pi/workflows/
-└─ <span class="f">deep-research.js</span>          <span class="c">personal saved workflows</span>
+└─ <span class="f">webfetch-quality-audit.js</span>  <span class="c">a project-local saved workflow (no run state)</span>
 </div>
 
   <div class="note"><b>The read-model rule.</b> The <code>/workflows</code> list view must render from <code>manifest.json</code> alone — never parsing journals or transcripts. Loading a 132&nbsp;KB journal and 3.9&nbsp;MB of transcripts just to draw an overview row would be absurd. Cheap to read = snappy UI.</div>

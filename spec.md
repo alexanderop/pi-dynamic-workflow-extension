@@ -189,22 +189,18 @@ values would change the computed agent keys and break the journal cache. Pass
 timestamps in through `args` and stamp results after the workflow returns; vary
 per-iteration work by index rather than by random values.
 
-Observed Claude Code saved workflow locations:
+Observed Claude Code project saved workflow location:
 
 - Project workflows: `.claude/workflows/*.js`
-- Personal workflows: `~/.claude/workflows/*.js`
-- If names conflict, project workflow wins.
 
-This Pi extension keeps the Claude-like lookup behavior but uses the Pi namespace
-shown in §18.
+This Pi extension keeps the Claude-like plain `.js` file shape but uses the Pi
+namespace shown in §18 and intentionally supports only project/workspace-local
+saved workflows.
 
 Observed local artifacts include project saved workflows such as
-`<project>/.claude/workflows/webfetch-quality-audit.js` and personal saved
-workflows such as `~/.claude/workflows/deep-research2.js`. Most observed saved
-workflow file basenames match `meta.name`; one personal artifact has file
-basename `deep-research2.js` with `meta.name: 'deep-research'`, so command
-identity SHOULD come from `meta.name`, while filenames are lookup/storage
-details.
+`<project>/.claude/workflows/webfetch-quality-audit.js`. Most observed saved
+workflow file basenames match `meta.name`, but command identity SHOULD come from
+`meta.name`, while filenames are lookup/storage details.
 
 ## 7. Runtime API
 
@@ -672,21 +668,28 @@ Rules:
 
 ## 15. Save Semantics
 
-Saving a workflow copies only the executed script to a saved workflow location.
+Saving a workflow copies only the executed script to the project/workspace-local
+saved workflow location.
 
 Requirements:
 
-- Claude Code saves to project scope:
-  `.claude/workflows/<meta.name>.js`
-- Claude Code saves to personal scope:
-  `~/.claude/workflows/<meta.name>.js`
-- This Pi extension maps those locations to:
-  `.pi/workflows/<meta.name>.js` and `~/.pi/workflows/<meta.name>.js`.
+- Claude Code saves project workflows to `.claude/workflows/<meta.name>.js`.
+- This Pi extension maps that location to
+  `<pi-workflow-root>/<meta.name>.js`, where `<pi-workflow-root>` is the same
+  project/workspace `.pi/workflows` root used for run artifacts.
+- Saved workflows are project-local prompt/command templates; this extension MUST
+  NOT save or resolve them from a user-home or cross-project workflow directory.
 - Observed local saved files are plain `.js` modules, not `.workflow.js` files.
+- The saved filename MUST be derived from the script's `meta.name`.
 - Do not copy run JSON.
 - Do not copy journal files.
 - Do not copy transcripts.
 - Do not copy final result.
+
+A saved workflow is a project-local retriggerable command template. A UI adapter MAY
+surface `<meta.name>.js` as a slash-style command such as `/deep-research who is
+alexander opalic`; internally that retrigger launches the saved workflow by
+`name` and passes the trailing text as invocation `args`.
 
 A later invocation of the saved workflow creates a new run id and new run state.
 
@@ -699,7 +702,7 @@ interface WorkflowController {
   stopRun(runId: string): Promise<void>;
   stopAgent(runId: string, agentId: string): Promise<void>;
   restartAgent(runId: string, agentId: string): Promise<void>;
-  saveRunScript(runId: string, scope: "project" | "personal"): Promise<string>;
+  saveRunScript(runId: string): Promise<string>;
 }
 ```
 
@@ -712,8 +715,8 @@ Behavior:
 - `stopAgent` cancels one queued or running agent and records a stopped event.
 - `restartAgent` invalidates the prior cached result, creates a new attempt, and
   preserves the old transcript.
-- `saveRunScript` copies only the run script to the selected saved workflow
-  directory.
+- `saveRunScript` copies only the run script to the project/workspace-local saved
+  workflow directory using the script's `meta.name`.
 
 ## 17. Notification Contract
 
@@ -791,11 +794,10 @@ The Claude-like artifact layout is:
         Minimal agent metadata.
 ```
 
-Observed Claude Code saved workflows live outside run state:
+Observed Claude Code project saved workflows live outside run state:
 
 ```text
 .claude/workflows/<workflowName>.js
-~/.claude/workflows/<workflowName>.js
 ```
 
 Pi extension mapping:
@@ -827,10 +829,6 @@ no ancestor has `.pi/workflows`, the extension falls back to
 
   <workflowName>.js
     Project/workspace-local saved workflow scripts, using Claude-like plain `.js` files.
-
-~/.pi/workflows/
-  <workflowName>.js
-    Personal saved workflow scripts, using Claude-like plain `.js` files.
 ```
 
 The Pi `/workflows` list view MUST read only `manifest.json` files. Journals,
@@ -973,8 +971,8 @@ running a web research workflow without web tools.
 An implementation is complete when these scenarios pass:
 
 1. Launching an inline workflow returns `{ taskId, runId }` immediately.
-2. Launching a saved workflow resolves project and personal workflow locations
-   correctly, with project scope winning conflicts.
+2. Launching a saved workflow resolves the project/workspace-local workflow
+   location correctly and does not read cross-project workflow directories.
 3. The runtime writes initial run JSON before execution starts.
 4. `phase()` and `log()` update run state.
 5. `agent()` creates an isolated transcript and metadata file.
@@ -1321,7 +1319,7 @@ restart and stop handling (§16) remain unproven by the artifacts.
 ### API Surface: Exercised vs Documented
 
 The reference scripts (`webfetch-quality-audit`, `reverse-engineer-workflow-
-feature`, and the personal `deep-research2`) exercise only part of the §7 API.
+feature`, and the `deep-research2` artifact) exercise only part of the §7 API.
 An implementation MUST still provide the full surface, but only the following was
 observed in real scripts:
 

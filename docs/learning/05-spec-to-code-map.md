@@ -199,14 +199,13 @@ src/workflows/resume.ts
 
 ### §15 Save Semantics
 
-Partially built for launch/discovery. Save-run-script itself is still future
-work.
+Built for project-local launch/discovery and save-run-script behavior.
 
-Saved workflow lookup uses Pi-namespaced paths with Claude-like plain `.js` files:
+Saved workflow lookup uses Pi-namespaced paths with Claude-like plain `.js` files,
+and only checks the project/workspace-local workflow root:
 
 ```text
 <project>/.pi/workflows/*.js
-~/.pi/workflows/*.js
 ```
 
 ### §16 Control Operations

@@ -524,7 +524,6 @@ Saved workflow launch:
 ```ts
 const scenario = await workflowScenario()
   .withSavedWorkflow("review", projectScript)
-  .withPersonalWorkflow("review", personalScript)
   .withAgents(agent.label("review-agent").replyText("project result"))
   .launchByName("review");
 
@@ -565,7 +564,6 @@ workflowScenario(options?)
   .withScript(source, args?)
   .withScriptPath(path, source?)
   .withSavedWorkflow(name, source)
-  .withPersonalWorkflow(name, source)
   .withAgents(...handlers)
   .withLaunchOptions(overrides)
 ```
@@ -679,7 +677,7 @@ whether the error occurs before or during run execution.
 ## Layer 3b: Saved Workflow Scenario Harness
 
 Saved workflow listing and resolution tests need less machinery than a launched
-run. If project/personal saved-workflow filesystem setup keeps repeating, add a
+run. If project-local saved-workflow filesystem setup keeps repeating, add a
 small harness instead of forcing these tests through `workflowScenario`.
 
 Target file:
@@ -691,9 +689,7 @@ test/workflows/saved/saved-workflow-scenario.ts
 Target examples:
 
 ```ts
-const saved = await savedWorkflowScenario()
-  .withProjectWorkflow("review", projectSource)
-  .withPersonalWorkflow("review", personalSource);
+const saved = await savedWorkflowScenario().withProjectWorkflow("review", projectSource);
 
 await saved.shouldResolve("review", {
   scope: "project",
@@ -701,8 +697,8 @@ await saved.shouldResolve("review", {
 });
 ```
 
-Assertions should cover exact resolved paths, project-before-personal
-precedence, missing files, invalid files, and list ordering.
+Assertions should cover exact resolved paths, missing files, invalid files, and
+list ordering.
 
 ## Layer 4: Journal Assertions
 
@@ -832,12 +828,12 @@ Acceptance criteria:
 ### Slice 5: Saved Workflow Scenario Harness
 
 Add `test/workflows/saved/saved-workflow-scenario.ts` only if saved workflow
-tests keep repeating project/personal directory setup after the builders and
-launch scenario exist.
+tests keep repeating project-local directory setup after the builders and launch
+scenario exist.
 
 Acceptance criteria:
 
-- project-before-personal precedence remains explicit;
+- project-local lookup remains explicit;
 - invalid and missing workflow cases still assert exact error tags and paths;
 - the harness does not create run storage.
 
