@@ -305,6 +305,10 @@ export class AgentMockHandler {
     this.#header = header;
   }
 
+  clone(): AgentMockHandler {
+    return new AgentMockHandler(this.#matcher, this.#resolver, this.#options, this.#header);
+  }
+
   get header(): string {
     return this.#header ?? formatMatcher(this.#matcher);
   }
@@ -363,6 +367,9 @@ export class AgentMockHandler {
  * even ordering-sensitive cases can stay on the mock boundary.
  */
 export class PendingAgentHandler extends AgentMockHandler {
+  readonly #matcher: AgentCallMatcher;
+  readonly #options: AgentHandlerOptions;
+  readonly #header?: string;
   readonly #calls: AgentResolverInfo[] = [];
   readonly #waiting: ControlledDeferred<AgentResolverValue>[] = [];
   readonly #presets: PendingPreset[] = [];
@@ -370,6 +377,13 @@ export class PendingAgentHandler extends AgentMockHandler {
 
   constructor(matcher: AgentCallMatcher, options: AgentHandlerOptions, header?: string) {
     super(matcher, (info) => this.#handleCall(info), options, header);
+    this.#matcher = matcher;
+    this.#options = options;
+    this.#header = header;
+  }
+
+  clone(): PendingAgentHandler {
+    return new PendingAgentHandler(this.#matcher, this.#options, this.#header);
   }
 
   get started(): boolean {
@@ -487,7 +501,7 @@ export class AgentMockServer {
   }
 
   async boundary<T>(callback: () => T | Promise<T>): Promise<Awaited<T>> {
-    const inheritedHandlers = [...this.#activeHandlers()];
+    const inheritedHandlers = this.#activeHandlers().map((handler) => handler.clone());
     const scope: AgentMockBoundaryScope = {
       initialHandlers: inheritedHandlers,
       handlers: [...inheritedHandlers],

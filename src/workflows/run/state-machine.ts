@@ -197,8 +197,11 @@ export function transitionAgent(
         lastProgressAt: event.now,
         durationMs: event.now - (agent.startedAt ?? event.now),
         resultPreview: event.resultPreview,
-        tokens: event.tokens,
-        toolCalls: event.toolCalls,
+        tokens: event.tokens ?? agent.tokens,
+        toolCalls: event.toolCalls ?? agent.toolCalls,
+        activityState: "done",
+        currentToolName: undefined,
+        currentToolCallId: undefined,
       });
     case "agent_failed":
       return ok({
@@ -206,12 +209,18 @@ export function transitionAgent(
         lastProgressAt: event.now,
         durationMs: event.now - (agent.startedAt ?? event.now),
         resultPreview: event.resultPreview,
+        activityState: "failed",
+        currentToolName: undefined,
+        currentToolCallId: undefined,
       });
     case "agent_stopped":
       return ok({
         ...nextAgent,
         lastProgressAt: event.now,
         durationMs: event.now - (agent.startedAt ?? event.now),
+        activityState: "stopped",
+        currentToolName: undefined,
+        currentToolCallId: undefined,
       });
     case "agent_restarted":
       return ok({
@@ -224,6 +233,18 @@ export function transitionAgent(
         durationMs: undefined,
         lastToolName: undefined,
         lastToolSummary: undefined,
+        activityState: undefined,
+        activityLabel: undefined,
+        lastEventAt: undefined,
+        lastEventType: undefined,
+        lastEventLabel: undefined,
+        currentToolName: undefined,
+        currentToolCallId: undefined,
+        turnCount: undefined,
+        messageUpdateCount: undefined,
+        observedLiveEvents: undefined,
+        telemetryAvailable: undefined,
+        recentActivity: undefined,
         resultPreview: undefined,
         tokens: undefined,
         toolCalls: undefined,

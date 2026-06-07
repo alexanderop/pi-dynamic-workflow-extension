@@ -10,6 +10,29 @@ export interface AgentOptions {
   isolation?: "worktree";
 }
 
+export type WorkflowAgentActivityState =
+  | "queued"
+  | "starting"
+  | "waiting_for_model"
+  | "thinking"
+  | "streaming"
+  | "using_tool"
+  | "waiting_for_tool"
+  | "finalizing"
+  | "no_telemetry"
+  | "idle"
+  | "done"
+  | "failed"
+  | "stopped";
+
+export interface WorkflowAgentActivitySummary {
+  at: number;
+  label: string;
+  detail?: string;
+  toolName?: string;
+  isError?: boolean;
+}
+
 export interface WorkflowAgentProgress {
   type: "workflow_agent";
   index: number;
@@ -31,6 +54,18 @@ export interface WorkflowAgentProgress {
   durationMs?: number;
   lastToolName?: string;
   lastToolSummary?: string;
+  activityState?: WorkflowAgentActivityState;
+  activityLabel?: string;
+  lastEventAt?: number;
+  lastEventType?: string;
+  lastEventLabel?: string;
+  currentToolName?: string;
+  currentToolCallId?: string;
+  turnCount?: number;
+  messageUpdateCount?: number;
+  observedLiveEvents?: number;
+  telemetryAvailable?: boolean;
+  recentActivity?: WorkflowAgentActivitySummary[];
   promptPreview: string;
   /** Full original prompt for the prompt reader; optional for legacy manifests/snapshots. */
   prompt?: string;

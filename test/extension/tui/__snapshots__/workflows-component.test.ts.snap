@@ -12,7 +12,7 @@ artifacts dir: .pi/workflows/wf_hard/
 │                   │ ● slice:P0.3-j… 41.1k tok · 11 tools │
 │                   │ ● slice:P1.1-m… 41.1k tok · 11 tools │
 │                   │ ● slice:P1.2-f… 41.1k tok · 11 tools │
-│                   │ ● slice:P2.1-drain-on-a… idle 1m 12s │
+│                   │ ● s… running 1m 12s · no live events │
 │                   │ ● slice:P2.2-l… 41.1k tok · 11 tools │
 └───────────────────┴──────────────────────────────────────┘
 
@@ -31,7 +31,7 @@ artifacts dir: .pi/workflows/wf_hard/
 │                   │ ● slice:P0.3-journal-clone Opus 4.8 (1M context)                            41.1k tok · 11 tools │
 │                   │ ● slice:P1.1-model-threading Opus 4.8 (1M context)                          41.1k tok · 11 tools │
 │                   │ ● slice:P1.2-forced-structured Opus 4.8 (1M context)                        41.1k tok · 11 tools │
-│                   │ ● slice:P2.1-drain-on-abort                                                          idle 1m 12s │
+│                   │ ● slice:P2.1-drain-on-abort                                      running 1m 12s · no live events │
 │                   │ ● slice:P2.2-limiter-queue Opus 4.8 (1M context)                            41.1k tok · 11 tools │
 └───────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────┘
 

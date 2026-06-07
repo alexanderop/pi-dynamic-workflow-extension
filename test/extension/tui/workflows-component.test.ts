@@ -137,6 +137,8 @@ const hardeningRun = (): WorkflowRunState =>
         model: "",
         tokens: undefined,
         toolCalls: undefined,
+        lastToolName: undefined,
+        lastToolSummary: undefined,
         lastProgressAt: NOW - 72_000,
       }),
       agent({ index: 6, label: "slice:P2.2-limiter-queue", state: "running", phaseTitle: "Slice" }),
@@ -155,12 +157,38 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).toContain("0/7");
     expect(screen).toContain("✓ Author");
     expect(screen).toContain("41.1k tok · 11 tools");
-    expect(screen).toContain("idle ");
+    expect(screen).toContain("no live events");
+    expect(screen).not.toContain("idle ");
     expect(screen).toContain(
       "↑↓ select · → detail · x stop workflow · p pause · esc back · s save",
     );
     expect(screen).not.toContain("Progress");
     expect(screen).not.toContain("Details");
+  });
+
+  it("should render live current tool activity ahead of generic metrics", () => {
+    const screen = make([
+      runState({
+        phases: [{ title: "Review" }],
+        workflowProgress: [
+          agent({
+            state: "running",
+            activityState: "using_tool",
+            currentToolName: "read",
+            lastEventLabel: "using read",
+            toolCalls: 1,
+            tokens: undefined,
+            lastProgressAt: NOW - 1000,
+          }),
+        ],
+      }),
+    ])
+      .render(100)
+      .join("\n");
+
+    expect(screen).toContain("using read");
+    expect(screen).not.toContain("idle ");
+    expect(screen).not.toContain("no live events");
   });
 
   it("should color key monitor affordances with semantic Pi theme slots", () => {
@@ -177,7 +205,7 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).toContain("\u001b[35m─");
     expect(screen).toContain("\u001b[35m› ");
     expect(screen).toContain("\u001b[32m✓");
-    expect(screen).toContain("\u001b[33midle 1m 12s");
+    expect(screen).toContain("\u001b[33mrunning 1m 12s · no live events");
   });
 
   it("should show the workflow description and artifact directory in the overview header", () => {
@@ -273,6 +301,32 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).not.toContain("No metrics yet");
     expect(screen).not.toContain("Still collecting");
     expect(screen).not.toContain("unknown");
+  });
+
+  it("should show failed phase counts separately from completed agents", () => {
+    const run = runState({
+      phases: [{ title: "Verify", agentCount: 6 }],
+      agentCount: 6,
+      workflowProgress: [
+        agent({ index: 0, agentId: "a0", label: "verify:1", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 1, agentId: "a1", label: "verify:2", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 2, agentId: "a2", label: "verify:3", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 3, agentId: "a3", label: "verify:4", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 4, agentId: "a4", label: "verify:5", state: "done", phaseTitle: "Verify" }),
+        agent({
+          index: 5,
+          agentId: "a5",
+          label: "verify:6",
+          state: "failed",
+          phaseTitle: "Verify",
+        }),
+      ],
+    });
+
+    const screen = make([run]).render(120).join("\n");
+
+    expect(screen).toContain("5/6");
+    expect(screen).toContain("1 failed");
   });
 
   it("should ask for confirmation before stopping a workflow from the overview", () => {

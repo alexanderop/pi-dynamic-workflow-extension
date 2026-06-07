@@ -23,7 +23,7 @@ export function buildMonitorView(
   options: BuildMonitorViewOptions,
 ): MonitorViewModel {
   const now = options.now ?? Date.now();
-  const agents = run.workflowProgress.filter(isWorkflowAgentProgress);
+  const agents = uniqueAgentProgress(run.workflowProgress.filter(isWorkflowAgentProgress));
   const phaseMetadata = uniquePhaseMetadata(run, agents);
   const phases = phaseMetadata.map((phase) => {
     const phaseAgents = agentsForPhase(agents, phase.title);
@@ -38,6 +38,7 @@ export function buildMonitorView(
         phase.agents?.length ?? 0,
       ),
       doneAgents: phaseAgents.filter((agent) => agent.state === "done").length,
+      failedAgents: phaseAgents.filter((agent) => agent.state === "failed").length,
       plannedAgents,
       remainingPlannedAgents: Math.max(
         0,
@@ -73,10 +74,19 @@ function liveDurationLabel(run: WorkflowRunState, now: number): string {
 
 function toAgentRow(agent: WorkflowAgentProgress, now: number): MonitorAgentRow {
   const hasModel = agent.model !== "" && agent.model !== "unknown" && agent.model !== "default";
+  const hasLiveTelemetry =
+    agent.lastToolName !== undefined ||
+    agent.lastToolSummary !== undefined ||
+    (agent.toolCalls !== undefined && agent.toolCalls > 0);
+  const lastProgressAt = agent.lastProgressAt;
+  const runningWithoutMetrics =
+    agent.state === "running" && agent.tokens === undefined && lastProgressAt !== undefined;
   const idleMs =
-    agent.state === "running" && agent.tokens === undefined && agent.lastProgressAt !== undefined
-      ? Math.max(0, now - agent.lastProgressAt)
+    runningWithoutMetrics && hasLiveTelemetry && agent.currentToolName === undefined
+      ? Math.max(0, now - lastProgressAt)
       : undefined;
+  const noTelemetryMs =
+    runningWithoutMetrics && !hasLiveTelemetry ? Math.max(0, now - lastProgressAt) : undefined;
   return {
     glyph: agentGlyph(agent.state),
     label: agent.label,
@@ -88,6 +98,13 @@ function toAgentRow(agent: WorkflowAgentProgress, now: number): MonitorAgentRow 
     tokens: agent.tokens !== undefined && agent.tokens > 0 ? agent.tokens : undefined,
     toolCalls: agent.toolCalls !== undefined && agent.toolCalls > 0 ? agent.toolCalls : undefined,
     idleMs,
+    noTelemetryMs,
+    activityState: agent.activityState,
+    activityLabel: agent.activityLabel ?? agent.lastEventLabel,
+    lastEventAt: agent.lastEventAt,
+    lastEventType: agent.lastEventType,
+    lastEventLabel: agent.lastEventLabel,
+    currentToolName: agent.currentToolName,
     fullPrompt: agent.prompt ?? agent.promptPreview,
     promptPreview: agent.promptPreview,
     lastToolName: agent.lastToolName,
@@ -252,6 +269,20 @@ function agentsForPhase(agents: WorkflowAgentProgress[], title: string): Workflo
   const phaseAgents = agents.filter((agent) => agent.phaseTitle === title);
   if (phaseAgents.length > 0) return phaseAgents;
   return agents.filter((agent) => agent.phaseTitle === undefined);
+}
+
+function uniqueAgentProgress(agents: WorkflowAgentProgress[]): WorkflowAgentProgress[] {
+  const byStableIdentity = new Map<string, WorkflowAgentProgress>();
+  for (const agent of agents) {
+    byStableIdentity.set(agentStableIdentity(agent), agent);
+  }
+  return Array.from(byStableIdentity.values());
+}
+
+function agentStableIdentity(agent: WorkflowAgentProgress): string {
+  return agent.agentId.length > 0
+    ? `agentId:${agent.agentId}:index:${agent.index}`
+    : `index:${agent.index}`;
 }
 
 export function isWorkflowAgentProgress(

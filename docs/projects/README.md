@@ -13,7 +13,7 @@ to prevent.
 | # | Project | Status | The remaining gap | Spec |
 |---|---|---|---|---|
 | 1 | [test-page-objects](./test-page-objects/)           | partial     | `saveRun`/`restartAgent` screen actions + spies, saved-workflow-scenario, journal assertions | [spec](./test-page-objects/spec.md) |
-| 2 | [live-feedback](./live-feedback/)                   | not started | live per-agent activity states (queued/thinking/using-tool/…) wired scheduler → projector → TUI | [spec](./live-feedback/spec.md) |
+| 2 | [live-feedback](./live-feedback/)                   | partial | honest no-telemetry labels, phase/agent display dedupe, and fake-runner live event plumbing landed; remaining: Pi `AgentSession.subscribe()` adapter, throttled persistence, and detail activity timeline | [spec](./live-feedback/spec.md) |
 | 3 | [workflows-monitor](./workflows-monitor/)           | in progress | spec §24 four-state TUI rebuild | [plan](./workflows-monitor/plan.md) · [ticket](./workflows-monitor/ticket.md) |
 | 4 | [saved-workflow-scopes](./saved-workflow-scopes/)   | **blocked** | re-introduce user scope — **requires revisiting ADR 0009** (commit `51e10ce7` deliberately dropped it) | [spec](./saved-workflow-scopes/spec.md) |
 

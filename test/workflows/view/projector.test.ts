@@ -90,7 +90,7 @@ describe("buildMonitorView", () => {
     expect(row?.toolCalls).toBeUndefined();
   });
 
-  it("should expose idle duration when an agent is running without metrics", () => {
+  it("should label a running agent without telemetry as no live events instead of idle", () => {
     const run = runState({
       phases: [{ title: "Review" }],
       workflowProgress: [agent({ state: "running", tokens: undefined, lastProgressAt: 28_000 })],
@@ -102,7 +102,64 @@ describe("buildMonitorView", () => {
     }).selectedPhaseAgents;
 
     expect(row?.tokens).toBeUndefined();
+    expect(row?.idleMs).toBeUndefined();
+    expect(row?.noTelemetryMs).toBe(72_000);
+  });
+
+  it("should project a running agent live tool event as current tool activity", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      workflowProgress: [
+        agent({
+          state: "running",
+          activityState: "using_tool",
+          currentToolName: "read",
+          currentToolCallId: "tool_1",
+          lastEventAt: 42_000,
+          lastEventLabel: "using read",
+          lastEventType: "tool_start",
+          observedLiveEvents: 1,
+          telemetryAvailable: true,
+          toolCalls: 1,
+          lastProgressAt: 42_000,
+        }),
+      ],
+    });
+
+    const [row] = buildMonitorView(run, { selectedPhaseIndex: 0, now: 43_000 }).selectedPhaseAgents;
+
+    expect(row).toMatchObject({
+      activityState: "using_tool",
+      activityLabel: "using read",
+      currentToolName: "read",
+      lastEventLabel: "using read",
+      toolCalls: 1,
+    });
+    expect(row?.idleMs).toBeUndefined();
+    expect(row?.noTelemetryMs).toBeUndefined();
+  });
+
+  it("should expose idle duration only after live telemetry has been observed", () => {
+    const run = runState({
+      phases: [{ title: "Review" }],
+      workflowProgress: [
+        agent({
+          state: "running",
+          tokens: undefined,
+          toolCalls: undefined,
+          lastToolName: "Read",
+          lastProgressAt: 28_000,
+        }),
+      ],
+    });
+
+    const [row] = buildMonitorView(run, {
+      selectedPhaseIndex: 0,
+      now: 100_000,
+    }).selectedPhaseAgents;
+
     expect(row?.idleMs).toBe(72_000);
+    expect(row?.noTelemetryMs).toBeUndefined();
   });
 
   it("should include only the selected phase agents in the monitor view", () => {
@@ -117,6 +174,70 @@ describe("buildMonitorView", () => {
     const view = buildMonitorView(run, { selectedPhaseIndex: 1 });
 
     expect(view.selectedPhaseAgents.map((row) => row.label)).toEqual(["author:a"]);
+  });
+
+  it("should collapse repeated phase rows while preserving first-seen order", () => {
+    const run = runState({
+      phases: [{ title: "Scout" }, { title: "Verify" }],
+      workflowProgress: [
+        { type: "workflow_phase", index: 0, title: "Verify" },
+        { type: "workflow_phase", index: 1, title: "Verify" },
+        { type: "workflow_phase", index: 2, title: "Synthesize" },
+        { type: "workflow_phase", index: 3, title: "Scout" },
+        agent({ index: 0, label: "verify:a", phaseTitle: "Verify" }),
+      ],
+    });
+
+    const view = buildMonitorView(run, { selectedPhaseIndex: 0 });
+
+    expect(view.phases.map((phase) => phase.title)).toEqual(["Scout", "Verify", "Synthesize"]);
+  });
+
+  it("should deduplicate repeated agent progress rows by stable agent identity for counts and selected rows", () => {
+    const duplicate = agent({
+      index: 7,
+      agentId: "agent_duplicate",
+      label: "verify:duplicate",
+      phaseTitle: "Verify",
+      state: "running",
+    });
+    const run = runState({
+      phases: [{ title: "Verify" }],
+      workflowProgress: [
+        { type: "workflow_phase", index: 0, title: "Verify" },
+        duplicate,
+        { ...duplicate, state: "done", tokens: 123, toolCalls: 1 },
+        agent({ index: 8, agentId: "agent_unique", label: "verify:unique", phaseTitle: "Verify" }),
+      ],
+    });
+
+    const view = buildMonitorView(run, { selectedPhaseIndex: 0 });
+
+    expect(view.header.totalAgents).toBe(2);
+    expect(view.header.doneAgents).toBe(1);
+    expect(view.phases[0]).toMatchObject({ totalAgents: 2, doneAgents: 1 });
+    expect(view.selectedPhaseAgents.map((row) => row.label)).toEqual([
+      "verify:duplicate",
+      "verify:unique",
+    ]);
+  });
+
+  it("should count failed agents distinctly from completed agents in phase rows", () => {
+    const run = runState({
+      phases: [{ title: "Verify", agentCount: 6 }],
+      workflowProgress: [
+        agent({ index: 0, label: "verify:1", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 1, label: "verify:2", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 2, label: "verify:3", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 3, label: "verify:4", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 4, label: "verify:5", state: "done", phaseTitle: "Verify" }),
+        agent({ index: 5, label: "verify:6", state: "failed", phaseTitle: "Verify" }),
+      ],
+    });
+
+    const [phase] = buildMonitorView(run, { selectedPhaseIndex: 0 }).phases;
+
+    expect(phase).toMatchObject({ doneAgents: 5, failedAgents: 1, totalAgents: 6 });
   });
 
   it("should use planned phase agent counts before agent labels exist", () => {

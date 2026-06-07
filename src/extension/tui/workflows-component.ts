@@ -248,9 +248,13 @@ export class WorkflowsTuiComponent implements Component {
         : complete
           ? this.#theme.fg("success", phase.title)
           : phase.title;
+      const progressText =
+        phase.failedAgents > 0
+          ? `${phase.doneAgents}/${phase.totalAgents} · ${phase.failedAgents} failed`
+          : `${phase.doneAgents}/${phase.totalAgents}`;
       const progress = this.#theme.fg(
-        complete ? "success" : "muted",
-        `${phase.doneAgents}/${phase.totalAgents}`,
+        phase.failedAgents > 0 ? "error" : complete ? "success" : "muted",
+        progressText,
       );
       return `${cursor}${marker} ${title}  ${progress}`;
     });
@@ -346,6 +350,9 @@ export class WorkflowsTuiComponent implements Component {
     if (agent.tokens !== undefined) metricsParts.push(`${formatTokens(agent.tokens)} tok`);
     if (agent.toolCalls !== undefined) metricsParts.push(`${agent.toolCalls} tool calls`);
     if (agent.idleMs !== undefined) metricsParts.push(`idle ${formatIdle(agent.idleMs)}`);
+    if (agent.noTelemetryMs !== undefined) {
+      metricsParts.push(`running ${formatIdle(agent.noTelemetryMs)} · no live events`);
+    }
 
     const promptLines = splitLines(agent.fullPrompt);
     const previewLines = splitLines(agent.promptPreview);
@@ -476,14 +483,25 @@ export class WorkflowsTuiComponent implements Component {
     const label = agent.state === "done" ? this.#theme.fg("muted", agent.label) : agent.label;
     const left = `${this.#agentGlyph(agent)} ${label}${details}`;
     const metricParts: string[] = [];
+    if (agent.currentToolName !== undefined) metricParts.push(`using ${agent.currentToolName}`);
     if (agent.tokens !== undefined) metricParts.push(`${formatTokens(agent.tokens)} tok`);
-    if (agent.toolCalls !== undefined) metricParts.push(`${agent.toolCalls} tools`);
+    if (agent.toolCalls !== undefined && agent.currentToolName === undefined) {
+      metricParts.push(`${agent.toolCalls} tools`);
+    }
     const metric =
       metricParts.length > 0
-        ? this.#theme.fg("dim", metricParts.join(" · "))
+        ? this.#theme.fg(
+            agent.currentToolName === undefined ? "dim" : "accent",
+            metricParts.join(" · "),
+          )
         : agent.idleMs !== undefined
           ? this.#theme.fg("warning", `idle ${formatIdle(agent.idleMs)}`)
-          : "";
+          : agent.noTelemetryMs !== undefined
+            ? this.#theme.fg(
+                "warning",
+                `running ${formatIdle(agent.noTelemetryMs)} · no live events`,
+              )
+            : "";
     if (metric === "") return padTo(left, innerWidth);
     return headerSummaryLine(left, metric, innerWidth);
   }

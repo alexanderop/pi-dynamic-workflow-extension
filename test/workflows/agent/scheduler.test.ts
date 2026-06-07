@@ -92,6 +92,46 @@ describe("WorkflowAgentScheduler", () => {
     expect(row?.promptPreview).toHaveLength(160);
   });
 
+  it("should update running progress from fake-runner live tool events", async () => {
+    const finished = deferred<string>();
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      now: sequenceNumbers(1000, 1100, 1200, 1300),
+      runner: async ({ onEvent }) => {
+        onEvent?.({
+          type: "tool_start",
+          at: 1200,
+          toolCallId: "tool_1",
+          toolName: "read",
+          summary: "src/workflows/agent/scheduler.ts",
+        });
+        return await finished.promise;
+      },
+    });
+
+    const result = scheduler.schedule("scan src", { label: "scan" });
+    await delay(0);
+
+    expect(scheduler.progress()[0]).toMatchObject({
+      state: "running",
+      activityState: "using_tool",
+      currentToolName: "read",
+      currentToolCallId: "tool_1",
+      lastToolName: "read",
+      lastToolSummary: "src/workflows/agent/scheduler.ts",
+      lastEventAt: 1200,
+      lastEventType: "tool_start",
+      lastEventLabel: "using read",
+      lastProgressAt: 1200,
+      observedLiveEvents: 1,
+      telemetryAvailable: true,
+      toolCalls: 1,
+    });
+
+    finished.resolve("ok");
+    await expect(result).resolves.toBe("ok");
+  });
+
   it("should expose queued, running, done, and failed progress rows", async () => {
     const first = deferred<string>();
     const scheduler = new WorkflowAgentScheduler({
@@ -409,4 +449,9 @@ function deferred<T>(): Deferred<T> {
 function sequenceIds(prefix: string): () => string {
   let index = 0;
   return () => `${prefix}_${index++}`;
+}
+
+function sequenceNumbers(...values: number[]): () => number {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)]!;
 }

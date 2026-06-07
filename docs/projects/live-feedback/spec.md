@@ -2,10 +2,26 @@
 
 ## Status
 
-Planned.
+Partial.
 
-This is a product/technical specification for a later implementation slice. It
-extends the existing `/workflows` monitor work in
+Slice A (honest labels only) is implemented: the projector and `/workflows` TUI
+now label running agents with no live telemetry as `running … · no live events`
+instead of `idle`. Idle remains available only after compact live evidence such
+as a tool summary has been observed.
+
+Slice B (phase and agent display dedupe) is implemented: repeated phase progress
+entries collapse into one visible phase, repeated agent progress rows are
+deduplicated for monitor counts and selected rows, and failed phase agents are
+counted separately from completed agents.
+
+Slice C (live event plumbing with fake runner) is implemented: the scheduler/runner
+boundary accepts compact `WorkflowAgentLiveEvent` updates, scheduler-owned progress
+rows are patched with current activity/tool fields, projection exposes that activity,
+and the `/workflows` overview prefers current tool activity such as `using read` over
+generic metrics. Pi `AgentSession.subscribe()` integration remains planned for Slice D.
+
+This is a product/technical specification for implementation slices that extend
+the existing `/workflows` monitor work in
 [`docs/projects/workflows-monitor/ticket.md`](../workflows-monitor/ticket.md) and the
 storage/UI decisions in ADR 0010 and ADR 0013. It does not change scheduling or
 workflow script semantics.
@@ -671,11 +687,16 @@ Add tests for:
 
 ### Slice B: Phase and agent display dedupe
 
+Implemented.
+
 - Collapse duplicate phase entries by title in view projection.
-- Ensure selected phase agents are unique by `agentId` or stable `index`.
+- Ensure selected phase agents are unique by stable `agentId`/`index` identity.
+- Count failed phase agents separately from done agents.
 - Add tests using repeated `phase()` entries from a pipeline.
 
 ### Slice C: Live event plumbing with fake runner
+
+Implemented.
 
 - Add internal `WorkflowAgentLiveEvent` callback shape.
 - Let scheduler apply live-event patches.
@@ -719,7 +740,7 @@ Add tests for:
 - When Pi sidechain tool events are available, `/workflows` shows the current or
   most recent tool.
 - Agent detail explains missing telemetry and shows recent activity when present.
-- Duplicate phase entries do not inflate visible phase/agent counts.
+- Duplicate phase entries do not inflate visible phase/agent counts. (Implemented in Slice B.)
 - Manifest writes remain bounded and overview rendering stays manifest-only.
 - Pure projection, TUI render, scheduler, runner, and persistence tests cover the
   behavior without requiring live model calls.

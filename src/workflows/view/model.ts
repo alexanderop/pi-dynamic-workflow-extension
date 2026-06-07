@@ -18,6 +18,13 @@ export interface MonitorAgentRow {
   tokens?: number;
   toolCalls?: number;
   idleMs?: number;
+  noTelemetryMs?: number;
+  activityState?: WorkflowAgentProgress["activityState"];
+  activityLabel?: string;
+  lastEventAt?: number;
+  lastEventType?: string;
+  lastEventLabel?: string;
+  currentToolName?: string;
   fullPrompt: string;
   promptPreview: string;
   lastToolName?: string;
@@ -30,6 +37,7 @@ export interface MonitorPhaseRow {
   detail?: string;
   modelLabel?: string;
   doneAgents: number;
+  failedAgents: number;
   totalAgents: number;
   plannedAgents: MonitorPlannedAgentRow[];
   remainingPlannedAgents: number;

@@ -3,7 +3,12 @@ import { availableParallelism } from "node:os";
 import { computeWorkflowAgentKey } from "#src/workflows/journal/key.ts";
 import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
 import { transitionAgent } from "#src/workflows/run/state-machine.ts";
-import type { AgentOptions, WorkflowAgentProgress } from "./model.ts";
+import type {
+  AgentOptions,
+  WorkflowAgentActivityState,
+  WorkflowAgentActivitySummary,
+  WorkflowAgentProgress,
+} from "./model.ts";
 
 export interface WorkflowAgentRunRequest {
   readonly agentId: string;
@@ -11,7 +16,47 @@ export interface WorkflowAgentRunRequest {
   readonly prompt: string;
   readonly options: AgentOptions;
   readonly signal: AbortSignal;
+  readonly onEvent?: (event: WorkflowAgentLiveEvent) => void;
 }
+
+export type WorkflowAgentLiveEvent =
+  | { readonly type: "sidechain_starting"; readonly at: number }
+  | {
+      readonly type: "agent_event";
+      readonly at: number;
+      readonly eventType: string;
+      readonly label: string;
+      readonly activityState?: WorkflowAgentActivityState;
+    }
+  | {
+      readonly type: "tool_start";
+      readonly at: number;
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly summary?: string;
+    }
+  | {
+      readonly type: "tool_update";
+      readonly at: number;
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly summary?: string;
+    }
+  | {
+      readonly type: "tool_end";
+      readonly at: number;
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly summary?: string;
+      readonly isError: boolean;
+    }
+  | { readonly type: "message_update"; readonly at: number; readonly summary?: string }
+  | {
+      readonly type: "usage_update";
+      readonly at: number;
+      readonly tokens?: number;
+      readonly toolCalls?: number;
+    };
 
 export type WorkflowAgentRunner = (request: WorkflowAgentRunRequest) => Promise<unknown>;
 
@@ -268,6 +313,9 @@ export class WorkflowAgentScheduler {
         prompt: queued.prompt,
         options: queued.options,
         signal: queued.abortController.signal,
+        onEvent: (event) => {
+          this.#applyLiveEvent(queued.progressIndex, event);
+        },
       });
       if (!this.#stoppedAgents.has(queued.progressIndex)) {
         await started;
@@ -371,6 +419,14 @@ export class WorkflowAgentScheduler {
     return write;
   }
 
+  #applyLiveEvent(progressIndex: number, event: WorkflowAgentLiveEvent): void {
+    const current = this.#progress[progressIndex];
+    if (current === undefined || current.state !== "running") return;
+
+    this.#progress[progressIndex] = patchLiveEvent(current, event);
+    this.#emitProgress();
+  }
+
   #applyAgentEvent(progressIndex: number, event: Parameters<typeof transitionAgent>[1]): void {
     const result = transitionAgent(this.#progress[progressIndex]!, event);
     if (result.status === "error") throw new Error(result.error.message);
@@ -406,6 +462,101 @@ function serializeError(cause: unknown): { message: string; name?: string; stack
     return { message: cause.message, name: cause.name, stack: cause.stack };
   }
   return { message: String(cause) };
+}
+
+function patchLiveEvent(
+  agent: WorkflowAgentProgress,
+  event: WorkflowAgentLiveEvent,
+): WorkflowAgentProgress {
+  switch (event.type) {
+    case "sidechain_starting":
+      return patchActivity(agent, event, {
+        activityState: "starting",
+        lastEventType: event.type,
+        lastEventLabel: "creating sidechain",
+      });
+    case "agent_event":
+      return patchActivity(agent, event, {
+        activityState: event.activityState ?? "waiting_for_model",
+        lastEventType: event.eventType,
+        lastEventLabel: event.label,
+        turnCount: event.eventType === "turn_start" ? (agent.turnCount ?? 0) + 1 : agent.turnCount,
+      });
+    case "message_update":
+      return patchActivity(agent, event, {
+        activityState: "thinking",
+        lastEventType: event.type,
+        lastEventLabel: event.summary ?? "assistant message update",
+        messageUpdateCount: (agent.messageUpdateCount ?? 0) + 1,
+      });
+    case "tool_start":
+      return patchActivity(agent, event, {
+        activityState: "using_tool",
+        lastEventType: event.type,
+        lastEventLabel: `using ${event.toolName}`,
+        currentToolName: event.toolName,
+        currentToolCallId: event.toolCallId,
+        lastToolName: event.toolName,
+        lastToolSummary: event.summary,
+        toolCalls: (agent.toolCalls ?? 0) + 1,
+      });
+    case "tool_update":
+      return patchActivity(agent, event, {
+        activityState: "using_tool",
+        lastEventType: event.type,
+        lastEventLabel: `using ${event.toolName}`,
+        currentToolName: event.toolName,
+        currentToolCallId: event.toolCallId,
+        lastToolName: event.toolName,
+        lastToolSummary: event.summary ?? agent.lastToolSummary,
+      });
+    case "tool_end":
+      return patchActivity(agent, event, {
+        activityState: "waiting_for_model",
+        lastEventType: event.type,
+        lastEventLabel: event.isError ? `${event.toolName} failed` : `${event.toolName} finished`,
+        currentToolName: undefined,
+        currentToolCallId: undefined,
+        lastToolName: event.toolName,
+        lastToolSummary: event.summary ?? agent.lastToolSummary,
+        recentActivity: appendRecentActivity(agent.recentActivity, {
+          at: event.at,
+          label: event.isError ? `${event.toolName} failed` : `${event.toolName} finished`,
+          detail: event.summary,
+          toolName: event.toolName,
+          isError: event.isError,
+        }),
+      });
+    case "usage_update":
+      return patchActivity(agent, event, {
+        lastEventType: event.type,
+        lastEventLabel: "usage updated",
+        tokens: event.tokens ?? agent.tokens,
+        toolCalls: event.toolCalls ?? agent.toolCalls,
+      });
+  }
+}
+
+function patchActivity(
+  agent: WorkflowAgentProgress,
+  event: { readonly at: number },
+  patch: Partial<WorkflowAgentProgress>,
+): WorkflowAgentProgress {
+  return {
+    ...agent,
+    ...patch,
+    lastEventAt: event.at,
+    lastProgressAt: event.at,
+    observedLiveEvents: (agent.observedLiveEvents ?? 0) + 1,
+    telemetryAvailable: true,
+  };
+}
+
+function appendRecentActivity(
+  current: WorkflowAgentActivitySummary[] | undefined,
+  entry: WorkflowAgentActivitySummary,
+): WorkflowAgentActivitySummary[] {
+  return [...(current ?? []), entry].slice(-5);
 }
 
 function isTerminalAgent(agent: WorkflowAgentProgress): boolean {

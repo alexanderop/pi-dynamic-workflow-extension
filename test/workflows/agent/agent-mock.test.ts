@@ -551,6 +551,31 @@ describe("agent mock boundaries", () => {
     await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
     await expect(agents.runner("scan src", { label: "scan-agent" })).resolves.toBe("initial");
   });
+
+  it("should isolate inherited stateful handlers across concurrent boundaries", async () => {
+    const agents = setupAgentMock(
+      agent.label("once-agent").once().replyText("once"),
+      agent.label("once-agent").replyText("fallback"),
+      agent.label("poll-agent").replyWith(function* () {
+        yield AgentResponse.text("poll:first");
+        return AgentResponse.text("poll:done");
+      }),
+    );
+
+    const runBoundaryScenario = async () => {
+      const onceResult = await agents.runner("scan src", { label: "once-agent" });
+      const pollResult = await agents.runner("poll", { label: "poll-agent" });
+      return [onceResult, pollResult];
+    };
+
+    await expect(
+      Promise.all([agents.boundary(runBoundaryScenario), agents.boundary(runBoundaryScenario)]),
+    ).resolves.toEqual([
+      ["once", "poll:first"],
+      ["once", "poll:first"],
+    ]);
+    await expect(agents.runner("scan src", { label: "once-agent" })).resolves.toBe("once");
+  });
 });
 
 describe("agent fluent handlers", () => {
