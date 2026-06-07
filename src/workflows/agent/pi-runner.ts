@@ -10,7 +10,12 @@ import {
   createWorkflowStructuredOutputTool,
   WorkflowAgentSchemaError,
 } from "./structured-output-tool.ts";
-import type { WorkflowAgentRunRequest, WorkflowAgentRunner } from "./scheduler.ts";
+import type {
+  WorkflowAgentLiveEvent,
+  WorkflowAgentRunRequest,
+  WorkflowAgentRunner,
+} from "./scheduler.ts";
+import type { WorkflowAgentActivityState } from "./model.ts";
 
 export interface PiWorkflowAgentSession {
   readonly messages?: readonly unknown[];
@@ -23,6 +28,7 @@ export interface PiWorkflowAgentSession {
     text: string,
     options?: { readonly expandPromptTemplates?: boolean; readonly source?: "extension" },
   ): Promise<void>;
+  subscribe?(listener: (event: unknown) => void): () => void;
   abort(): void | Promise<void>;
   dispose(): void;
 }
@@ -71,6 +77,7 @@ async function runPiWorkflowAgent(
     currentModel: options.model,
     currentThinkingLevel: options.thinkingLevel,
   });
+  request.onEvent?.({ type: "sidechain_starting", at: Date.now() });
   const { session } = await (options.sessionFactory ?? defaultSessionFactory)({
     cwd: options.cwd,
     model: resolvedRouting.model,
@@ -78,6 +85,10 @@ async function runPiWorkflowAgent(
     modelRegistry: options.modelRegistry,
     sessionManager: SessionManager.inMemory(options.cwd),
     customTools: structuredOutputTool === undefined ? undefined : [structuredOutputTool],
+  });
+  const unsubscribe = session.subscribe?.((event) => {
+    const liveEvent = piSessionEventToWorkflowLiveEvent(event);
+    if (liveEvent !== undefined) request.onEvent?.(liveEvent);
   });
   const abort = () => {
     void session.abort();
@@ -112,6 +123,7 @@ async function runPiWorkflowAgent(
     return extractFinalAssistantText(session);
   } finally {
     request.signal.removeEventListener("abort", abort);
+    unsubscribe?.();
     session.dispose();
   }
 }
@@ -166,6 +178,85 @@ function structuredOutputInstructions(schema: unknown): string {
   ].join("\n");
 }
 
+const AGENT_EVENT_ACTIVITY: Record<
+  string,
+  { readonly label: string; readonly activityState: WorkflowAgentActivityState }
+> = {
+  agent_start: { label: "agent started", activityState: "starting" },
+  turn_start: { label: "waiting for model", activityState: "waiting_for_model" },
+  turn_end: { label: "turn completed", activityState: "finalizing" },
+  agent_end: { label: "agent finished", activityState: "finalizing" },
+};
+
+function piSessionEventToWorkflowLiveEvent(event: unknown): WorkflowAgentLiveEvent | undefined {
+  if (!isRecord(event) || typeof event.type !== "string") return undefined;
+  const at = Date.now();
+  const agentActivity = AGENT_EVENT_ACTIVITY[event.type];
+  if (agentActivity !== undefined) {
+    return { type: "agent_event", at, eventType: event.type, ...agentActivity };
+  }
+  switch (event.type) {
+    case "message_update":
+      return { type: "message_update", at, summary: messageUpdateSummary(event) };
+    case "tool_execution_start":
+      return {
+        type: "tool_start",
+        at,
+        toolCallId: stringField(event, "toolCallId") ?? "unknown",
+        toolName: stringField(event, "toolName") ?? "tool",
+        summary: summarizeUnknown(event.args),
+      };
+    case "tool_execution_update":
+      return {
+        type: "tool_update",
+        at,
+        toolCallId: stringField(event, "toolCallId") ?? "unknown",
+        toolName: stringField(event, "toolName") ?? "tool",
+        summary: summarizeUnknown(event.partialResult),
+      };
+    case "tool_execution_end":
+      return {
+        type: "tool_end",
+        at,
+        toolCallId: stringField(event, "toolCallId") ?? "unknown",
+        toolName: stringField(event, "toolName") ?? "tool",
+        summary: summarizeUnknown(event.result),
+        isError: event.isError === true,
+      };
+    default:
+      return undefined;
+  }
+}
+
+function messageUpdateSummary(event: Record<string, unknown>): string | undefined {
+  const assistantEvent = event.assistantMessageEvent;
+  if (isRecord(assistantEvent)) {
+    const text = stringField(assistantEvent, "text") ?? stringField(assistantEvent, "delta");
+    if (text !== undefined) return truncateSummary(text);
+    if (typeof assistantEvent.type === "string") return assistantEvent.type;
+  }
+  return undefined;
+}
+
+function summarizeUnknown(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return truncateSummary(value);
+  try {
+    return truncateSummary(JSON.stringify(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function truncateSummary(text: string): string {
+  return text.length <= 120 ? text : `${text.slice(0, 117)}…`;
+}
+
+function stringField(value: Record<string, unknown>, key: string): string | undefined {
+  const field = value[key];
+  return typeof field === "string" ? field : undefined;
+}
+
 function extractFinalAssistantText(session: PiWorkflowAgentSession): string {
   const messages = session.messages ?? session.agent?.state?.messages ?? [];
   const text = lastAssistantText(messages);
@@ -218,4 +309,8 @@ function isTextPart(value: unknown): value is { readonly type: "text"; readonly 
     "text" in value &&
     typeof value.text === "string"
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

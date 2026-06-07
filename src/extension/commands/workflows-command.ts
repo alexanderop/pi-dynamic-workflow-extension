@@ -23,6 +23,7 @@ import {
 import { prepareWorkflowNotification } from "#src/extension/workflow-notifications.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
+import { saveRunScript } from "#src/workflows/saved/save-run-script.ts";
 import { formatDuration } from "#src/workflows/view/layout.ts";
 import type {
   WorkflowSavedWorkflow,
@@ -125,6 +126,9 @@ export function registerWorkflowsCommand(
               (c) => c.stopAgent(runId, agentId),
             );
           },
+          onSaveRun: (runId) => {
+            void saveWorkflowRunScript(commandCtx, rootDir, runId);
+          },
         });
         return;
       }
@@ -145,6 +149,23 @@ function filterRunsForCurrentSession(
   const sessionId = currentSessionId(ctx);
   if (sessionId === undefined) return runs;
   return runs.filter((run) => run.sessionId === sessionId);
+}
+
+async function saveWorkflowRunScript(
+  ctx: WorkflowCommandContext,
+  rootDir: string,
+  runId: string,
+): Promise<void> {
+  const result = await saveRunScript(
+    { runId },
+    { rootDir, savedWorkflowDirs: ctx.savedWorkflowDirs },
+  );
+  if (result.status === "error") {
+    ctx.ui.notify(result.error.message, "error");
+    return;
+  }
+
+  ctx.ui.notify(`Saved workflow '${result.value.name}' to ${result.value.path}.`, "info");
 }
 
 async function resumeStoppedWorkflow(

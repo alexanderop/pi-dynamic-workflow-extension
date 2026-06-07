@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ import {
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import { ok } from "#src/workflows/result.ts";
-import { delay, fakePi, unwrap } from "../../support.ts";
+import { delay, fakePi, pathExists, unwrap } from "../../support.ts";
 
 vi.mock("#src/extension/tui/workflows-view.ts", () => ({
   showWorkflowsTui: vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined),
@@ -161,6 +161,35 @@ describe("registerWorkflowsCommand", () => {
     } finally {
       unregister();
     }
+  });
+
+  it("should save a completed run script when the TUI save callback is invoked", async () => {
+    const rootDir = join(tempDir, ".pi", "workflows");
+    const scriptPath = join(rootDir, "wf_test", "script.js");
+    const script =
+      "export const meta = { name: 'saved-audit', description: 'Saved audit' }\nreturn 'ok'\n";
+    await mkdir(join(rootDir, "wf_test"), { recursive: true });
+    await writeFile(scriptPath, script, "utf8");
+    await writeRunManifest(tempDir, runState({ status: "completed", scriptPath }));
+    const command = registerCommand();
+    const notify = vi.fn<(...args: unknown[]) => void>();
+
+    await command.handler("", {
+      cwd: tempDir,
+      mode: "tui",
+      hasUI: true,
+      ui: { custom: vi.fn<() => void>(), notify },
+    });
+
+    const tuiOptions = vi.mocked(showWorkflowsTui).mock.calls[0]?.[1] as
+      | ShowWorkflowsTuiOptions
+      | undefined;
+    tuiOptions?.onSaveRun?.("wf_test");
+    const savedPath = join(rootDir, "saved-audit.js");
+    await waitForPath(savedPath);
+
+    expect(await readFile(savedPath, "utf8")).toBe(script);
+    expect(notify).toHaveBeenCalledWith(`Saved workflow 'saved-audit' to ${savedPath}.`, "info");
   });
 
   it("should launch a successor run when resuming a stopped workflow from the TUI", async () => {
@@ -376,6 +405,14 @@ async function waitForRunStatus(
     await delay(1);
   }
   expect(unwrap(await store.readRun(runId)).status).toBe(status);
+}
+
+async function waitForPath(path: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await pathExists(path)) return;
+    await delay(1);
+  }
+  expect(await pathExists(path)).toBe(true);
 }
 
 async function waitForAgentStatus(

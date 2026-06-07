@@ -81,7 +81,11 @@ const runState = (overrides: Partial<WorkflowRunState> = {}): WorkflowRunState =
 
 const make = (
   runs: WorkflowRunState[],
-  options: Partial<{ onClose: () => void; savedWorkflowCount: number }> = {},
+  options: Partial<{
+    onClose: () => void;
+    onSaveRun: (runId: string) => void;
+    savedWorkflowCount: number;
+  }> = {},
 ): WorkflowsTuiComponent =>
   new WorkflowsTuiComponent({
     runs,
@@ -89,6 +93,7 @@ const make = (
     now: () => NOW,
     savedWorkflowCount: options.savedWorkflowCount,
     onClose: options.onClose,
+    onSaveRun: options.onSaveRun,
   });
 
 const hardeningRun = (): WorkflowRunState =>
@@ -737,6 +742,15 @@ describe("WorkflowsTuiComponent lifecycle", () => {
 
     expect(screen).toContain("new-flow");
     expect(screen).not.toContain("old-flow");
+  });
+
+  it("should call onSaveRun when the user presses s", () => {
+    const onSaveRun = vi.fn<(runId: string) => void>();
+    const component = make([runState({ runId: "wf_save" })], { onSaveRun });
+
+    component.handleInput("s");
+
+    expect(onSaveRun).toHaveBeenCalledWith("wf_save");
   });
 
   it("should call onClose when escape is pressed at the root", () => {

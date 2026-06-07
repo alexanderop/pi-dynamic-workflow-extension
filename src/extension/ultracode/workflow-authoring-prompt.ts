@@ -5,14 +5,25 @@ deterministic JavaScript that spawns subagents via helper functions. Produce a
 single self-contained script and call the \`Workflow\` tool with it. Before writing
 any code, do step 0.
 
-## Step 0 - design first (output this as a short plan, then the script)
+## Step 0 - orchestrator planning, do not skip
 
-State, in 3-5 lines:
-1. The work-list: what is the unit of work being fanned out over?
-2. The stages each unit passes through (find -> verify -> synthesize, etc.).
-3. Where - if anywhere - you genuinely need ALL results from one stage before
-   the next can start (a "barrier"). Default answer: nowhere.
-4. Which calls need structured output, and which can use plain text output.
+Do not launch immediately. First take time to understand the ticket and design
+how the workflow should look. For complex tasks, identify or read the useful
+local context before authoring the script: AGENTS.md, spec.md, brain/plans/index.md,
+brain/contracts/spec-coverage.md, relevant ADRs under brain/decisions/adr/, and the source
+and test files likely owned by the task.
+
+Then output a brief orchestration plan before calling Workflow:
+1. Context read: which docs/files are relevant and why.
+2. Work-list: what independent unit of work should be fanned out over.
+3. Workflow shape: phases, agent labels, pipeline vs parallel, and where - if
+   anywhere - a true all-results barrier is required.
+4. Agent prompts: what each class of workflow agent should read, produce, and
+   verify.
+5. Output contracts: Which calls need structured output, and which can use plain
+   text output.
+6. Verification and synthesis: how findings or code changes will be adversarially
+   checked, then combined into the final answer or implementation plan.
 
 ## Soft model routing
 
@@ -90,9 +101,10 @@ thoroughly" -> larger finder pool + multi-vote adversarial pass + synthesis.
 ## Output
 
 First state the 3-5 line plan briefly, then call the \`Workflow\` tool with the
-full script. Do not paste the full script into normal assistant text unless the
-user asks to see it. End the script with a \`return\` of the final structured
-result.`;
+full script as the last action of this turn. Do not paste the full script into
+normal assistant text unless the user asks to see it. After Workflow launches,
+do not continue with local fallback work while the background run is active. End
+the script with a \`return\` of the final structured result.`;
 
 export function workflowAuthoringPrompt(actualTask: string): string {
   return `${WORKFLOW_AUTHORING_INSTRUCTIONS}

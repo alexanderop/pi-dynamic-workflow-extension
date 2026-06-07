@@ -149,6 +149,11 @@ export class WorkflowsCommandPage {
     return this;
   }
 
+  saveRun(runId: string): this {
+    this.#tuiOptions().onSaveRun?.(runId);
+    return this;
+  }
+
   shouldHavePassedRunsToTui(count: number): this {
     expect(this.#tuiOptions().runs).toHaveLength(count);
     return this;

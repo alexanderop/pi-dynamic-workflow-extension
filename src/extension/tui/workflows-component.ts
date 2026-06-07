@@ -75,6 +75,7 @@ export interface WorkflowsTuiComponentOptions {
   readonly onResumeStoppedRun?: (runId: string) => void | Promise<void>;
   readonly onStopRun?: (runId: string) => void;
   readonly onStopAgent?: (runId: string, agentId: string) => void;
+  readonly onSaveRun?: (runId: string) => void;
 }
 
 const PROMPT_VISIBLE_ROWS = 15;
@@ -99,6 +100,7 @@ export class WorkflowsTuiComponent implements Component {
   #onResumeStoppedRun?: (runId: string) => void | Promise<void>;
   #onStopRun?: (runId: string) => void;
   #onStopAgent?: (runId: string, agentId: string) => void;
+  #onSaveRun?: (runId: string) => void;
   #pendingStop?: PendingStopConfirmation;
   #nav: MonitorNavigationState;
   #promptScroll = 0;
@@ -116,6 +118,7 @@ export class WorkflowsTuiComponent implements Component {
     this.#onResumeStoppedRun = options.onResumeStoppedRun;
     this.#onStopRun = options.onStopRun;
     this.#onStopAgent = options.onStopAgent;
+    this.#onSaveRun = options.onSaveRun;
     this.#nav = {
       ...initialMonitorNavigation(options.runs.length),
       selectedRunIndex: defaultChooserSelection(options.runs),
@@ -163,6 +166,8 @@ export class WorkflowsTuiComponent implements Component {
       this.#requestResumeStoppedConfirmation();
     } else if (data === "x") {
       this.#requestStopConfirmation();
+    } else if (data === "s") {
+      this.#handleSaveRun();
     }
 
     if (before !== this.#snapshot()) this.invalidate();
@@ -608,6 +613,12 @@ export class WorkflowsTuiComponent implements Component {
     if (run === undefined) return;
     if (canPauseRun(run.status)) this.#onPauseRun?.(run.runId);
     else if (canResumeRun(run.status)) this.#onResumeRun?.(run.runId);
+  }
+
+  #handleSaveRun(): void {
+    const run = this.#selectedRun();
+    if (run === undefined) return;
+    this.#onSaveRun?.(run.runId);
   }
 
   #requestStopConfirmation(): void {

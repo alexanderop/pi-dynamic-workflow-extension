@@ -348,6 +348,10 @@ Launch rules:
 - The launcher MUST start execution in the background.
 - The launcher MUST return the confirmation (carrying `taskId`, `runId`, and the
   script path) without waiting for completion.
+- In Pi, the model-facing `Workflow` tool SHOULD return a terminating tool result
+  after a successful launch so the orchestrator's current turn stops immediately
+  instead of continuing with local fallback work while the background workflow is
+  running.
 
 Initial run state MUST include:
 
@@ -885,7 +889,13 @@ While `ultracode` mode is `on`, the main agent SHOULD treat workflow
 orchestration as the default for substantive tasks. Trivial conversational turns
 and one-line mechanical edits MAY still be handled solo. The policy instruction
 SHOULD tell the agent to optimize for correctness over token cost and to
-adversarially verify findings before relying on them.
+adversarially verify findings before relying on them. For substantive or complex
+tasks, the policy SHOULD require an explicit orchestrator-planning step before
+calling `Workflow`: identify useful local context such as `AGENTS.md`, `spec.md`,
+`brain/plans/index.md`, `brain/contracts/spec-coverage.md`, relevant ADRs, and likely
+source/test files; then plan the workflow phases, fan-out units, agent prompt
+classes, structured-output contracts, pipeline/barrier choices, verification
+strategy, and synthesis path.
 
 The mode state machine SHOULD be restorable from Pi session entries through
 `ctx.sessionManager.getEntries()` on `session_start`. Direct bundled

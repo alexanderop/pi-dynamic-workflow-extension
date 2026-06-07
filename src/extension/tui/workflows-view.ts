@@ -14,6 +14,7 @@ export interface ShowWorkflowsTuiOptions {
   readonly onResumeStoppedRun?: (runId: string) => void | Promise<void>;
   readonly onStopRun?: (runId: string) => void;
   readonly onStopAgent?: (runId: string, agentId: string) => void;
+  readonly onSaveRun?: (runId: string) => void;
 }
 
 export async function showWorkflowsTui(
@@ -31,6 +32,7 @@ export async function showWorkflowsTui(
       onResumeStoppedRun: options.onResumeStoppedRun,
       onStopRun: options.onStopRun,
       onStopAgent: options.onStopAgent,
+      onSaveRun: options.onSaveRun,
     });
 
     let disposed = false;

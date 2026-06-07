@@ -17,9 +17,20 @@ class FakePiSession implements PiWorkflowAgentSession {
   });
   readonly abort = vi.fn<() => void>();
   readonly dispose = vi.fn<() => void>();
+  readonly unsubscribe = vi.fn<() => void>();
+  #listeners: Array<(event: unknown) => void> = [];
   promptText = "";
 
   constructor(private readonly onPrompt?: (text: string) => Promise<void> | void) {}
+
+  subscribe(listener: (event: unknown) => void): () => void {
+    this.#listeners.push(listener);
+    return this.unsubscribe;
+  }
+
+  emit(event: unknown): void {
+    for (const listener of this.#listeners) listener(event);
+  }
 }
 
 describe("createPiWorkflowAgentRunner", () => {
@@ -183,6 +194,49 @@ describe("createPiWorkflowAgentRunner", () => {
     await expect(running).rejects.toThrow("aborted");
     expect(session.abort).toHaveBeenCalledOnce();
     expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("should translate Pi AgentSession events into compact workflow live events", async () => {
+    const session = new FakePiSession(() => {
+      session.emit({ type: "turn_start" });
+      session.emit({
+        type: "tool_execution_start",
+        toolCallId: "tool_1",
+        toolName: "read",
+        args: { path: "src/index.ts" },
+      });
+      session.emit({
+        type: "tool_execution_end",
+        toolCallId: "tool_1",
+        toolName: "read",
+        result: "ok",
+        isError: false,
+      });
+      session.emit({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "working" },
+      });
+    });
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+    const onEvent = vi.fn<NonNullable<WorkflowAgentRunRequest["onEvent"]>>();
+
+    await runner(requestForTest({ onEvent }));
+
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "sidechain_starting" }));
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "agent_event", eventType: "turn_start" }),
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "tool_start", toolCallId: "tool_1", toolName: "read" }),
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "tool_end", toolCallId: "tool_1", toolName: "read" }),
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "message_update", summary: "working" }),
+    );
+    expect(session.unsubscribe).toHaveBeenCalledOnce();
   });
 
   it("should return captured structured output when the Pi subagent calls structured_output", async () => {

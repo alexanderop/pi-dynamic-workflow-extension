@@ -21,7 +21,11 @@ interface RegisteredTool {
     signal: AbortSignal | undefined,
     onUpdate: ((update: unknown) => void) | undefined,
     ctx: unknown,
-  ): Promise<{ content: Array<{ type: "text"; text: string }>; details: unknown }>;
+  ): Promise<{
+    content: Array<{ type: "text"; text: string }>;
+    details: unknown;
+    terminate?: boolean;
+  }>;
   renderCall(
     args: unknown,
     theme: RenderTheme,
@@ -88,6 +92,7 @@ describe("Workflow tool", () => {
     expect(tool?.description).toContain("heavy synthesis");
     expect(tool?.description).toContain("fall back to the current Pi model");
     expect(tool?.description).toContain("at most 4096 items");
+    expect(tool?.description).toContain("stop the current assistant turn");
     expect(tool?.description).not.toContain("nested workflow");
     expect(tool?.description).not.toContain("Do not pass schema yet");
   });
@@ -153,7 +158,24 @@ describe("Workflow tool", () => {
       .render(120)
       .join("\n");
     expect(authoringRender).toContain("authoring…");
-    expect(authoringRender).toContain("drafting inline script");
+    expect(authoringRender).toContain("drafting inline script · 150 chars · 3 lines");
+    expect(authoringRender).toContain("live preview:");
+    expect(authoringRender).toContain("1 │ export const meta");
+    expect(authoringRender).toContain("3 │ return 'ok'");
+
+    const longScript = Array.from({ length: 25 }, (_entry, index) =>
+      index === 24 ? `tail-${index} ${"x".repeat(200)}` : `line-${index}`,
+    ).join("\n");
+    const longAuthoringRender = tool
+      ?.renderCall({ script: longScript }, theme, { argsComplete: false })
+      .render(120)
+      .join("\n");
+    expect(longAuthoringRender).toContain("1 │ line-0");
+    expect(longAuthoringRender).toContain("…");
+    expect(longAuthoringRender).not.toContain("9 │ line-8");
+    expect(longAuthoringRender).toContain("25 │ tail-24");
+    expect(longAuthoringRender).not.toContain("x".repeat(200));
+
     expect(
       tool
         ?.renderCall({ script: validScript }, theme, {
@@ -178,7 +200,7 @@ describe("Workflow tool", () => {
     ).toContain("invalid before launch: Workflow meta.phases[0] must be an object.");
   });
 
-  it("should launch through launchWorkflow and ignore cosmetic title/description params", async () => {
+  it("should launch through launchWorkflow, ignore cosmetic title/description params, and terminate the current turn", async () => {
     let tool: RegisteredTool | undefined;
     const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
       async () =>
@@ -273,6 +295,7 @@ describe("Workflow tool", () => {
         scriptPath: "/repo/.pi/workflows/wf_test/script.js",
         transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
       },
+      terminate: true,
     });
   });
 

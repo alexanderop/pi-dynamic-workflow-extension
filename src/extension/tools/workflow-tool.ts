@@ -34,7 +34,9 @@ Available workflow globals: args, budget, agent(prompt, opts?), pipeline(items, 
 
 Default to pipeline() for multi-stage work. Use a parallel() barrier only when a stage genuinely needs all earlier results together, such as deduplication, global merge, zero-count early exit, or cross-item comparison. Filter null results defensively after parallel() or pipeline() stages that may fail. A single parallel() or pipeline() call accepts at most 4096 items.
 
-Concurrency is capped by the runtime, a workflow run has a lifetime agent limit, and budget.total is a hard ceiling for future agent() calls once spent. Use /workflows to watch live progress. A task notification is sent when the run completes or fails.`;
+Concurrency is capped by the runtime, a workflow run has a lifetime agent limit, and budget.total is a hard ceiling for future agent() calls once spent. Use /workflows to watch live progress. A task notification is sent when the run completes or fails.
+
+After Workflow launches successfully, stop the current assistant turn. Do not continue with fallback local work while the background workflow is running; wait for the workflow notification or the user's next message.`;
 
 const WorkflowToolParameters = Type.Object(
   {
@@ -118,6 +120,7 @@ export function registerWorkflowTool(
     promptGuidelines: [
       "Use Workflow only after explicit multi-agent opt-in, such as ultracode, a user request to use a workflow, or a skill that instructs workflow orchestration.",
       "When using Workflow, pass exactly one effective source: prefer scriptPath when iterating, otherwise script for a new self-contained workflow, otherwise name for a saved workflow.",
+      "After Workflow launches, do not continue with additional local work in the same assistant turn; the terminating tool result should hand control back while the background run proceeds.",
       'Workflow scripts must begin with a pure literal `export const meta = { ... }` block; `meta.phases` must be objects like `{ title: "Phase", detail: "...", model: "default", agentCount: 3, agents: [{ label: "phase:one" }] }` when planned context is known, never bare strings, and scripts must use pipeline() rather than parallel() unless a true barrier is needed.',
     ],
     parameters: WorkflowToolParameters,
@@ -162,6 +165,7 @@ export function registerWorkflowTool(
           scriptPath: launch.value.scriptPath,
           transcriptDir: launch.value.transcriptDir,
         } satisfies WorkflowToolDetails,
+        terminate: true,
       };
     },
     renderCall(args, theme, context) {
@@ -274,6 +278,10 @@ function workflowToolSourceDetails(
   return [theme.fg("dim", "  waiting for workflow source arguments…")];
 }
 
+const INLINE_SCRIPT_PREVIEW_HEAD_LINES = 8;
+const INLINE_SCRIPT_PREVIEW_TAIL_LINES = 12;
+const INLINE_SCRIPT_PREVIEW_LINE_MAX_CHARS = 160;
+
 function inlineScriptDetails(
   script: string,
   context: WorkflowToolRenderContext,
@@ -281,7 +289,7 @@ function inlineScriptDetails(
 ): string[] {
   const size = `${script.length.toLocaleString("en-US")} chars`;
   if (context.argsComplete === false) {
-    return [theme.fg("dim", `  drafting inline script · ${size}`)];
+    return inlineScriptAuthoringDetails(script, size, theme);
   }
 
   const parsed = tryParseWorkflowScript(script);
@@ -302,6 +310,55 @@ function inlineScriptDetails(
     lines.push(theme.fg("dim", `  phases: ${phases}`));
   }
   return lines;
+}
+
+function inlineScriptAuthoringDetails(
+  script: string,
+  size: string,
+  theme: WorkflowToolRenderTheme,
+): string[] {
+  const lines = script.split("\n");
+  const lineCount = `${lines.length.toLocaleString("en-US")} ${lines.length === 1 ? "line" : "lines"}`;
+  return [
+    theme.fg("dim", `  drafting inline script · ${size} · ${lineCount}`),
+    theme.fg("dim", "  live preview:"),
+    ...inlineScriptPreviewLines(lines, theme),
+  ];
+}
+
+function inlineScriptPreviewLines(lines: string[], theme: WorkflowToolRenderTheme): string[] {
+  const visible = selectInlineScriptPreviewLines(lines);
+  const lineNumberWidth = String(lines.length).length;
+  return visible.map((line) => {
+    if (line === "omitted") return theme.fg("dim", "    …");
+    const lineNumber = String(line.index + 1).padStart(lineNumberWidth, " ");
+    return theme.fg("dim", `    ${lineNumber} │ ${truncateInlineScriptPreviewLine(line.text)}`);
+  });
+}
+
+function truncateInlineScriptPreviewLine(line: string): string {
+  if (line.length <= INLINE_SCRIPT_PREVIEW_LINE_MAX_CHARS) return line;
+  return `${line.slice(0, INLINE_SCRIPT_PREVIEW_LINE_MAX_CHARS - 1)}…`;
+}
+
+function selectInlineScriptPreviewLines(
+  lines: string[],
+): Array<{ readonly index: number; readonly text: string } | "omitted"> {
+  const maxPreviewLines = INLINE_SCRIPT_PREVIEW_HEAD_LINES + INLINE_SCRIPT_PREVIEW_TAIL_LINES;
+  if (lines.length <= maxPreviewLines) {
+    return lines.map((text, index) => ({ index, text }));
+  }
+
+  const head = lines.slice(0, INLINE_SCRIPT_PREVIEW_HEAD_LINES).map((text, index) => ({
+    index,
+    text,
+  }));
+  const tailStart = lines.length - INLINE_SCRIPT_PREVIEW_TAIL_LINES;
+  const tail = lines.slice(tailStart).map((text, offset) => ({
+    index: tailStart + offset,
+    text,
+  }));
+  return [...head, "omitted", ...tail];
 }
 
 function formatWorkflowToolResult(
