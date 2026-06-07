@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How Flue runs agents headless (with just-bash)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+          mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html { scroll-behavior: smooth; }
+  body { background:#0a0b10; }
+  .glow { box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 20px 60px -20px rgba(56,189,248,.25); }
+  .card { background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015)); border:1px solid rgba(255,255,255,.08); }
+  .pill { border:1px solid rgba(255,255,255,.12); }
+  .fade-up { opacity:0; transform: translateY(18px); transition: all .6s cubic-bezier(.2,.7,.2,1); }
+  .fade-up.in { opacity:1; transform:none; }
+  .grid-bg {
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,.06) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .agent-dot { transition: all .35s cubic-bezier(.2,.7,.2,1); }
+  .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  .booting { animation: boot 1.6s ease-in-out infinite; }
+  @keyframes boot { 0%,100%{ opacity:.35 } 50%{ opacity:1 } }
+  ::selection { background: rgba(56,189,248,.35); }
+  .tab-active { background: rgba(56,189,248,.15); border-color: rgba(56,189,248,.5); color:#e0f2fe; }
+  .scroll-thin::-webkit-scrollbar{ width:8px;height:8px } .scroll-thin::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.12); border-radius:8px }
+</style>
+</head>
+<body class="font-sans text-slate-200 antialiased">
+
+<!-- ░░ HERO ░░ -->
+<header class="relative overflow-hidden grid-bg">
+  <div class="absolute inset-0 bg-gradient-to-b from-sky-500/10 via-transparent to-transparent pointer-events-none"></div>
+  <div class="max-w-5xl mx-auto px-6 pt-20 pb-14 relative">
+    <div class="inline-flex items-center gap-2 pill rounded-full px-3 py-1 text-xs text-sky-300 mb-6">
+      <span class="w-2 h-2 rounded-full bg-sky-400 blink"></span> visual explainer
+    </div>
+    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white leading-[1.05]">
+      How <span class="text-sky-400">Flue</span> runs agents<br/>
+      <span class="text-slate-400">headless</span>, with <span class="text-emerald-400">just-bash</span>.
+    </h1>
+    <p class="mt-6 text-lg text-slate-400 max-w-2xl">
+      No terminal. No human watching. Thousands of agents at once — each with its own
+      <em>fake</em> computer that lives in memory. Here's the whole idea, one scroll at a time.
+    </p>
+    <div class="mt-8 flex flex-wrap gap-3 text-sm">
+      <a href="#headless" class="pill rounded-lg px-4 py-2 hover:bg-white/5">1 · What "headless" means</a>
+      <a href="#problem" class="pill rounded-lg px-4 py-2 hover:bg-white/5">2 · The expensive problem</a>
+      <a href="#justbash" class="pill rounded-lg px-4 py-2 hover:bg-white/5">3 · The just-bash trick</a>
+      <a href="#you" class="pill rounded-lg px-4 py-2 hover:bg-white/5">4 · Why YOU don't need it</a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-6 pb-32 space-y-28">
+
+  <!-- ░░ 0 · THE TWO WORLDS ░░ -->
+  <section class="fade-up">
+    <p class="text-sky-400 font-semibold text-sm uppercase tracking-widest mb-3">Start here</p>
+    <h2 class="text-3xl font-bold text-white mb-2">Same engine. Two completely different chassis.</h2>
+    <p class="text-slate-400 mb-8 max-w-2xl">Flue and your Pi extension are built on the <span class="text-white">same agent engine</span>. The difference is <span class="text-white">where it runs and who's watching.</span> Hover each card.</p>
+    <div class="grid md:grid-cols-2 gap-5">
+      <!-- claude code style -->
+      <div class="card rounded-2xl p-6 hover:glow transition">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-amber-400/15 grid place-items-center text-xl">🧑‍💻</div>
+          <div>
+            <h3 class="font-semibold text-white">Your Pi extension / Claude Code</h3>
+            <p class="text-xs text-slate-500">interactive, on your machine</p>
+          </div>
+        </div>
+        <ul class="space-y-2 text-sm text-slate-300">
+          <li class="flex gap-2"><span class="text-amber-400">▸</span> A <b>human is present</b>, watching a TUI.</li>
+          <li class="flex gap-2"><span class="text-amber-400">▸</span> Runs on <b>your laptop</b>, in your real terminal.</li>
+          <li class="flex gap-2"><span class="text-amber-400">▸</span> The agent uses the <b>real bash + real files</b>.</li>
+          <li class="flex gap-2"><span class="text-amber-400">▸</span> Usually <b>one</b> session at a time.</li>
+        </ul>
+      </div>
+      <!-- flue style -->
+      <div class="card rounded-2xl p-6 hover:glow transition">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-sky-400/15 grid place-items-center text-xl">🤖</div>
+          <div>
+            <h3 class="font-semibold text-white">Flue</h3>
+            <p class="text-xs text-slate-500">headless, on a server</p>
+          </div>
+        </div>
+        <ul class="space-y-2 text-sm text-slate-300">
+          <li class="flex gap-2"><span class="text-sky-400">▸</span> <b>Nobody is watching.</b> No TUI, no screen.</li>
+          <li class="flex gap-2"><span class="text-sky-400">▸</span> Runs on a <b>server / Cloudflare / CI</b>.</li>
+          <li class="flex gap-2"><span class="text-sky-400">▸</span> The agent needs a <b>fake computer</b> handed to it.</li>
+          <li class="flex gap-2"><span class="text-sky-400">▸</span> Maybe <b>thousands</b> running at once.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ 1 · HEADLESS ░░ -->
+  <section id="headless" class="fade-up scroll-mt-8">
+    <p class="text-sky-400 font-semibold text-sm uppercase tracking-widest mb-3">Concept 1</p>
+    <h2 class="text-3xl font-bold text-white mb-2">"Headless" = a function you call, not an app you open.</h2>
+    <p class="text-slate-400 mb-8 max-w-2xl">
+      You don't <em>watch</em> a Flue agent. You <em>call</em> it like an API: a message goes in, a typed answer comes out. Press play.
+    </p>
+
+    <div class="card rounded-2xl p-6 md:p-8 glow">
+      <div class="grid md:grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-4 text-center">
+        <!-- request -->
+        <div id="hl-req" class="agent-dot card rounded-xl p-4">
+          <div class="text-2xl mb-1">📨</div>
+          <div class="text-xs text-slate-400">A message arrives</div>
+          <code class="text-[11px] text-sky-300 font-mono block mt-2">POST /agents/translator</code>
+          <code class="text-[11px] text-slate-500 font-mono block">{ text, language }</code>
+        </div>
+        <div class="text-slate-600 text-2xl hidden md:block">→</div>
+        <!-- agent -->
+        <div id="hl-agent" class="agent-dot card rounded-xl p-4">
+          <div class="text-2xl mb-1">🧠</div>
+          <div class="text-xs text-slate-400">Agent thinks & acts</div>
+          <div class="text-[11px] text-slate-500 mt-2">model + tools, no screen</div>
+        </div>
+        <div class="text-slate-600 text-2xl hidden md:block">→</div>
+        <!-- result -->
+        <div id="hl-res" class="agent-dot card rounded-xl p-4">
+          <div class="text-2xl mb-1">📦</div>
+          <div class="text-xs text-slate-400">Typed result returns</div>
+          <code class="text-[11px] text-emerald-300 font-mono block mt-2">{ translation,</code>
+          <code class="text-[11px] text-emerald-300 font-mono block">&nbsp;&nbsp;confidence }</code>
+        </div>
+      </div>
+      <div class="mt-6 flex items-center gap-3">
+        <button id="hl-play" class="rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold px-4 py-2 text-sm">▶ Run the agent</button>
+        <span id="hl-status" class="text-sm text-slate-500">idle — click run</span>
+      </div>
+    </div>
+    <p class="mt-4 text-sm text-slate-500">No human in this loop. That's the whole meaning of headless: it's <span class="text-slate-300">code calling code.</span></p>
+  </section>
+
+  <!-- ░░ 2 · THE PROBLEM ░░ -->
+  <section id="problem" class="fade-up scroll-mt-8">
+    <p class="text-rose-400 font-semibold text-sm uppercase tracking-widest mb-3">Concept 2 · the catch</p>
+    <h2 class="text-3xl font-bold text-white mb-2">But an agent needs a computer to <em>do</em> things.</h2>
+    <p class="text-slate-400 mb-6 max-w-2xl">
+      Agents run shell commands — <code class="font-mono text-slate-300">ls</code>, <code class="font-mono text-slate-300">grep</code>, <code class="font-mono text-slate-300">cat</code>, write files.
+      The obvious way to give each agent a safe place to do that is to <b>boot a real container or mini-VM per agent.</b>
+      That's fine for one. Now do it for a thousand.
+    </p>
+
+    <div class="card rounded-2xl p-6 md:p-8">
+      <div class="flex flex-wrap items-center gap-3 mb-5">
+        <span class="text-sm text-slate-400">Spawn agents the <b class="text-rose-300">heavy</b> way:</span>
+        <button data-spawn="container" class="spawn-btn rounded-lg bg-rose-500/90 hover:bg-rose-400 text-slate-950 font-semibold px-3 py-1.5 text-sm">+ 1 container</button>
+        <button data-spawn="container" data-many="50" class="spawn-btn rounded-lg pill hover:bg-white/5 px-3 py-1.5 text-sm">+ 50</button>
+        <button id="reset-c" class="rounded-lg pill hover:bg-white/5 px-3 py-1.5 text-sm text-slate-400">reset</button>
+      </div>
+      <div class="grid grid-cols-3 gap-3 text-center mb-5">
+        <div class="card rounded-xl p-3"><div class="text-2xl font-bold text-white" id="c-count">0</div><div class="text-xs text-slate-500">agents</div></div>
+        <div class="card rounded-xl p-3"><div class="text-2xl font-bold text-rose-300" id="c-ram">0<span class="text-sm font-normal">MB</span></div><div class="text-xs text-slate-500">RAM (~256MB each)</div></div>
+        <div class="card rounded-xl p-3"><div class="text-2xl font-bold text-amber-300" id="c-boot">0<span class="text-sm font-normal">s</span></div><div class="text-xs text-slate-500">boot time (~2s each)</div></div>
+      </div>
+      <div id="c-pool" class="flex flex-wrap gap-1.5 min-h-[64px] scroll-thin max-h-40 overflow-auto"></div>
+      <p class="mt-4 text-sm text-rose-300/90">🐢 Each box has to <b>boot an OS</b> before it can run a single command. Heavy, slow, and you pay for every one.</p>
+    </div>
+  </section>
+
+  <!-- ░░ 3 · JUST-BASH ░░ -->
+  <section id="justbash" class="fade-up scroll-mt-8">
+    <p class="text-emerald-400 font-semibold text-sm uppercase tracking-widest mb-3">Concept 3 · the trick</p>
+    <h2 class="text-3xl font-bold text-white mb-2">just-bash: skip the OS. Fake the computer in memory.</h2>
+    <p class="text-slate-400 mb-6 max-w-2xl">
+      just-bash is a <b class="text-white">pretend bash shell + a pretend filesystem</b>, written in TypeScript, living <b>inside the same process</b> as your app.
+      No OS to boot. The "filesystem" is just a JavaScript object in RAM. So spawning an agent's computer is basically free.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <!-- scale demo -->
+      <div class="card rounded-2xl p-6">
+        <div class="flex flex-wrap items-center gap-3 mb-5">
+          <span class="text-sm text-slate-400">Spawn the <b class="text-emerald-300">light</b> way:</span>
+          <button data-spawn="vbash" class="spawn-btn rounded-lg bg-emerald-500/90 hover:bg-emerald-400 text-slate-950 font-semibold px-3 py-1.5 text-sm">+ 1</button>
+          <button data-spawn="vbash" data-many="1000" class="spawn-btn rounded-lg pill hover:bg-white/5 px-3 py-1.5 text-sm">+ 1000</button>
+          <button id="reset-v" class="rounded-lg pill hover:bg-white/5 px-3 py-1.5 text-sm text-slate-400">reset</button>
+        </div>
+        <div class="grid grid-cols-3 gap-3 text-center mb-5">
+          <div class="card rounded-xl p-3"><div class="text-2xl font-bold text-white" id="v-count">0</div><div class="text-xs text-slate-500">agents</div></div>
+          <div class="card rounded-xl p-3"><div class="text-2xl font-bold text-emerald-300" id="v-ram">0<span class="text-sm font-normal">MB</span></div><div class="text-xs text-slate-500">RAM (~0.05MB each)</div></div>
+          <div class="card rounded-xl p-3"><div class="text-2xl font-bold text-emerald-300" id="v-boot">0<span class="text-sm font-normal">ms</span></div><div class="text-xs text-slate-500">boot (instant)</div></div>
+        </div>
+        <div id="v-pool" class="grid grid-cols-[repeat(auto-fill,minmax(8px,1fr))] gap-1 min-h-[64px] max-h-40 overflow-auto scroll-thin"></div>
+        <p class="mt-4 text-sm text-emerald-300/90">⚡ 1000 agents appear instantly — they're just objects in memory.</p>
+      </div>
+
+      <!-- live terminal -->
+      <div class="card rounded-2xl p-6">
+        <p class="text-sm text-slate-400 mb-3">Touch the "filesystem". This terminal is <b class="text-white">100% fake</b> — it's a JS object, exactly like just-bash. Click commands:</p>
+        <div class="flex flex-wrap gap-2 mb-3 text-xs">
+          <button class="term-cmd pill rounded px-2 py-1 hover:bg-white/5 font-mono" data-cmd='echo "hello world" > notes.txt'>echo &gt; notes.txt</button>
+          <button class="term-cmd pill rounded px-2 py-1 hover:bg-white/5 font-mono" data-cmd='cat notes.txt'>cat notes.txt</button>
+          <button class="term-cmd pill rounded px-2 py-1 hover:bg-white/5 font-mono" data-cmd='mkdir logs'>mkdir logs</button>
+          <button class="term-cmd pill rounded px-2 py-1 hover:bg-white/5 font-mono" data-cmd='echo "boot ok" > logs/run.log'>echo &gt; logs/run.log</button>
+          <button class="term-cmd pill rounded px-2 py-1 hover:bg-white/5 font-mono" data-cmd='ls'>ls</button>
+          <button class="term-cmd pill rounded px-2 py-1 hover:bg-white/5 font-mono" data-cmd='grep boot logs/run.log'>grep boot</button>
+        </div>
+        <div id="term" class="bg-black/60 rounded-xl border border-white/10 p-3 font-mono text-[12.5px] h-44 overflow-auto scroll-thin leading-relaxed">
+          <div class="text-slate-500"># a virtual shell over an in-memory FS</div>
+        </div>
+        <div class="mt-3 text-xs text-slate-500">FS state (the actual JS object): <code id="fs-json" class="text-emerald-300/80"></code></div>
+      </div>
+    </div>
+
+    <div class="mt-6 card rounded-2xl p-6">
+      <h3 class="font-semibold text-white mb-3">The honest tradeoff ⚖️</h3>
+      <div class="grid md:grid-cols-2 gap-4 text-sm">
+        <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <p class="text-emerald-300 font-semibold mb-1">Why it's great</p>
+          <p class="text-slate-300">Instant, tiny, scales to thousands, runs anywhere JS runs (even Cloudflare Workers). Network off by default.</p>
+        </div>
+        <div class="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <p class="text-amber-300 font-semibold mb-1">The catch</p>
+          <p class="text-slate-300">It runs <b>in your process</b> — it is <b>not</b> a hard security wall like a real VM. For untrusted/risky code, Flue tells you to use a real sandbox instead.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ░░ 4 · YOU ░░ -->
+  <section id="you" class="fade-up scroll-mt-8">
+    <p class="text-violet-400 font-semibold text-sm uppercase tracking-widest mb-3">Concept 4 · bringing it home</p>
+    <h2 class="text-3xl font-bold text-white mb-2">So... should <em>your</em> project use just-bash?</h2>
+    <div class="card rounded-2xl p-6 md:p-8 glow">
+      <div class="flex items-start gap-4">
+        <div class="text-4xl">🙅</div>
+        <div>
+          <p class="text-lg text-white font-semibold mb-2">No — and here's the one-line reason.</p>
+          <p class="text-slate-300 max-w-2xl">
+            Flue fakes a computer because <b>nobody's there and it runs a thousand strangers' agents on a server.</b>
+            Your Pi extension is the opposite: it runs <b>on the user's own machine, with the user right there.</b>
+            The agent already has a real shell and real files — <span class="text-violet-300">the user <em>is</em> the computer.</span>
+            There's no per-agent container cost to dodge, so there's nothing for just-bash to save.
+          </p>
+          <div class="mt-5 grid sm:grid-cols-3 gap-3 text-sm">
+            <div class="card rounded-xl p-3"><div class="text-violet-300 font-semibold mb-1">Flue's need</div><div class="text-slate-400">cheap sandbox × 1000, on a server</div></div>
+            <div class="card rounded-xl p-3"><div class="text-violet-300 font-semibold mb-1">Your reality</div><div class="text-slate-400">one user, real machine, real bash</div></div>
+            <div class="card rounded-xl p-3"><div class="text-violet-300 font-semibold mb-1">Your isolation tool</div><div class="text-slate-400">git <code class="font-mono">worktree</code>, when needed</div></div>
+          </div>
+          <p class="mt-5 text-sm text-slate-500">
+            (And note: just-bash is a fake <b>bash shell</b>. Your <code class="font-mono text-slate-300">node:vm</code> runs the workflow <b>orchestration script</b>. Different layers — not a swap.)
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-center text-xs text-slate-600 pt-6">
+    Built as a learning aid · numbers are illustrative, not benchmarks · open in any browser
+  </footer>
+</main>
+
+<script>
+/* ---------- scroll reveal ---------- */
+const io = new IntersectionObserver((es)=>es.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('in'); }), {threshold:.12});
+document.querySelectorAll('.fade-up').forEach(el=>io.observe(el));
+
+/* ---------- headless run animation ---------- */
+const hlBtn = document.getElementById('hl-play');
+const hlStatus = document.getElementById('hl-status');
+const stages = ['hl-req','hl-agent','hl-res'].map(id=>document.getElementById(id));
+const labels = ['📨 message received…','🧠 agent working (no screen, no human)…','📦 typed result returned ✓'];
+hlBtn.onclick = async ()=>{
+  hlBtn.disabled = true; hlBtn.classList.add('opacity-50');
+  stages.forEach(s=>s.style.outline='');
+  for(let i=0;i<stages.length;i++){
+    hlStatus.textContent = labels[i];
+    stages[i].style.outline = '2px solid rgba(56,189,248,.8)';
+    stages[i].style.transform='translateY(-6px) scale(1.03)';
+    await new Promise(r=>setTimeout(r,850));
+    stages[i].style.transform='';
+  }
+  hlStatus.innerHTML = '<span class="text-emerald-400">done — all without a human in the loop.</span>';
+  hlBtn.disabled = false; hlBtn.classList.remove('opacity-50');
+};
+
+/* ---------- container (heavy) pool ---------- */
+let cN=0; const cPool=document.getElementById('c-pool');
+function renderC(){
+  document.getElementById('c-count').textContent=cN;
+  document.getElementById('c-ram').innerHTML=(cN*256).toLocaleString()+'<span class="text-sm font-normal">MB</span>';
+  document.getElementById('c-boot').innerHTML=(cN*2)+'<span class="text-sm font-normal">s</span>';
+}
+function addContainer(){
+  const d=document.createElement('div');
+  d.className='agent-dot booting w-7 h-7 rounded-md bg-rose-500/40 border border-rose-400/40 grid place-items-center text-[9px] text-rose-100';
+  d.textContent='OS';
+  cPool.appendChild(d);
+  setTimeout(()=>{ d.classList.remove('booting'); d.classList.replace('bg-rose-500/40','bg-rose-500/70'); d.textContent='✓'; }, 1600);
+}
+document.querySelectorAll('[data-spawn="container"]').forEach(b=>b.onclick=()=>{
+  const n=parseInt(b.dataset.many||'1',10);
+  for(let i=0;i<n;i++){ cN++; addContainer(); } renderC();
+});
+document.getElementById('reset-c').onclick=()=>{ cN=0; cPool.innerHTML=''; renderC(); };
+
+/* ---------- vbash (light) pool ---------- */
+let vN=0; const vPool=document.getElementById('v-pool');
+function renderV(){
+  document.getElementById('v-count').textContent=vN.toLocaleString();
+  document.getElementById('v-ram').innerHTML=(vN*0.05).toFixed(1)+'<span class="text-sm font-normal">MB</span>';
+  document.getElementById('v-boot').innerHTML='0<span class="text-sm font-normal">ms</span>';
+}
+document.querySelectorAll('[data-spawn="vbash"]').forEach(b=>b.onclick=()=>{
+  const n=parseInt(b.dataset.many||'1',10);
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<n;i++){ vN++; const d=document.createElement('div'); d.className='w-2 h-2 rounded-sm bg-emerald-400/80'; frag.appendChild(d); }
+  vPool.appendChild(frag); renderV();
+});
+document.getElementById('reset-v').onclick=()=>{ vN=0; vPool.innerHTML=''; renderV(); };
+
+/* ---------- tiny fake bash over an in-memory FS (just-bash in miniature) ---------- */
+const FS = {};                                  // <-- the "filesystem" is literally this object
+const term = document.getElementById('term');
+const fsJson = document.getElementById('fs-json');
+function refreshFs(){ fsJson.textContent = JSON.stringify(FS); }
+refreshFs();
+function out(html, cls='text-slate-300'){ const l=document.createElement('div'); l.className=cls; l.innerHTML=html; term.appendChild(l); term.scrollTop=term.scrollHeight; }
+function run(cmd){
+  out('<span class="text-emerald-400">$</span> '+cmd.replace(/</g,'&lt;'));
+  let m;
+  if((m=cmd.match(/^echo\s+"([^"]*)"\s*>\s*(.+)$/))){ FS[m[2].trim()]=m[1]; }
+  else if((m=cmd.match(/^cat\s+(.+)$/))){ const f=FS[m[1].trim()]; out(f!==undefined?f:'cat: '+m[1].trim()+': No such file', f!==undefined?'text-slate-200':'text-rose-400'); }
+  else if((m=cmd.match(/^mkdir\s+(.+)$/))){ FS[m[1].trim()+'/']=true; }
+  else if(cmd.trim()==='ls'){ const k=Object.keys(FS); out(k.length?k.join('  '):'(empty)','text-sky-300'); }
+  else if((m=cmd.match(/^grep\s+(\S+)\s+(.+)$/))){ const f=FS[m[2].trim()]; if(f===undefined){ out('grep: '+m[2].trim()+': No such file','text-rose-400'); } else { const hit=String(f).split('\n').filter(x=>x.includes(m[1])); out(hit.length?hit.join('\n'):'(no match)', hit.length?'text-amber-200':'text-slate-500'); } }
+  else { out('command not in this tiny demo','text-slate-500'); }
+  refreshFs();
+}
+document.querySelectorAll('.term-cmd').forEach(b=>b.onclick=()=>run(b.dataset.cmd));
+
+renderC(); renderV();
+</script>
+</body>
+</html>

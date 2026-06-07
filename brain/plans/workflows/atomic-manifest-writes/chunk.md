@@ -1,3 +1,12 @@
+---
+title: Atomic Manifest Writes
+status: partial
+priority: P4
+last_audited: 2026-06-07
+implementation: "Manifest writes use temp-file then rename in src/workflows/run/store.ts; journal replay still parses every non-empty line and does not yet tolerate a partial trailing JSONL fragment."
+next: "Finish partial-trailing-line journal recovery and add focused filesystem tests."
+---
+
 # Chunk: Atomic Manifest Writes
 
 ## Goal

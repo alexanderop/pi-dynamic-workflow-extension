@@ -1,3 +1,12 @@
+---
+title: Testing DSL And Page-Object Specification
+status: partial
+priority: P1
+last_audited: 2026-06-07
+implementation: "Builders, workflowScenario, workflowsCommandPage, workflowsScreen, and related page-object tests exist; restartAgent screen actions, saved-workflow-scenario, and richer journal assertions remain."
+next: "Finish the remaining page-object helpers before broadening monitor/live-feedback tests."
+---
+
 # Testing DSL And Page-Object Specification
 
 ## Purpose

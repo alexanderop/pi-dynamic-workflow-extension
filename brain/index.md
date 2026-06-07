@@ -1,6 +1,8 @@
 # Brain
 
 ## Codebase
+- [[codebase/pi-tool-api-gotchas]]
+- [[codebase/structured-output-retry-reference]]
 - [[codebase/workflow-feature-flag-warnings]]
 - [[codebase/workflow-model-policy-direction]]
 
@@ -51,10 +53,13 @@
 - [[plans/workflows/align-with-pi/plan]]
 - [[plans/workflows/atomic-manifest-writes/chunk]]
 - [[plans/workflows/feature-flags/spec]]
+- [[plans/workflows/flue-harness-improvements/spec]]
 - [[plans/workflows/live-feedback/spec]]
 - [[plans/workflows/saved-workflow-scopes/spec]]
+- [[plans/workflows/saved-workflow-slash-commands/spec]]
 - [[plans/workflows/sidechain-transcripts/spec]]
 - [[plans/workflows/structured-output-retry/chunk]]
+- [[plans/workflows/structured-output-retry/spec]]
 - [[plans/workflows/test-page-objects/spec]]
 - [[plans/workflows/workflows-monitor/plan]]
 - [[plans/workflows/workflows-monitor/ticket]]

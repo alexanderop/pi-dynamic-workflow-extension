@@ -1,3 +1,12 @@
+---
+title: MSW-Style Agent Mock Developer Experience Specification
+status: implemented
+priority: P6
+last_audited: 2026-06-07
+implementation: "Implemented in test/workflows/agent/agent-mock.ts with setupDefaultAgentTestServer(...) and scoped agents.boundary(...) coverage."
+next: "No planned implementation gap; extend only when new testing boundary behavior is needed."
+---
+
 # MSW-Style Agent Mock Developer Experience Specification
 
 ## Purpose

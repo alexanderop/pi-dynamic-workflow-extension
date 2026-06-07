@@ -1,3 +1,12 @@
+---
+title: Saved-Workflow Storage Scopes
+status: blocked
+priority: P8
+last_audited: 2026-06-07
+implementation: "Not implemented; current code and ADR 0009 intentionally keep saved workflows project/workspace-local only."
+next: "Revisit ADR 0009 before reintroducing user-home saved workflow scope."
+---
+
 # Saved-Workflow Storage: Align with Claude Code (.pi Namespace)
 
 ## 1. Purpose

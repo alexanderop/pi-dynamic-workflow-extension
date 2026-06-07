@@ -1,3 +1,12 @@
+---
+title: Workflow Feature Flags Spec
+status: implemented
+priority: P6
+last_audited: 2026-06-07
+implementation: "Feature registry, config/session/env/CLI resolution, /workflows features, manifest persistence, and default-off experimental model routing are implemented and covered."
+next: "No active implementation gap beyond the documented Pi limitation for explicit CLI false provenance."
+---
+
 # Workflow Feature Flags Spec
 
 ## Purpose

@@ -29,18 +29,21 @@ packages.
 For every real Pi workflow subagent with `options.schema`, register a per-agent
 custom tool named `structured_output`.
 
-The tool must:
+The tool bundle must:
 
-- use the workflow schema as its Pi tool parameter schema;
-- reject non-object top-level schemas before session launch, because Pi tool
-  parameters must be object-shaped;
-- capture the validated `params` passed into `execute()`;
-- return the captured object in `details`;
-- return `terminate: true`.
+- use object-shaped workflow schemas directly as Pi tool parameter schemas;
+- wrap non-object workflow schemas as `{ result: <schema> }` because Pi tool
+  parameters must be object-shaped, then unwrap the returned value for `agent()`;
+- capture the first validated `structured_output` params passed into `execute()`;
+- return the captured tool arguments in `details`;
+- return `terminate: true` for the first successful `structured_output` call;
+- also expose a terminating `give_up` tool that captures a non-empty reason and
+  fails the workflow agent with `WorkflowAgentSchemaError`.
 
-The subagent prompt must state that structured output is required and that the
-final action must be a `structured_output` tool call. If the session completes
-without a captured tool call, the workflow agent fails with a schema error.
+The subagent prompt must put structured-output instructions after the assigned
+work so the result-tool protocol is the final instruction. If the session
+completes without `structured_output` or `give_up`, the runner sends up to two
+same-session nudges before final schema failure.
 
 The accepted long-term policy is bounded correction before final failure:
 
@@ -62,9 +65,10 @@ Journal behavior follows ADR 0008:
   correction policy is exhausted;
 - never cache prose fallback output for an `agent({ schema })` call.
 
-Current implementation status: the Pi runner already registers and captures the
-terminating `structured_output` tool and fails if the tool is missing. The bounded
-nudge policy is accepted here but remains a follow-up implementation slice.
+Current implementation status: the Pi runner registers the terminating
+`structured_output`/`give_up` bundle, wraps non-object schemas, captures and
+unwraps successful output, emits live retry events, and sends exactly two
+same-session nudges before final schema failure.
 
 ## Consequences
 
@@ -72,7 +76,7 @@ nudge policy is accepted here but remains a follow-up implementation slice.
   parallel structured-response transport.
 - Structured-output results are auditable as normal Pi tool calls and tool
   results.
-- Plain JavaScript workflow schemas remain usable without TypeBox imports.
+- Plain JavaScript workflow schemas remain usable without TypeBox imports, including array and scalar result schemas through an envelope.
 - Pi's argument validation owns the exact validation/coercion behavior for tool
   parameters. If the extension needs stricter launch-time schema validation, that
   should be added explicitly before session creation.

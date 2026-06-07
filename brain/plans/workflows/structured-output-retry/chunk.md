@@ -1,3 +1,12 @@
+---
+title: Structured Output Retry ADR Chunk
+status: implemented
+priority: P6
+last_audited: 2026-06-07
+implementation: "Superseded by the implemented structured-output-retry spec and accepted ADR 0014."
+next: "Keep for historical chunk context; no active work remains in this file."
+---
+
 # Chunk: Structured Output Retry ADR
 
 ## Goal

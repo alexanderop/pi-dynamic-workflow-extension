@@ -1,3 +1,12 @@
+---
+title: Live Workflow Feedback And Accurate Activity States
+status: partial
+priority: P2
+last_audited: 2026-06-07
+implementation: "Slices A-D are implemented: honest no-telemetry labels, phase/agent dedupe, fake-runner live events, and real Pi AgentSession.subscribe() mapping."
+next: "Implement throttled manifest persistence for live events and a richer detail activity timeline."
+---
+
 # Spec: Live Workflow Feedback And Accurate Activity States
 
 ## Status

@@ -1,3 +1,12 @@
+---
+title: Align With Pi Author Conventions
+status: partial
+priority: P7
+last_audited: 2026-06-07
+implementation: "W1 docs/process items are largely present: AGENTS.md has Git rules, CHANGELOG.md has Unreleased, and ADR 0013/0014 statuses are normalized; later structural workstreams remain planned."
+next: "Continue with the remaining W2-W6 workstreams only when convention alignment is the active goal."
+---
+
 # Refactor plan: align with pi author conventions
 
 Review-first plan. No code changes are applied by this document.

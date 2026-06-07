@@ -1,3 +1,12 @@
+---
+title: Make Workflows Match The Claude Code Workflow Monitor
+status: partial
+priority: P2
+last_audited: 2026-06-07
+implementation: "The current TUI has monitor foundations and several user actions, but the full spec §24 four-state experience is not complete."
+next: "Use the implementation plan in this folder as the source for the remaining monitor work."
+---
+
 # Ticket: Make `/workflows` match the Claude Code workflow monitor
 
 ## Status

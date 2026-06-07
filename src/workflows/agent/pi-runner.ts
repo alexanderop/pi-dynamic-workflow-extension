@@ -7,8 +7,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { resolveWorkflowModelHint } from "#src/workflows/model-routing/resolve.ts";
 import {
-  createWorkflowStructuredOutputTool,
+  createWorkflowStructuredOutputToolBundle,
   WorkflowAgentSchemaError,
+  type WorkflowStructuredOutputToolBundle,
 } from "./structured-output-tool.ts";
 import type {
   WorkflowAgentLiveEvent,
@@ -59,15 +60,10 @@ async function runPiWorkflowAgent(
   request: WorkflowAgentRunRequest,
   options: PiWorkflowAgentRunnerOptions,
 ): Promise<unknown> {
-  let structuredOutput: unknown;
-  let hasStructuredOutput = false;
-  const structuredOutputTool =
+  const structuredOutputBundle =
     request.options.schema === undefined
       ? undefined
-      : createWorkflowStructuredOutputTool(request.options.schema, (value) => {
-          structuredOutput = value;
-          hasStructuredOutput = true;
-        });
+      : createWorkflowStructuredOutputToolBundle(request.options.schema);
 
   const availableModels = options.modelRegistry?.getAll();
   const resolvedRouting = resolveWorkflowModelHint({
@@ -84,7 +80,8 @@ async function runPiWorkflowAgent(
     thinkingLevel: resolvedRouting.thinkingLevel,
     modelRegistry: options.modelRegistry,
     sessionManager: SessionManager.inMemory(options.cwd),
-    customTools: structuredOutputTool === undefined ? undefined : [structuredOutputTool],
+    customTools:
+      structuredOutputBundle === undefined ? undefined : [...structuredOutputBundle.tools],
   });
   const unsubscribe = session.subscribe?.((event) => {
     const liveEvent = piSessionEventToWorkflowLiveEvent(event);
@@ -102,22 +99,14 @@ async function runPiWorkflowAgent(
 
   request.signal.addEventListener("abort", abort, { once: true });
   try {
-    await session.prompt(buildPiSubagentPrompt(request), {
-      expandPromptTemplates: false,
-      source: "extension",
-    });
+    await promptOrThrowIfAborted(
+      session,
+      buildPiSubagentPrompt(request, structuredOutputBundle?.toolSchema),
+      request,
+    );
 
-    if (request.signal.aborted) {
-      throw new Error(`Workflow agent '${request.agentId}' was aborted.`);
-    }
-
-    if (request.options.schema !== undefined) {
-      if (!hasStructuredOutput) {
-        throw new WorkflowAgentSchemaError(
-          "Pi workflow subagent finished without calling structured_output.",
-        );
-      }
-      return structuredOutput;
+    if (structuredOutputBundle !== undefined) {
+      return await finishStructuredOutputAgent(session, request, structuredOutputBundle);
     }
 
     return extractFinalAssistantText(session);
@@ -144,7 +133,10 @@ async function defaultSessionFactory(
   })) as PiWorkflowAgentSessionFactoryResult;
 }
 
-function buildPiSubagentPrompt(request: WorkflowAgentRunRequest): string {
+function buildPiSubagentPrompt(
+  request: WorkflowAgentRunRequest,
+  structuredOutputToolSchema?: unknown,
+): string {
   const lines = [
     "You are a dynamic-workflow subagent running in an isolated Pi sidechain.",
     "Complete only the assigned task below and return the final result concisely.",
@@ -156,24 +148,81 @@ function buildPiSubagentPrompt(request: WorkflowAgentRunRequest): string {
     request.options.agentType === undefined
       ? undefined
       : `Agent type: ${request.options.agentType}`,
-    request.options.schema === undefined
-      ? undefined
-      : structuredOutputInstructions(request.options.schema),
     "",
     "Assigned task:",
     request.prompt,
+    structuredOutputToolSchema === undefined
+      ? undefined
+      : structuredOutputInstructions(structuredOutputToolSchema),
   ];
 
   return lines.filter((line): line is string => line !== undefined).join("\n");
+}
+
+const STRUCTURED_OUTPUT_NUDGE_LIMIT = 2;
+
+async function finishStructuredOutputAgent(
+  session: PiWorkflowAgentSession,
+  request: WorkflowAgentRunRequest,
+  bundle: WorkflowStructuredOutputToolBundle,
+): Promise<unknown> {
+  for (let nudgesSent = 0; nudgesSent <= STRUCTURED_OUTPUT_NUDGE_LIMIT; nudgesSent += 1) {
+    const outcome = bundle.getOutcome();
+    if (outcome.type === "finished") return outcome.value;
+    if (outcome.type === "gave_up") {
+      throw new WorkflowAgentSchemaError(`Pi workflow subagent called give_up: ${outcome.reason}`);
+    }
+
+    if (nudgesSent === STRUCTURED_OUTPUT_NUDGE_LIMIT) break;
+    request.onEvent?.({
+      type: "agent_event",
+      at: Date.now(),
+      eventType: "structured_output_retry",
+      label: `structured output missing; nudge ${nudgesSent + 1}/${STRUCTURED_OUTPUT_NUDGE_LIMIT}`,
+      activityState: "waiting_for_model",
+    });
+    await promptOrThrowIfAborted(session, buildStructuredOutputFollowUpPrompt(), request);
+  }
+
+  throw new WorkflowAgentSchemaError(
+    `Pi workflow subagent finished without calling structured_output after ${STRUCTURED_OUTPUT_NUDGE_LIMIT} nudges.`,
+  );
+}
+
+async function promptOrThrowIfAborted(
+  session: PiWorkflowAgentSession,
+  prompt: string,
+  request: WorkflowAgentRunRequest,
+): Promise<void> {
+  if (request.signal.aborted) {
+    throw new Error(`Workflow agent '${request.agentId}' was aborted.`);
+  }
+  await session.prompt(prompt, {
+    expandPromptTemplates: false,
+    source: "extension",
+  });
+  if (request.signal.aborted) {
+    throw new Error(`Workflow agent '${request.agentId}' was aborted.`);
+  }
+}
+
+export function buildStructuredOutputFollowUpPrompt(): string {
+  return [
+    "You ended your turn without calling `structured_output` or `give_up`.",
+    "Either call `structured_output` with your final answer, or call `give_up` with a reason if you cannot produce valid structured output.",
+    "Plain text does not count as a result.",
+  ].join("\n");
 }
 
 function structuredOutputInstructions(schema: unknown): string {
   return [
     "",
     "Structured output is required.",
-    "When you finish the assigned task, call the structured_output tool as your final action.",
-    "Do not answer with prose instead of calling structured_output.",
-    "The structured_output arguments must satisfy this JSON schema:",
+    "When the task is complete, call `structured_output` with your final answer as its arguments.",
+    "The arguments are validated against the required schema; if validation fails you may receive an error and try again.",
+    "If you cannot complete the task or cannot produce valid structured output, call `give_up` with a clear reason.",
+    "Do not answer with prose instead of calling `structured_output`; plain text does not count.",
+    "The `structured_output` arguments must satisfy this JSON schema:",
     JSON.stringify(schema, null, 2),
   ].join("\n");
 }

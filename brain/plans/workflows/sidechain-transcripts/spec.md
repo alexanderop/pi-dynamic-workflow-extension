@@ -1,3 +1,12 @@
+---
+title: Agent Transcript Replay View
+status: proposed
+priority: P3
+last_audited: 2026-06-07
+implementation: "Not implemented; ADR 0018 is proposed and the real Pi runner still uses SessionManager.inMemory(...)."
+next: "Thread transcriptDir to the runner, persist Pi-native sidechain sessions, then add the raw transcript drill-down view."
+---
+
 # Spec: Agent Transcript Replay View
 
 ## Status

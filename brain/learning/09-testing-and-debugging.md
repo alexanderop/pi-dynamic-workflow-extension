@@ -216,6 +216,29 @@ Run:
 pnpm test test/extension/index.test.ts test/workflows/run/store.test.ts
 ```
 
+## Debugging Pi structured-output tool agents
+
+The real Pi runner uses custom tools for `agent({ schema })`; there is no separate provider response-format API in this project.
+
+Key lessons from the structured-output retry fix:
+
+- The schema is only the contract. It is not a result. The runner has no structured value until Pi validates a `structured_output` tool call and passes its arguments into `execute()`.
+- Pi tool parameters must be top-level objects. If a workflow schema is an array, scalar, union, or other non-object shape, expose the Pi tool as `{ result: <schema> }` and unwrap `result` for the workflow return value.
+- A successful schema agent should end through a terminating `structured_output` tool result. A model that responds in prose has not produced a valid result.
+- Missing result-tool calls are handled with same-session follow-up prompts, not by spawning a new workflow agent. This keeps one journal key and one transcript for the attempt.
+- The retry loop must check `request.signal` before and after every `session.prompt(...)`, then dispose the sidechain exactly once in `finally`.
+- Test this with fake Pi sessions: capture the `customTools` passed to `sessionFactory`, call `customTools.find(tool => tool.name === "structured_output")?.execute(...)`, and assert the runner returns the captured value.
+- Also test the negative paths: two missing-output nudges, `give_up`, envelope schemas, duplicate result-tool calls, and abort during a retry.
+
+Relevant files:
+
+```text
+src/workflows/agent/pi-runner.ts
+src/workflows/agent/structured-output-tool.ts
+test/workflows/agent/pi-runner.test.ts
+test/workflows/agent/structured-output-tool.test.ts
+```
+
 ## Fake-agent first rule
 
 Do not add live model tests for behavior that can be tested with fake agents.

@@ -1,3 +1,12 @@
+---
+title: Rebuild The Pi Workflows TUI
+status: partial
+priority: P2
+last_audited: 2026-06-07
+implementation: "Projection, layout, navigation, command page objects, TUI adapter tests, chooser/detail/prompt foundations, save-run action, and stopped-run resume affordance exist."
+next: "Complete the spec §24 four-state monitor rebuild and keep all actions behind controller/projection boundaries."
+---
+
 # Implementation Plan — Rebuild the Pi `/workflows` TUI (spec §24)
 
 Single source of truth for rebuilding `/workflows` into the four-state monitor of

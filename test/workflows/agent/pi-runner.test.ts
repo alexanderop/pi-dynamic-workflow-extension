@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import {
+  buildStructuredOutputFollowUpPrompt,
   createPiWorkflowAgentRunner,
   type PiWorkflowAgentSession,
   type PiWorkflowAgentSessionFactory,
@@ -10,18 +11,33 @@ import type { WorkflowAgentRunRequest } from "#src/workflows/agent/scheduler.ts"
 
 class FakePiSession implements PiWorkflowAgentSession {
   readonly messages: unknown[] = [];
-  readonly prompt = vi.fn<(text: string, options?: unknown) => Promise<void>>(async (text) => {
-    this.promptText = text;
-    await this.onPrompt?.(text);
-    this.messages.push({ role: "assistant", content: [{ type: "text", text: "subagent result" }] });
-  });
+  readonly prompt = vi.fn<(text: string, options?: unknown) => Promise<void>>(
+    async (text, options) => {
+      this.promptText = text;
+      this.promptTexts.push(text);
+      this.promptOptions.push(options);
+      await this.onPrompt?.(text, options, this.promptTexts.length - 1);
+      this.messages.push({
+        role: "assistant",
+        content: [{ type: "text", text: "subagent result" }],
+      });
+    },
+  );
   readonly abort = vi.fn<() => void>();
   readonly dispose = vi.fn<() => void>();
   readonly unsubscribe = vi.fn<() => void>();
   #listeners: Array<(event: unknown) => void> = [];
   promptText = "";
+  readonly promptTexts: string[] = [];
+  readonly promptOptions: unknown[] = [];
 
-  constructor(private readonly onPrompt?: (text: string) => Promise<void> | void) {}
+  constructor(
+    private readonly onPrompt?: (
+      text: string,
+      options: unknown,
+      callIndex: number,
+    ) => Promise<void> | void,
+  ) {}
 
   subscribe(listener: (event: unknown) => void): () => void {
     this.#listeners.push(listener);
@@ -266,18 +282,116 @@ describe("createPiWorkflowAgentRunner", () => {
     );
 
     expect(result).toEqual(structuredResult);
-    expect(sessionOptions?.customTools).toHaveLength(1);
+    expect(sessionOptions?.customTools).toHaveLength(2);
     expect(sessionOptions?.customTools?.[0]).toMatchObject({
       name: "structured_output",
       parameters: schema,
     });
+    expect(sessionOptions?.customTools?.[1]).toMatchObject({ name: "give_up" });
+    expect(session.promptText).toContain("Assigned task:\ndo work");
     expect(session.promptText).toContain("Structured output is required.");
     expect(session.promptText).toContain(JSON.stringify(schema, null, 2));
+    expect(session.promptText.indexOf("Assigned task:")).toBeLessThan(
+      session.promptText.indexOf("Structured output is required."),
+    );
   });
 
-  it("should fail schema agents when the Pi subagent finishes without structured_output", async () => {
+  it("should nudge once when structured output is missing and then return the captured result", async () => {
+    const schema = { type: "object", properties: { ok: { type: "boolean" } } };
+    let sessionOptions: CreateAgentSessionOptions | undefined;
+    const session = new FakePiSession(async (_text, _options, callIndex) => {
+      if (callIndex !== 1) return;
+      const structuredOutput = sessionOptions?.customTools?.find(
+        (tool) => tool.name === "structured_output",
+      );
+      if (structuredOutput === undefined) throw new Error("structured_output missing");
+      await structuredOutput.execute(
+        "tool_1",
+        { ok: true } as never,
+        undefined,
+        undefined,
+        {} as never,
+      );
+    });
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async (options) => {
+      sessionOptions = options;
+      return { session };
+    });
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+    const onEvent = vi.fn<NonNullable<WorkflowAgentRunRequest["onEvent"]>>();
+
+    await expect(
+      runner(requestForTest({ options: { label: "structured", schema }, onEvent })),
+    ).resolves.toEqual({ ok: true });
+
+    expect(session.prompt).toHaveBeenCalledTimes(2);
+    expect(session.promptTexts[1]).toBe(buildStructuredOutputFollowUpPrompt());
+    expect(session.promptOptions[1]).toEqual({ expandPromptTemplates: false, source: "extension" });
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "agent_event",
+        eventType: "structured_output_retry",
+        label: "structured output missing; nudge 1/2",
+        activityState: "waiting_for_model",
+      }),
+    );
+  });
+
+  it("should send two nudges before failing missing structured output", async () => {
     const session = new FakePiSession();
     const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+    const onEvent = vi.fn<NonNullable<WorkflowAgentRunRequest["onEvent"]>>();
+
+    await expect(
+      runner(
+        requestForTest({
+          options: { label: "structured", schema: { type: "object" } },
+          onEvent,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      variant: "schema",
+      message: "Pi workflow subagent finished without calling structured_output after 2 nudges.",
+    });
+
+    expect(session.prompt).toHaveBeenCalledTimes(3);
+    expect(session.promptTexts.slice(1)).toEqual([
+      buildStructuredOutputFollowUpPrompt(),
+      buildStructuredOutputFollowUpPrompt(),
+    ]);
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "structured_output_retry",
+        label: "structured output missing; nudge 1/2",
+      }),
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "structured_output_retry",
+        label: "structured output missing; nudge 2/2",
+      }),
+    );
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("should fail schema agents when the Pi subagent calls give_up", async () => {
+    let sessionOptions: CreateAgentSessionOptions | undefined;
+    const session = new FakePiSession(async () => {
+      const giveUp = sessionOptions?.customTools?.find((tool) => tool.name === "give_up");
+      if (giveUp === undefined) throw new Error("give_up missing");
+      await giveUp.execute(
+        "tool_1",
+        { reason: "not enough evidence" } as never,
+        undefined,
+        undefined,
+        {} as never,
+      );
+    });
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async (options) => {
+      sessionOptions = options;
+      return { session };
+    });
     const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
 
     await expect(
@@ -286,7 +400,66 @@ describe("createPiWorkflowAgentRunner", () => {
           options: { label: "structured", schema: { type: "object" } },
         }),
       ),
-    ).rejects.toMatchObject({ variant: "schema" });
+    ).rejects.toMatchObject({
+      variant: "schema",
+      message: "Pi workflow subagent called give_up: not enough evidence",
+    });
+  });
+
+  it("should unwrap structured output envelopes for non-object schemas", async () => {
+    const schema = { type: "array", items: { type: "string" } };
+    let sessionOptions: CreateAgentSessionOptions | undefined;
+    const session = new FakePiSession(async () => {
+      const tool = sessionOptions?.customTools?.[0];
+      if (tool === undefined) throw new Error("structured_output tool was not registered");
+      await tool.execute(
+        "tool_1",
+        { result: ["alpha", "beta"] } as never,
+        undefined,
+        undefined,
+        {} as never,
+      );
+    });
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async (options) => {
+      sessionOptions = options;
+      return { session };
+    });
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+
+    await expect(
+      runner(requestForTest({ options: { label: "structured", schema } })),
+    ).resolves.toEqual(["alpha", "beta"]);
+    const envelopeSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: { result: schema },
+      required: ["result"],
+    };
+    expect(sessionOptions?.customTools?.[0]?.parameters).toEqual(envelopeSchema);
+    expect(session.promptText).toContain(JSON.stringify(envelopeSchema, null, 2));
+  });
+
+  it("should abort and dispose once during a structured-output retry", async () => {
+    const session = new FakePiSession();
+    const controller = new AbortController();
+    session.prompt.mockImplementation(async (_text, _options) => {
+      if (session.prompt.mock.calls.length === 2) {
+        controller.abort();
+      }
+    });
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+
+    await expect(
+      runner(
+        requestForTest({
+          signal: controller.signal,
+          options: { label: "structured", schema: { type: "object" } },
+        }),
+      ),
+    ).rejects.toThrow("aborted");
+
+    expect(session.abort).toHaveBeenCalledOnce();
     expect(session.dispose).toHaveBeenCalledOnce();
   });
 });

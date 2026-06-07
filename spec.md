@@ -1,3 +1,12 @@
+---
+title: Claude Code Workflow Feature Specification
+status: partial
+priority: P0
+last_audited: 2026-06-07
+implementation: "Core runtime, saved workflows, journal resume, notifications, feature flags, structured output retry, and monitor foundations exist; richer controls, transcript replay, and some UI/runtime polish remain."
+next: "Use brain/contracts/spec-coverage.md and brain/plans/index.md to choose the next implementation slice."
+---
+
 # Claude Code Workflow Feature Specification
 
 ## 1. Purpose
@@ -251,11 +260,15 @@ Runtime behavior:
 - `agent(prompt, options)` schedules one subagent through the global scheduler.
   - Without `schema`, the resolved value is the subagent's final text as a
     string.
-  - With `schema`, the resolved value is the validated structured output object.
+  - With `schema`, the resolved value is the validated structured output value.
     Current Pi extension status: the real Pi subagent runner registers a
-    per-agent terminating `structured_output` custom tool from the workflow's
-    plain JSON object schema. The subagent MUST call that tool as its final
-    action; if it finishes without the tool call, the schema agent fails.
+    per-agent terminating `structured_output` custom tool and a terminating
+    `give_up` escape-hatch tool. The subagent MUST call `structured_output` as
+    its final successful action. If it finishes without `structured_output` or
+    `give_up`, the runner sends up to two in-session nudges in the same
+    sidechain before final schema failure. Non-object workflow schemas are
+    exposed to Pi as an object envelope `{ result: ... }`; `agent()` resolves to
+    the unwrapped value.
   - If the user skips the agent mid-run, the call resolves to `null`. Callers
     SHOULD filter with `.filter(Boolean)` when a skip is possible.
   - If the scheduler rejects the call before queuing it, such as when the
@@ -398,10 +411,15 @@ Each `agent()` call MUST create a fresh sidechain session with:
 
 If `schema` is provided:
 
-- The runtime MUST require structured output.
+- The runtime MUST require structured output through the `structured_output`
+  tool.
 - The runtime MUST validate the output against the schema.
-- Invalid or missing output SHOULD trigger a bounded retry or in-conversation
-  nudge.
+- The Pi implementation also exposes `give_up` with `{ reason: string }`; if the
+  model calls it, the agent fails with `WorkflowAgentSchemaError` and the reason.
+- Missing output MUST trigger at most two same-session follow-up nudges before
+  final schema failure.
+- Non-object schemas MUST be wrapped for Pi tool parameters as
+  `{ result: <schema> }`, and the resolved `agent()` value MUST be unwrapped.
 - Final schema failure MUST reject the `agent()` promise and be surfaced in run
   failures.
 - A journal `result` event MUST only be appended after validation succeeds.
@@ -1033,8 +1051,8 @@ An implementation is complete when these scenarios pass:
 3. The runtime writes initial run JSON before execution starts.
 4. `phase()` and `log()` update run state.
 5. `agent()` creates an isolated transcript and metadata file.
-6. `agent({ schema })` validates structured output before resolving.
-7. Missing structured output fails predictably after bounded retries or nudges.
+6. `agent({ schema })` validates structured output before resolving, including unwrapped non-object schemas.
+7. Missing structured output fails predictably after exactly two nudges, and `give_up` fails with the supplied reason.
 8. `parallel()` preserves result order and respects the scheduler cap.
 9. `pipeline()` starts stage 2 for an item as soon as that item's stage 1
    completes.
