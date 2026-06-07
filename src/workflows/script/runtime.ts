@@ -3,6 +3,8 @@ import { parseWorkflowScript } from "./parser.ts";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { WorkflowAgentScheduler } from "#src/workflows/agent/scheduler.ts";
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
+import { resolveEffectiveAgentOptions } from "#src/workflows/model-routing/agent-options.ts";
+import type { WorkflowModelRoutingWarning } from "#src/workflows/model-routing/resolve.ts";
 import type {
   WorkflowBudget,
   WorkflowRuntimeError,
@@ -38,11 +40,12 @@ async function executeWorkflowScript(
   const agentCalls: WorkflowRuntimeState["agentCalls"] = [];
   let spentTokens = 0;
   let emitStateChange = noop;
+  const routingWarnings: WorkflowModelRoutingWarning[] = [];
   const scheduler = new WorkflowAgentScheduler({
     maxConcurrent: options.maxConcurrentAgents,
     maxTotalAgents: options.maxTotalAgents,
     defaultModel: parsed.meta.model ?? options.defaultModel,
-    defaultThinkingLevel: options.defaultThinkingLevel,
+    defaultThinkingLevel: parsed.meta.thinkingLevel ?? options.defaultThinkingLevel,
     cwd: options.cwd,
     journal: options.journal,
     replayCache: options.replayCache,
@@ -83,14 +86,23 @@ async function executeWorkflowScript(
       throw new Error("Workflow token budget exhausted; no further agent() calls are allowed.");
     }
     agentCalls.push({ prompt, options: agentOptions });
+    const effectiveOptions = resolveEffectiveAgentOptions(agentOptions, {
+      meta: parsed.meta,
+      availableModels: options.availableModels,
+      currentModelReference: options.defaultModel,
+      currentThinkingLevel: options.defaultThinkingLevel,
+      previousWarnings: routingWarnings,
+    });
+    routingWarnings.push(...effectiveOptions.warnings);
+    for (const warning of effectiveOptions.warnings) logs.push(formatRoutingWarning(warning));
     const progressCountBeforeSchedule = scheduler.progress().length;
     try {
-      const result = await scheduler.schedule(prompt, agentOptions);
+      const result = await scheduler.schedule(prompt, effectiveOptions.options);
       spentTokens += estimateTokens(prompt, result);
       return result;
     } catch (cause) {
       if (scheduler.progress().length === progressCountBeforeSchedule) throw cause;
-      if (agentOptions.schema !== undefined || isSchemaAgentFailure(cause)) throw cause;
+      if (effectiveOptions.options.schema !== undefined || isSchemaAgentFailure(cause)) throw cause;
       spentTokens += estimateTokens(prompt, null);
       return null;
     }
@@ -121,7 +133,7 @@ async function executeWorkflowScript(
     phases,
     logs,
     agentCalls,
-    workflowProgress: [...phases, ...scheduler.progress()],
+    workflowProgress: mergeWorkflowProgress(phases, scheduler.progress()),
     result,
     stopped: scheduler.isStopped(),
   });
@@ -154,6 +166,33 @@ export async function tryRunWorkflowScript(
       cause,
     });
   }
+}
+
+function formatRoutingWarning(warning: WorkflowModelRoutingWarning): string {
+  if (warning.kind === "model-fallback") {
+    return `Workflow model hint '${warning.requested}' is unavailable; using '${warning.effective}'.`;
+  }
+  return `Workflow thinkingLevel hint '${warning.requested}' is unavailable; using '${warning.effective}'.`;
+}
+
+function mergeWorkflowProgress(
+  phases: WorkflowRuntimeState["phases"],
+  agents: Extract<WorkflowRuntimeState["workflowProgress"][number], { type: "workflow_agent" }>[],
+): WorkflowRuntimeState["workflowProgress"] {
+  const output: WorkflowRuntimeState["workflowProgress"] = [];
+  const emittedAgents = new Set<number>();
+  for (const phase of phases) {
+    output.push(phase);
+    for (const agent of agents) {
+      if (agent.phaseTitle !== phase.title) continue;
+      output.push(agent);
+      emittedAgents.add(agent.index);
+    }
+  }
+  for (const agent of agents) {
+    if (!emittedAgents.has(agent.index)) output.push(agent);
+  }
+  return output;
 }
 
 function noop(): void {}

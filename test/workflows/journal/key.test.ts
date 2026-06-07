@@ -42,7 +42,30 @@ describe("computeWorkflowAgentKey", () => {
       original,
     );
     expect(computeWorkflowAgentKey({ ...baseInput, model: "claude-haiku" })).not.toBe(original);
+    expect(computeWorkflowAgentKey({ ...baseInput, thinkingLevel: "high" })).not.toBe(original);
     expect(computeWorkflowAgentKey({ ...baseInput, cwd: "/other" })).not.toBe(original);
+  });
+
+  it("should key resume by the effective model after a fallback, not the misspelled requested hint", () => {
+    const effective = computeWorkflowAgentKey({
+      ...baseInput,
+      model: "openai-codex/gpt-5.5",
+      thinkingLevel: "high",
+    });
+    const requestedTypoWouldBeDifferent = computeWorkflowAgentKey({
+      ...baseInput,
+      model: "openai-codex/gpt-5.55",
+      thinkingLevel: "high",
+    });
+
+    expect(effective).not.toBe(requestedTypoWouldBeDifferent);
+    expect(
+      computeWorkflowAgentKey({
+        ...baseInput,
+        model: "openai-codex/gpt-5.5",
+        thinkingLevel: "high",
+      }),
+    ).toBe(effective);
   });
 });
 

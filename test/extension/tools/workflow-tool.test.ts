@@ -75,6 +75,10 @@ describe("Workflow tool", () => {
     expect(tool?.description).toContain('never strings such as ["Generate"]');
     expect(tool?.description).toContain("opts.schema");
     expect(tool?.description).toContain("plain JSON object schema");
+    expect(tool?.description).toContain("model and thinking hints");
+    expect(tool?.description).toContain("cheap fan-out");
+    expect(tool?.description).toContain("heavy synthesis");
+    expect(tool?.description).toContain("fall back to the current Pi model");
     expect(tool?.description).toContain("at most 4096 items");
     expect(tool?.description).not.toContain("nested workflow");
     expect(tool?.description).not.toContain("Do not pass schema yet");
@@ -262,5 +266,56 @@ describe("Workflow tool", () => {
         transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
       },
     });
+  });
+
+  it("should pass available Pi models and current thinking into workflow launch options", async () => {
+    let tool: RegisteredTool | undefined;
+    const launchWorkflow = vi.fn<NonNullable<RegisterWorkflowToolOptions["launchWorkflow"]>>(
+      async () =>
+        ok({
+          taskId: "task_test",
+          runId: "wf_test",
+          scriptPath: "/repo/.pi/workflows/wf_test/script.js",
+          transcriptDir: "/repo/.pi/workflows/wf_test/transcripts",
+          confirmation: "Workflow launched in background. Task ID: task_test",
+          completion: Promise.resolve(ok({ runId: "wf_test" } as WorkflowRunState)),
+        }),
+    );
+    const availableModels = [
+      { provider: "openai-codex", id: "gpt-5.4-mini" },
+      { provider: "openai-codex", id: "gpt-5.5" },
+    ];
+    const pi = {
+      registerTool: vi.fn<(registered: RegisteredTool) => void>((registered) => {
+        tool = registered;
+      }),
+      sendMessage: vi.fn<(...args: unknown[]) => void>(),
+      getThinkingLevel: vi.fn<() => string>(() => "high"),
+    };
+
+    registerWorkflowTool(pi as any, { launchWorkflow });
+
+    await tool?.execute(
+      "tool_call_1",
+      { script: "export const meta = { name: 'demo', description: 'Demo' }\nreturn 'ok'" },
+      undefined,
+      undefined,
+      {
+        cwd: "/repo",
+        model: { provider: "openai-codex", id: "gpt-5.5" } as any,
+        modelRegistry: {
+          getAvailable: () => availableModels,
+        } as any,
+      },
+    );
+
+    expect(launchWorkflow).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        defaultModel: "openai-codex/gpt-5.5",
+        defaultThinkingLevel: "high",
+        availableModels,
+      }),
+    );
   });
 });

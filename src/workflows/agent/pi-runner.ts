@@ -5,7 +5,7 @@ import {
   getAgentDir,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import { resolveWorkflowModelHint } from "#src/workflows/model-routing/resolve.ts";
 import {
   createWorkflowStructuredOutputTool,
   WorkflowAgentSchemaError,
@@ -38,13 +38,10 @@ export type PiWorkflowAgentSessionFactory = (
 export interface PiWorkflowAgentRunnerOptions {
   readonly cwd: string;
   readonly model?: CreateAgentSessionOptions["model"];
-  readonly thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+  readonly thinkingLevel?: string;
   readonly modelRegistry?: CreateAgentSessionOptions["modelRegistry"];
   readonly sessionFactory?: PiWorkflowAgentSessionFactory;
 }
-
-type PiModel = Model<Api>;
-type PiModelRegistry = NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
 
 export function createPiWorkflowAgentRunner(
   options: PiWorkflowAgentRunnerOptions,
@@ -66,10 +63,18 @@ async function runPiWorkflowAgent(
           hasStructuredOutput = true;
         });
 
+  const availableModels = options.modelRegistry?.getAll();
+  const resolvedRouting = resolveWorkflowModelHint({
+    requestedModel: request.options.model,
+    requestedThinkingLevel: request.options.thinkingLevel,
+    availableModels,
+    currentModel: options.model,
+    currentThinkingLevel: options.thinkingLevel,
+  });
   const { session } = await (options.sessionFactory ?? defaultSessionFactory)({
     cwd: options.cwd,
-    model: resolveRequestedModel(request.options.model, options.model, options.modelRegistry),
-    thinkingLevel: request.options.thinkingLevel ?? options.thinkingLevel,
+    model: resolvedRouting.model,
+    thinkingLevel: resolvedRouting.thinkingLevel,
     modelRegistry: options.modelRegistry,
     sessionManager: SessionManager.inMemory(options.cwd),
     customTools: structuredOutputTool === undefined ? undefined : [structuredOutputTool],
@@ -125,55 +130,6 @@ async function defaultSessionFactory(
     agentDir,
     resourceLoader,
   })) as PiWorkflowAgentSessionFactoryResult;
-}
-
-function resolveRequestedModel(
-  requestedModel: string | undefined,
-  fallbackModel: PiModel | undefined,
-  modelRegistry: PiModelRegistry | undefined,
-): PiModel | undefined {
-  if (requestedModel === undefined || isDefaultModelPlaceholder(requestedModel))
-    return fallbackModel;
-
-  if (
-    fallbackModel !== undefined &&
-    (modelReferencesEqual(requestedModel, `${fallbackModel.provider}/${fallbackModel.id}`) ||
-      modelReferencesEqual(requestedModel, fallbackModel.id))
-  ) {
-    return fallbackModel;
-  }
-
-  if (modelRegistry === undefined) {
-    throw new Error(
-      `Workflow agent requested model '${requestedModel}', but no Pi model registry is available to resolve it.`,
-    );
-  }
-
-  const models = modelRegistry.getAll();
-  const canonicalMatch = models.find((model) =>
-    modelReferencesEqual(requestedModel, `${model.provider}/${model.id}`),
-  );
-  if (canonicalMatch !== undefined) return canonicalMatch;
-
-  const idMatches = models.filter((model) => modelReferencesEqual(requestedModel, model.id));
-  if (idMatches.length === 1) return idMatches[0];
-  if (idMatches.length > 1) {
-    throw new Error(
-      `Workflow agent requested ambiguous model '${requestedModel}'. Use provider/model-id.`,
-    );
-  }
-
-  throw new Error(
-    `Workflow agent requested unknown model '${requestedModel}'. Use provider/model-id or a unique model id.`,
-  );
-}
-
-function modelReferencesEqual(left: string | undefined, right: string | undefined): boolean {
-  return left?.trim().toLowerCase() === right?.trim().toLowerCase();
-}
-
-function isDefaultModelPlaceholder(model: string): boolean {
-  return model.trim().toLowerCase() === "default";
 }
 
 function buildPiSubagentPrompt(request: WorkflowAgentRunRequest): string {

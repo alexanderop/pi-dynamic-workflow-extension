@@ -103,6 +103,83 @@ describe("WorkflowRunStore", () => {
     ]);
   });
 
+  it("should preserve planned phase thinking-level metadata when reading a run", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({
+        runId: "wf_planned_thinking",
+        phases: [
+          {
+            title: "Deep review",
+            detail: "Use heavier reasoning",
+            model: "openai-codex/gpt-5.5",
+            thinkingLevel: "high",
+            agentCount: 1,
+            agents: [
+              {
+                label: "deep-review",
+                model: "openai-codex/gpt-5.5",
+                thinkingLevel: "high",
+              },
+            ],
+          },
+        ] as any,
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_planned_thinking");
+
+    expect(unwrap(result).phases).toEqual([
+      {
+        title: "Deep review",
+        detail: "Use heavier reasoning",
+        model: "openai-codex/gpt-5.5",
+        thinkingLevel: "high",
+        agentCount: 1,
+        agents: [
+          {
+            label: "deep-review",
+            model: "openai-codex/gpt-5.5",
+            thinkingLevel: "high",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("should preserve requested and effective model fallback metadata on agent rows", async () => {
+    await writeRunManifest(
+      rootDir,
+      runState({
+        runId: "wf_model_fallback",
+        workflowProgress: [
+          agentEntry({
+            label: "scan-agent",
+            model: "openai-codex/gpt-5.5",
+            thinkingLevel: "high",
+            requestedModel: "openai-codex/gpt-5.55",
+            requestedThinkingLevel: "hihg",
+            modelFallbackReason: "Requested model is unavailable; using current Pi model.",
+          } as any),
+        ],
+        agentCount: 1,
+      }),
+    );
+
+    const result = await new WorkflowRunStore({ rootDir }).readRun("wf_model_fallback");
+
+    const [agent] = unwrap(result).workflowProgress;
+    expect(agent).toMatchObject({
+      type: "workflow_agent",
+      label: "scan-agent",
+      model: "openai-codex/gpt-5.5",
+      thinkingLevel: "high",
+      requestedModel: "openai-codex/gpt-5.55",
+      requestedThinkingLevel: "hihg",
+      modelFallbackReason: "Requested model is unavailable; using current Pi model.",
+    });
+  });
+
   it("should preserve session ownership metadata when reading a run", async () => {
     await writeRunManifest(
       rootDir,

@@ -5,7 +5,7 @@ export interface AgentOptions {
   phase?: string;
   agentType?: string;
   model?: string;
-  thinkingLevel?: WorkflowThinkingLevel;
+  thinkingLevel?: string;
   schema?: unknown;
   isolation?: "worktree";
 }
@@ -17,7 +17,7 @@ export interface WorkflowAgentProgress {
   agentId: string;
   agentType: string;
   model: string;
-  thinkingLevel?: WorkflowThinkingLevel;
+  thinkingLevel?: string;
   state: "queued" | "running" | "done" | "failed" | "stopped";
   queuedAt: number;
   attempt: number;

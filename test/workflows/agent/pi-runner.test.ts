@@ -91,6 +91,83 @@ describe("createPiWorkflowAgentRunner", () => {
     );
   });
 
+  it("should fall back to the current Pi model when the requested workflow model is unknown", async () => {
+    const session = new FakePiSession();
+    const contextModel = modelForTest("openai-codex", "gpt-5.5");
+    const modelRegistry = {
+      getAll: () => [contextModel],
+    } as unknown as NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      model: contextModel,
+      modelRegistry,
+      sessionFactory,
+    });
+
+    await expect(
+      runner(
+        requestForTest({
+          options: { label: "test-agent", model: "openai-codex/gpt-5.55" },
+        }),
+      ),
+    ).resolves.toBe("subagent result");
+
+    expect(sessionFactory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: contextModel,
+        modelRegistry,
+      }),
+    );
+  });
+
+  it("should fall back to the current Pi model when a short model id is ambiguous", async () => {
+    const session = new FakePiSession();
+    const contextModel = modelForTest("openai-codex", "gpt-5.5");
+    const first = modelForTest("provider-a", "same-id");
+    const second = modelForTest("provider-b", "same-id");
+    const modelRegistry = {
+      getAll: () => [contextModel, first, second],
+    } as unknown as NonNullable<CreateAgentSessionOptions["modelRegistry"]>;
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      model: contextModel,
+      modelRegistry,
+      sessionFactory,
+    });
+
+    await expect(
+      runner(requestForTest({ options: { label: "test-agent", model: "same-id" } })),
+    ).resolves.toBe("subagent result");
+
+    expect(sessionFactory).toHaveBeenCalledWith(expect.objectContaining({ model: contextModel }));
+  });
+
+  it("should fall back to the current thinking level when the requested thinking level is invalid", async () => {
+    const session = new FakePiSession();
+    const contextModel = modelForTest("openai-codex", "gpt-5.5");
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({
+      cwd: "/repo",
+      model: contextModel,
+      thinkingLevel: "high",
+      sessionFactory,
+    });
+
+    await runner(
+      requestForTest({
+        options: { label: "test-agent", thinkingLevel: "hihg" } as any,
+      }),
+    );
+
+    expect(sessionFactory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thinkingLevel: "high",
+      }),
+    );
+  });
+
   it("should abort and dispose the Pi sidechain session when the workflow agent is cancelled", async () => {
     const session = new FakePiSession();
     session.prompt.mockImplementationOnce(

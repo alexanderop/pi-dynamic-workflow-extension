@@ -1,11 +1,13 @@
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
 import type { WorkflowAgentRunner } from "#src/workflows/agent/scheduler.ts";
 import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
+import type { WorkflowModelRoutingModel } from "#src/workflows/model-routing/resolve.ts";
 import type { WorkflowPhaseProgress, WorkflowProgressEntry } from "#src/workflows/run/model.ts";
 
 export interface WorkflowPlannedAgent {
   label: string;
   model?: string;
+  thinkingLevel?: string;
   agentType?: string;
 }
 
@@ -13,6 +15,7 @@ export interface WorkflowPhase {
   title: string;
   detail?: string;
   model?: string;
+  thinkingLevel?: string;
   agentCount?: number;
   agents?: WorkflowPlannedAgent[];
 }
@@ -22,6 +25,7 @@ export interface WorkflowMeta {
   description: string;
   whenToUse?: string;
   model?: string;
+  thinkingLevel?: string;
   phases?: WorkflowPhase[];
 }
 
@@ -64,6 +68,7 @@ export interface WorkflowRuntimeOptions {
   budgetTotal?: number | null;
   defaultModel?: string;
   defaultThinkingLevel?: AgentOptions["thinkingLevel"];
+  availableModels?: readonly WorkflowModelRoutingModel[];
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;
   agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;

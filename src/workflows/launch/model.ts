@@ -41,6 +41,7 @@ export interface WorkflowLaunchOptions {
   readonly budgetTotal?: number | null;
   readonly defaultModel?: WorkflowRuntimeOptions["defaultModel"];
   readonly defaultThinkingLevel?: WorkflowRuntimeOptions["defaultThinkingLevel"];
+  readonly availableModels?: WorkflowRuntimeOptions["availableModels"];
   readonly onRuntimeControlReady?: WorkflowRuntimeOptions["onControlReady"];
   readonly notifyTerminal?: WorkflowTerminalNotifier;
   readonly onRunStateChange?: WorkflowRunStateObserver;

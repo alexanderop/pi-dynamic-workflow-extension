@@ -14,6 +14,18 @@ State, in 3-5 lines:
    the next can start (a "barrier"). Default answer: nowhere.
 4. Which calls need structured output, and which can use plain text output.
 
+## Soft model routing
+
+Use cheaper/faster models for fan-out, simple scouting, and redundant verification.
+Use stronger models for final synthesis and higher thinking for final judgment or tasks
+where one wrong answer would poison the result. Pick an exact model id from the available Pi models list:
+for example, use \`openai-codex/gpt-5.4-mini\` for cheap fan-out and \`openai-codex/gpt-5.5\`
+for heavy synthesis when those models are available. Set model hints at workflow,
+phase, or agent level with \`model\`, and set \`thinkingLevel\` as \`off\`, \`minimal\`,
+\`low\`, \`medium\`, \`high\`, or \`xhigh\`. These are soft hints: invalid or unavailable model/thinking hints fall back
+to the current Pi model/thinking instead of failing the workflow; exact model id typos,
+ambiguous short ids, or unsupported thinking levels are treated as fallback cases too.
+
 ## Hard rules (violating these breaks the run)
 
 - The script MUST begin with a pure literal \`export const meta = { ... }\` block.
@@ -40,6 +52,7 @@ State, in 3-5 lines:
   (\`{ type: 'object', properties: ..., required: ... }\`); define it as a normal
   JavaScript object in the workflow script.
   opts: \`{ label, phase, model, thinkingLevel, isolation: 'worktree', agentType, schema }\`.
+  Prefer exact \`provider/model-id\` strings for model hints; short ids must be unique.
   Returns \`null\` if the agent is skipped or a non-schema agent dies -
   \`.filter(Boolean)\` defensively for arrays of nullable results. Schema failures throw.
 - \`pipeline(items, stage1, stage2, ...)\` -> each item flows through all stages

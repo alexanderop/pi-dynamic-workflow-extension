@@ -298,6 +298,7 @@ function normalizedPhaseFromRecord(phase: Record<string, unknown>): WorkflowRunP
   const normalized: WorkflowRunPhase = { title: String(phase.title) };
   if (isString(phase.detail)) normalized.detail = phase.detail;
   if (isString(phase.model)) normalized.model = phase.model;
+  if (isString(phase.thinkingLevel)) normalized.thinkingLevel = phase.thinkingLevel;
   if (isNonNegativeInteger(phase.agentCount)) normalized.agentCount = phase.agentCount;
   const agents = normalizePlannedAgents(phase.agents);
   if (agents !== undefined) normalized.agents = agents;
@@ -311,6 +312,7 @@ function normalizePlannedAgents(value: unknown): WorkflowRunPlannedAgent[] | und
       if (!isRecord(agent) || !isString(agent.label) || agent.label.length === 0) return undefined;
       const planned: WorkflowRunPlannedAgent = { label: agent.label };
       if (isString(agent.model)) planned.model = agent.model;
+      if (isString(agent.thinkingLevel)) planned.thinkingLevel = agent.thinkingLevel;
       if (isString(agent.agentType)) planned.agentType = agent.agentType;
       return planned;
     })

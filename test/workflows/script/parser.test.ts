@@ -57,6 +57,69 @@ return "done";
     expect(parsed.body).toContain('phase("Scan")');
   });
 
+  it("should preserve workflow and phase thinking-level hints as literal metadata", () => {
+    const parsed = parseWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "thinking-routing",
+          description: "Route simple and heavy agents",
+          thinkingLevel: "low",
+          phases: [
+            { title: "Scout", model: "openai-codex/gpt-5.4-mini", thinkingLevel: "low" },
+            { title: "Synthesize", model: "openai-codex/gpt-5.5", thinkingLevel: "high" },
+          ],
+        } as any,
+      }),
+    );
+
+    expect(parsed.meta).toMatchObject({
+      thinkingLevel: "low",
+      phases: [
+        { title: "Scout", model: "openai-codex/gpt-5.4-mini", thinkingLevel: "low" },
+        { title: "Synthesize", model: "openai-codex/gpt-5.5", thinkingLevel: "high" },
+      ],
+    });
+  });
+
+  it("should accept misspelled model and thinking-level strings as soft hints", () => {
+    const parsed = parseWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "soft-hints",
+          description: "Keep invalid hints soft",
+          model: "openai-codex/gpt-5.55",
+          thinkingLevel: "hihg",
+          phases: [{ title: "Review", model: "not-a-real-model", thinkingLevel: "very-high" }],
+        } as any,
+      }),
+    );
+
+    expect(parsed.meta).toMatchObject({
+      model: "openai-codex/gpt-5.55",
+      thinkingLevel: "hihg",
+      phases: [{ title: "Review", model: "not-a-real-model", thinkingLevel: "very-high" }],
+    });
+  });
+
+  it("should reject non-string thinking-level metadata before launch", () => {
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource: '{ name: "bad-thinking", description: "Bad thinking", thinkingLevel: 123 }',
+        }),
+      ),
+    ).toThrow(/meta\.thinkingLevel.*string/);
+
+    expect(() =>
+      parseWorkflowScript(
+        invalidWorkflowScript({
+          metaSource:
+            '{ name: "bad-phase-thinking", description: "Bad phase thinking", phases: [{ title: "Review", thinkingLevel: false }] }',
+        }),
+      ),
+    ).toThrow(/phases\[0\]\.thinkingLevel.*string/);
+  });
+
   it("should require meta as the first statement when script has code before exported meta", () => {
     expect(() =>
       parseWorkflowScript(

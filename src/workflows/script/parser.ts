@@ -125,6 +125,8 @@ function validateWorkflowMeta(value: unknown): WorkflowMeta {
   if (value.whenToUse !== undefined)
     meta.whenToUse = requireString(value.whenToUse, "meta.whenToUse");
   if (value.model !== undefined) meta.model = requireString(value.model, "meta.model");
+  if (value.thinkingLevel !== undefined)
+    meta.thinkingLevel = requireString(value.thinkingLevel, "meta.thinkingLevel");
   if (value.phases !== undefined) meta.phases = validatePhases(value.phases);
   return meta;
 }
@@ -140,6 +142,11 @@ function validatePhases(value: unknown): WorkflowPhase[] {
       validated.detail = requireString(phase.detail, `meta.phases[${index}].detail`);
     if (phase.model !== undefined)
       validated.model = requireString(phase.model, `meta.phases[${index}].model`);
+    if (phase.thinkingLevel !== undefined)
+      validated.thinkingLevel = requireString(
+        phase.thinkingLevel,
+        `meta.phases[${index}].thinkingLevel`,
+      );
     if (phase.agentCount !== undefined)
       validated.agentCount = requireNonNegativeInteger(
         phase.agentCount,
@@ -161,6 +168,8 @@ function validatePlannedAgents(value: unknown, path: string): WorkflowPhase["age
     };
     if (agent.model !== undefined)
       planned.model = requireString(agent.model, `${path}[${index}].model`);
+    if (agent.thinkingLevel !== undefined)
+      planned.thinkingLevel = requireString(agent.thinkingLevel, `${path}[${index}].thinkingLevel`);
     if (agent.agentType !== undefined)
       planned.agentType = requireString(agent.agentType, `${path}[${index}].agentType`);
     return planned;

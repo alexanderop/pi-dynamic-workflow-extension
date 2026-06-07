@@ -65,11 +65,10 @@ describe("launchWorkflow", () => {
   });
 
   it("should return clear errors for missing saved workflow sources before run storage is created", async () => {
-    const personalDir = join(tempDir, "home", ".pi", "workflows");
     const byName = await launchWorkflow(
       { name: "saved-review" },
       launchOptions({
-        savedWorkflowDirs: { projectDir: projectSavedWorkflowDir(rootDir), personalDir },
+        savedWorkflowDirs: { projectDir: projectSavedWorkflowDir(rootDir) },
       }),
     );
     const byPath = await launchWorkflow(
@@ -162,7 +161,7 @@ describe("launchWorkflow", () => {
     expect(completed).toMatchObject({ status: "completed", result: { ok: true } });
   });
 
-  it("should launch a saved workflow by name from project scripts before personal scripts", async () => {
+  it("should launch a saved workflow by name from project scripts", async () => {
     const projectScript = workflowScript({
       meta: {
         name: "review",
@@ -175,14 +174,9 @@ const result = await agent("review " + args.target, { label: "review-agent", pha
 return { result };
 `,
     });
-    const personalScript = workflowScript({
-      meta: { name: "review" },
-      body: "return await agent('personal workflow should not run');",
-    });
     const scenario = await workflowScenario()
       .withNow(() => now)
       .withSavedWorkflow("review", projectScript)
-      .withPersonalWorkflow("review", personalScript)
       .withAgents(agent.label("review-agent").replyText("project review result"))
       .launchByName("review", { target: "src" });
 
@@ -306,6 +300,98 @@ return await agent("scan src", { label: "scan-agent" });
     });
     const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
     expect(manifest.defaultThinkingLevel).toBe("high");
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should persist meta.thinkingLevel as the run default thinking level and apply it to agents", async () => {
+    const agents = setupAgentMock(
+      agent.call({ label: "scan-agent", thinkingLevel: "low" }, () =>
+        AgentResponse.text("thinking result"),
+      ),
+    );
+    const script = workflowScript({
+      meta: {
+        name: "meta-thinking-default",
+        description: "Apply workflow thinking metadata",
+        thinkingLevel: "low",
+      } as any,
+      body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow({ script }, launchOptions({ schedulerRunner: agents.schedulerRunner })),
+    );
+    now = 150;
+    const completed = unwrap(await launch.completion);
+
+    expect(completed).toMatchObject({
+      status: "completed",
+      defaultThinkingLevel: "low",
+      workflowProgress: [{ type: "workflow_agent", label: "scan-agent", thinkingLevel: "low" }],
+    });
+    const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+    expect(manifest.defaultThinkingLevel).toBe("low");
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should persist phase thinking-level hints from workflow metadata", async () => {
+    const review = agent.pending({ prompt: "review src", label: "review-agent", phase: "Review" });
+    const agents = setupAgentMock(review);
+    const script = workflowScript({
+      meta: {
+        name: "planned-thinking",
+        description: "Plan phase model and thinking",
+        phases: [
+          {
+            title: "Review",
+            detail: "Read project files deeply",
+            model: "openai-codex/gpt-5.5",
+            thinkingLevel: "high",
+            agentCount: 1,
+            agents: [
+              {
+                label: "review-agent",
+                model: "openai-codex/gpt-5.5",
+                thinkingLevel: "high",
+                agentType: "reviewer",
+              },
+            ],
+          },
+        ],
+      } as any,
+      body: `
+return await agent("review src", { label: "review-agent", phase: "Review" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow({ script }, launchOptions({ schedulerRunner: agents.schedulerRunner })),
+    );
+    await review.waitUntilStarted();
+
+    const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun(launch.runId));
+    expect(manifest.phases).toEqual([
+      {
+        title: "Review",
+        detail: "Read project files deeply",
+        model: "openai-codex/gpt-5.5",
+        thinkingLevel: "high",
+        agentCount: 1,
+        agents: [
+          {
+            label: "review-agent",
+            model: "openai-codex/gpt-5.5",
+            thinkingLevel: "high",
+            agentType: "reviewer",
+          },
+        ],
+      },
+    ]);
+
+    review.resolve(AgentResponse.text("ok"));
+    unwrap(await launch.completion);
     agents.expectNoUnhandledAgents();
   });
 

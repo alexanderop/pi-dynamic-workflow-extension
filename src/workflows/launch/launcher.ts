@@ -12,10 +12,7 @@ import {
   workflowRunTranscriptDir,
 } from "#src/workflows/run/root-dir.ts";
 import { transitionRun } from "#src/workflows/run/state-machine.ts";
-import {
-  personalSavedWorkflowDir,
-  projectSavedWorkflowDir,
-} from "#src/workflows/saved/resolver.ts";
+import { projectSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import { toTaskNotification, toTerminalOutput } from "./notification.ts";
 import {
   defaultWorkflowLaunchOperations,
@@ -108,13 +105,14 @@ export async function launchWorkflow(
     description: parsed.value.meta.description ?? request.description,
     status: "running",
     defaultModel: parsed.value.meta.model ?? options.defaultModel,
-    defaultThinkingLevel: options.defaultThinkingLevel,
+    defaultThinkingLevel: parsed.value.meta.thinkingLevel ?? options.defaultThinkingLevel,
     script: source.value.script,
     scriptPath,
     phases: (parsed.value.meta.phases ?? []).map((phase) => ({
       title: phase.title,
       ...(phase.detail === undefined ? {} : { detail: phase.detail }),
       ...(phase.model === undefined ? {} : { model: phase.model }),
+      ...(phase.thinkingLevel === undefined ? {} : { thinkingLevel: phase.thinkingLevel }),
       ...(phase.agentCount === undefined ? {} : { agentCount: phase.agentCount }),
       ...(phase.agents === undefined ? {} : { agents: phase.agents }),
     })),
@@ -156,7 +154,8 @@ export async function launchWorkflow(
       maxTotalAgents: options.maxTotalAgents,
       budgetTotal: options.budgetTotal,
       defaultModel: options.defaultModel,
-      defaultThinkingLevel: options.defaultThinkingLevel,
+      defaultThinkingLevel: parsed.value.meta.thinkingLevel ?? options.defaultThinkingLevel,
+      availableModels: options.availableModels,
       onControlReady: (control) => {
         unregisterRuntimeControl = registerWorkflowRunControl(runId, control);
         options.onRuntimeControlReady?.(control);
@@ -220,7 +219,6 @@ async function loadLaunchSource(
       const resolved = await operations.resolveSavedWorkflowByName(selected.value.name, {
         projectDir:
           options.savedWorkflowDirs?.projectDir ?? projectSavedWorkflowDir(options.rootDir),
-        personalDir: options.savedWorkflowDirs?.personalDir ?? personalSavedWorkflowDir(),
       });
       if (resolved.status === "error") return resolved;
       return ok({ kind: "script", script: resolved.value.source });

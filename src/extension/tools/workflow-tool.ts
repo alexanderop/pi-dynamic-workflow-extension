@@ -29,7 +29,7 @@ A workflow script must begin with a pure literal export const meta = { ... } blo
 
 The script body is plain JavaScript, not TypeScript. Use top-level await. Do not use filesystem, Node.js APIs, Date.now(), Math.random(), or argument-less new Date(). Pass timestamps through args and vary work by stable item indexes.
 
-Available workflow globals: args, budget, agent(prompt, opts?), pipeline(items, ...stages), parallel(thunks), phase(title), and log(message). agent() spawns one subagent; without opts.schema it returns final text, and with opts.schema it returns the validated structured object. opts.schema must be a plain JSON object schema suitable for Pi tool parameters, such as { type: 'object', properties: ..., required: ... }. Other opts may include label, phase, model, thinkingLevel, isolation: 'worktree', and agentType. pipeline() has no cross-item barrier; each item advances through stages as soon as it can. Stage callbacks receive (prevResult, originalItem, index); for the first stage, prevResult === originalItem. parallel() is a barrier over thunks and returns null for failed thunks.
+Available workflow globals: args, budget, agent(prompt, opts?), pipeline(items, ...stages), parallel(thunks), phase(title), and log(message). agent() spawns one subagent; without opts.schema it returns final text, and with opts.schema it returns the validated structured object. opts.schema must be a plain JSON object schema suitable for Pi tool parameters, such as { type: 'object', properties: ..., required: ... }. Other opts may include label, phase, model, thinkingLevel, isolation: 'worktree', and agentType. Treat model and thinking hints as soft routing hints: use cheaper/faster models for cheap fan-out and stronger models with higher thinking for heavy synthesis, but exact model id typos, unavailable models, ambiguous short ids, or unsupported thinking levels fall back to the current Pi model/thinking instead of failing. pipeline() has no cross-item barrier; each item advances through stages as soon as it can. Stage callbacks receive (prevResult, originalItem, index); for the first stage, prevResult === originalItem. parallel() is a barrier over thunks and returns null for failed thunks.
 
 Default to pipeline() for multi-stage work. Use a parallel() barrier only when a stage genuinely needs all earlier results together, such as deduplication, global merge, zero-count early exit, or cross-item comparison. Filter null results defensively after parallel() or pipeline() stages that may fail. A single parallel() or pipeline() call accepts at most 4096 items.
 
@@ -129,7 +129,7 @@ export function registerWorkflowTool(
 
       const launch = await (options.launchWorkflow ?? launchWorkflow)(
         toLaunchRequest(params),
-        toLaunchOptions(ctx, pi, options),
+        await toLaunchOptions(ctx, pi, options),
       );
       if (launch.status === "error") throw new Error(launch.error.message);
 
@@ -182,11 +182,11 @@ function toLaunchRequest(params: WorkflowToolParams): WorkflowLaunchRequest {
   };
 }
 
-function toLaunchOptions(
+async function toLaunchOptions(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   options: RegisterWorkflowToolOptions,
-): WorkflowLaunchOptions {
+): Promise<WorkflowLaunchOptions> {
   const thinkingLevel = currentThinkingLevel(pi);
   return {
     rootDir: workflowRootDirForCwd(ctx.cwd),
@@ -196,6 +196,7 @@ function toLaunchOptions(
     cwd: ctx.cwd,
     defaultModel: currentModelReference(ctx.model),
     defaultThinkingLevel: thinkingLevel,
+    availableModels: await currentAvailableModels(ctx),
     schedulerRunner: createPiWorkflowAgentRunner({
       cwd: ctx.cwd,
       model: ctx.model,
@@ -343,6 +344,16 @@ function currentSessionId(ctx: ExtensionContext): string | undefined {
 function currentThinkingLevel(pi: ExtensionAPI): WorkflowLaunchOptions["defaultThinkingLevel"] {
   try {
     return (pi as Partial<Pick<ExtensionAPI, "getThinkingLevel">>).getThinkingLevel?.();
+  } catch {
+    return undefined;
+  }
+}
+
+async function currentAvailableModels(
+  ctx: ExtensionContext,
+): Promise<WorkflowLaunchOptions["availableModels"]> {
+  try {
+    return await Promise.resolve(ctx.modelRegistry?.getAvailable?.());
   } catch {
     return undefined;
   }

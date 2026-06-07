@@ -39,7 +39,7 @@ describe("dynamicWorkflowExtension", () => {
     );
     expect(registerTool).toHaveBeenCalledWith(expect.objectContaining({ name: "Workflow" }));
     expect(on).toHaveBeenCalledWith("input", expect.any(Function));
-    expect(on.mock.calls.filter(([event]) => event === "session_start")).toHaveLength(2);
+    expect(on.mock.calls.filter(([event]) => event === "session_start")).toHaveLength(3);
     expect(on.mock.calls.filter(([event]) => event === "session_shutdown")).toHaveLength(2);
   });
 

@@ -17,6 +17,7 @@ export type WorkflowRunStatus =
 export interface WorkflowRunPlannedAgent {
   label: string;
   model?: string;
+  thinkingLevel?: string;
   agentType?: string;
 }
 
@@ -24,6 +25,7 @@ export interface WorkflowRunPhase {
   title: string;
   detail?: string;
   model?: string;
+  thinkingLevel?: string;
   agentCount?: number;
   agents?: WorkflowRunPlannedAgent[];
 }

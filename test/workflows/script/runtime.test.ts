@@ -128,6 +128,92 @@ return await agent("scan src", { label: "scan-agent", model: "sonnet" });
     agents.expectNoUnhandledAgents();
   });
 
+  it("should use meta.thinkingLevel as the default thinking level for agent calls", async () => {
+    const agents = setupAgentMock(
+      agent.call(
+        { prompt: "scan src", model: "openai-codex/gpt-5.4-mini", thinkingLevel: "low" },
+        () => AgentResponse.text("ok"),
+      ),
+    );
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "thinking-default",
+          description: "Use workflow-level thinking default",
+          model: "openai-codex/gpt-5.4-mini",
+          thinkingLevel: "low",
+        } as any,
+        body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+      }),
+      { schedulerRunner: agents.schedulerRunner },
+    );
+
+    expect(state.result).toBe("ok");
+    expect(state.workflowProgress).toMatchObject([
+      {
+        type: "workflow_agent",
+        label: "scan-agent",
+        model: "openai-codex/gpt-5.4-mini",
+        thinkingLevel: "low",
+      },
+    ]);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should fall back to the current model and log once when an agent model hint is unavailable", async () => {
+    const agents = setupAgentMock(
+      agent.call(
+        {
+          prompt: "scan src",
+          label: "scan-agent",
+          model: "openai-codex/gpt-5.5",
+          thinkingLevel: "high",
+        },
+        () => AgentResponse.text("ok"),
+      ),
+    );
+
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "model-fallback",
+          description: "Treat typos as soft hints",
+          model: "openai-codex/gpt-5.4-mini",
+          thinkingLevel: "low",
+        } as any,
+        body: `
+await agent("scan src", {
+  label: "scan-agent",
+  model: "openai-codex/gpt-5.55",
+  thinkingLevel: "high",
+});
+await agent("scan src", {
+  label: "scan-agent",
+  model: "openai-codex/gpt-5.55",
+  thinkingLevel: "high",
+});
+return "done";
+`,
+      }),
+      {
+        defaultModel: "openai-codex/gpt-5.5",
+        defaultThinkingLevel: "high",
+        availableModels: [{ provider: "openai-codex", id: "gpt-5.5" }],
+        schedulerRunner: agents.schedulerRunner,
+      } as any,
+    );
+
+    expect(state.result).toBe("done");
+    expect(state.workflowProgress).toMatchObject([
+      { type: "workflow_agent", model: "openai-codex/gpt-5.5", thinkingLevel: "high" },
+      { type: "workflow_agent", model: "openai-codex/gpt-5.5", thinkingLevel: "high" },
+    ]);
+    expect(state.logs.filter((line) => line.includes("openai-codex/gpt-5.55"))).toHaveLength(1);
+    agents.expectNoUnhandledAgents();
+  });
+
   it("should resolve a direct non-schema agent failure to null", async () => {
     const state = await runWorkflowScript(
       workflowScript({
