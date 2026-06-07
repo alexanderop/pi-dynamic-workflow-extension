@@ -1,6 +1,7 @@
 # Brain
 
 ## Codebase
+- [[codebase/workflow-feature-flag-warnings]]
 - [[codebase/workflow-model-policy-direction]]
 
 ## Contracts
@@ -24,6 +25,7 @@
 - [[decisions/adr/0015-use-phase-agent-count-planning-hints]]
 - [[decisions/adr/0016-use-terminating-workflow-launch-tool]]
 - [[decisions/adr/0017-use-workflow-feature-flags]]
+- [[decisions/adr/0018-use-pi-native-sidechain-sessions-for-agent-transcripts]]
 - [[decisions/adr/README]]
 
 ## Learning
@@ -51,6 +53,7 @@
 - [[plans/workflows/feature-flags/spec]]
 - [[plans/workflows/live-feedback/spec]]
 - [[plans/workflows/saved-workflow-scopes/spec]]
+- [[plans/workflows/sidechain-transcripts/spec]]
 - [[plans/workflows/structured-output-retry/chunk]]
 - [[plans/workflows/test-page-objects/spec]]
 - [[plans/workflows/workflows-monitor/plan]]

@@ -6,8 +6,9 @@ Status: accepted
 
 `ultracode` should behave like a standing session opt-in, not like a one-shot
 slash command or hidden direct workflow launcher. Once the user types a prompt
-that begins with `ultracode`, later substantive turns in the same Pi session
-should default to workflow orchestration until the mode is cleared.
+that includes `ultracode` as a standalone word, even in the middle of a sentence,
+later substantive turns in the same Pi session should default to workflow
+orchestration until the mode is cleared.
 
 The current Pi extension API supports the pieces needed for this:
 
@@ -24,9 +25,12 @@ The current Pi extension API supports the pieces needed for this:
 
 Implement `ultracode` as a Pi session policy state machine:
 
-- The input hook detects `ultracode <goal>`, transitions the session mode to
-  `on`, records the transition with `pi.appendEntry(...)`, and returns
-  `{ action: "transform", text }` so the main agent still receives the task.
+- The input hook detects standalone `ultracode` anywhere in the submitted text,
+  transitions the session mode to `on`, records the transition with
+  `pi.appendEntry(...)`, and returns `{ action: "transform", text }` so the main
+  agent still receives the task. A leading `ultracode <goal>` prompt is
+  normalized to `<goal>`; a sentence containing `ultracode` keeps the sentence as
+  the transformed task text so intent is not mangled.
 - The `before_agent_start` hook injects an `ultracode` custom message and appends
   policy text to the system prompt whenever the session mode is `on`.
 - The injected policy requires the main agent to do explicit orchestrator planning

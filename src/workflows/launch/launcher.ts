@@ -19,6 +19,12 @@ import {
   persistenceError,
   type WorkflowLaunchOperations,
 } from "./operations.ts";
+import {
+  DEFAULT_WORKFLOW_FEATURES,
+  workflowFeatureKeys,
+  type WorkflowFeatureDecision,
+  type WorkflowFeatureFlags,
+} from "#src/extension/features/registry.ts";
 import { WORKFLOW_SCRIPT_MAX_LENGTH } from "./model.ts";
 import type {
   WorkflowLaunch,
@@ -96,6 +102,7 @@ export async function launchWorkflow(
   const journalPath = workflowRunJournalPath(options.rootDir, runId);
   const summarySource =
     parsed.value.meta.description ?? request.description ?? parsed.value.meta.name;
+  const launchFeatures = resolveLaunchFeatures(options);
   const initialState: WorkflowRunState = {
     runId,
     taskId,
@@ -105,8 +112,12 @@ export async function launchWorkflow(
     description: parsed.value.meta.description ?? request.description,
     args: request.args,
     status: "running",
-    defaultModel: parsed.value.meta.model ?? options.defaultModel,
+    defaultModel: launchFeatures.features.experimentalModelRouting
+      ? (parsed.value.meta.model ?? options.defaultModel)
+      : options.defaultModel,
     defaultThinkingLevel: parsed.value.meta.thinkingLevel ?? options.defaultThinkingLevel,
+    features: launchFeatures.features,
+    featureDecisions: launchFeatures.decisions,
     script: source.value.script,
     scriptPath,
     phases: (parsed.value.meta.phases ?? []).map((phase) => ({
@@ -154,9 +165,13 @@ export async function launchWorkflow(
       maxConcurrentAgents: options.maxConcurrentAgents,
       maxTotalAgents: options.maxTotalAgents,
       budgetTotal: options.budgetTotal,
-      defaultModel: options.defaultModel,
+      defaultModel: launchFeatures.features.experimentalModelRouting
+        ? (parsed.value.meta.model ?? options.defaultModel)
+        : options.defaultModel,
       defaultThinkingLevel: parsed.value.meta.thinkingLevel ?? options.defaultThinkingLevel,
       availableModels: options.availableModels,
+      features: launchFeatures.features,
+      featureDecisions: launchFeatures.decisions,
       onControlReady: (control) => {
         unregisterRuntimeControl = registerWorkflowRunControl(runId, control);
         options.onRuntimeControlReady?.(control);
@@ -178,6 +193,26 @@ export async function launchWorkflow(
     confirmation: formatLaunchConfirmation({ taskId, runId, scriptPath, transcriptDir }),
     completion,
   });
+}
+
+function resolveLaunchFeatures(options: WorkflowLaunchOptions): {
+  readonly features: WorkflowFeatureFlags;
+  readonly decisions: readonly WorkflowFeatureDecision[];
+} {
+  const features: WorkflowFeatureFlags = {
+    ...DEFAULT_WORKFLOW_FEATURES,
+    ...options.features,
+  };
+  if (options.featureDecisions !== undefined) {
+    return { features, decisions: options.featureDecisions };
+  }
+
+  const decisions = workflowFeatureKeys().map((key): WorkflowFeatureDecision => {
+    const value = features[key];
+    const source = options.features?.[key] === undefined ? "default" : "override";
+    return { key, value, source };
+  });
+  return { features, decisions };
 }
 
 function workflowProjectCwdFromRootDir(rootDir: string): string {

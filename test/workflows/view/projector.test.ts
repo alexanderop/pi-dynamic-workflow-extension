@@ -261,9 +261,44 @@ describe("buildMonitorView", () => {
     expect(view.selectedPhaseAgents).toEqual([]);
   });
 
-  it("should expose phase metadata and planned agents before queued rows exist", () => {
+  it("should hide planned model hints when experimental model routing is disabled", () => {
     const run = runState({
       defaultModel: "openai-codex/gpt-5.5",
+      phases: [
+        {
+          title: "Adversarially verify claims",
+          detail: "Check claims against independent evidence",
+          model: "openai-codex/gpt-5.5-high",
+          agentCount: 2,
+          agents: [
+            { label: "verify-official-personal-sites", model: "openai-codex/gpt-5.5" },
+            { label: "verify-professional-work", agentType: "researcher" },
+          ],
+        },
+      ],
+      workflowProgress: [],
+    });
+
+    const [phase] = buildMonitorView(run, { selectedPhaseIndex: 0 }).phases;
+
+    expect(phase).toMatchObject({
+      title: "Adversarially verify claims",
+      modelLabel: "openai-codex/gpt-5.5",
+      plannedAgents: [
+        { label: "verify-official-personal-sites", modelLabel: undefined },
+        {
+          label: "verify-professional-work",
+          modelLabel: undefined,
+          agentType: "researcher",
+        },
+      ],
+    });
+  });
+
+  it("should expose phase metadata and planned agents before queued rows exist when experimental model routing is enabled", () => {
+    const run = runState({
+      defaultModel: "openai-codex/gpt-5.5",
+      features: { experimentalModelRouting: true },
       phases: [
         {
           title: "Adversarially verify claims",

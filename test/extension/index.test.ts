@@ -23,12 +23,14 @@ describe("dynamicWorkflowExtension", () => {
   it("should register the workflows command when extension loads", () => {
     const registerCommand = vi.fn<(...args: unknown[]) => void>();
     const registerTool = vi.fn<(...args: unknown[]) => void>();
+    const registerFlag = vi.fn<(...args: unknown[]) => void>();
     const on = vi.fn<(...args: unknown[]) => void>();
 
     dynamicWorkflowExtension(
       fakePi({
         registerCommand,
         registerTool,
+        registerFlag,
         on,
       }),
     );
@@ -41,6 +43,11 @@ describe("dynamicWorkflowExtension", () => {
       }),
     );
     expect(registerTool).toHaveBeenCalledWith(expect.objectContaining({ name: "Workflow" }));
+    expect(registerFlag).toHaveBeenCalledWith("workflow-experimental-model-routing", {
+      description: "Enable experimental per-agent workflow model routing",
+      type: "boolean",
+      default: false,
+    });
     expect(on).toHaveBeenCalledWith("input", expect.any(Function));
     expect(on.mock.calls.filter(([event]) => event === "session_start")).toHaveLength(3);
     expect(on.mock.calls.filter(([event]) => event === "session_shutdown")).toHaveLength(2);

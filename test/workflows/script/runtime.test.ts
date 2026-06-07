@@ -78,7 +78,60 @@ return inspected;
     agents.expectNoUnhandledAgents();
   });
 
-  it("should use meta.model as the default model for agent calls", async () => {
+  it("should ignore workflow model hints by default while preserving thinkingLevel", async () => {
+    const agents = setupAgentMock(
+      agent.call(
+        {
+          prompt: "scan src",
+          label: "scan-agent",
+          model: "openai-codex/gpt-5.5",
+          thinkingLevel: "high",
+        },
+        () => AgentResponse.text("ok"),
+      ),
+    );
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: {
+          name: "model-routing-disabled",
+          description: "Ignore model hints unless experimental flag is enabled",
+          model: "openai-codex/gpt-5.4-mini",
+          phases: [{ title: "Scan", model: "anthropic/claude-opus-4-5" }],
+        },
+        body: `
+return await agent("scan src", {
+  label: "scan-agent",
+  phase: "Scan",
+  model: "anthropic/claude-haiku-4-5",
+  thinkingLevel: "high",
+});
+`,
+      }),
+      {
+        defaultModel: "openai-codex/gpt-5.5",
+        defaultThinkingLevel: "medium",
+        schedulerRunner: agents.schedulerRunner,
+      },
+    );
+
+    expect(state.result).toBe("ok");
+    expect(state.workflowProgress).toMatchObject([
+      {
+        type: "workflow_agent",
+        label: "scan-agent",
+        model: "openai-codex/gpt-5.5",
+        thinkingLevel: "high",
+      },
+    ]);
+    expect(
+      state.logs.filter((line) => line.includes("experimental-model-routing is disabled")),
+    ).toEqual([
+      "Workflow model hints are ignored because experimental-model-routing is disabled; using the current Pi model.",
+    ]);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should use meta.model as the default model for agent calls when experimental model routing is enabled", async () => {
     const agents = setupAgentMock(
       agent.call({ prompt: "scan src", model: "opus" }, () => AgentResponse.text("ok")),
     );
@@ -93,7 +146,10 @@ return inspected;
 return await agent("scan src", { label: "scan-agent" });
 `,
       }),
-      { schedulerRunner: agents.schedulerRunner },
+      {
+        features: { experimentalModelRouting: true },
+        schedulerRunner: agents.schedulerRunner,
+      },
     );
 
     expect(state.result).toBe("ok");
@@ -118,7 +174,10 @@ return await agent("scan src", { label: "scan-agent" });
 return await agent("scan src", { label: "scan-agent", model: "sonnet" });
 `,
       }),
-      { schedulerRunner: agents.schedulerRunner },
+      {
+        features: { experimentalModelRouting: true },
+        schedulerRunner: agents.schedulerRunner,
+      },
     );
 
     expect(state.result).toBe("ok");
@@ -147,7 +206,10 @@ return await agent("scan src", { label: "scan-agent", model: "sonnet" });
 return await agent("scan src", { label: "scan-agent" });
 `,
       }),
-      { schedulerRunner: agents.schedulerRunner },
+      {
+        features: { experimentalModelRouting: true },
+        schedulerRunner: agents.schedulerRunner,
+      },
     );
 
     expect(state.result).toBe("ok");
@@ -201,6 +263,7 @@ return "done";
         defaultModel: "openai-codex/gpt-5.5",
         defaultThinkingLevel: "high",
         availableModels: [{ provider: "openai-codex", id: "gpt-5.5" }],
+        features: { experimentalModelRouting: true },
         schedulerRunner: agents.schedulerRunner,
       },
     );

@@ -1,4 +1,8 @@
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
+import type {
+  WorkflowFeatureDecision,
+  WorkflowFeatureFlags,
+} from "#src/extension/features/registry.ts";
 
 export type WorkflowRunStatus =
   | "created"
@@ -41,6 +45,8 @@ export interface WorkflowRunState {
   status: WorkflowRunStatus;
   defaultModel?: string;
   defaultThinkingLevel?: WorkflowAgentProgress["thinkingLevel"];
+  features?: WorkflowFeatureFlags;
+  featureDecisions?: readonly WorkflowFeatureDecision[];
   script: string;
   scriptPath: string;
   phases: WorkflowRunPhase[];

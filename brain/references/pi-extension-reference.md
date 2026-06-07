@@ -31,10 +31,13 @@ The package root should declare a `pi` manifest:
 {
   "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./src/extension/index.ts"]
+    "extensions": ["./src/extension/index.ts"],
+    "skills": ["./skills"]
   }
 }
 ```
+
+`skills/workflow-debugger/SKILL.md` is packaged with the extension so users can ask Pi to debug workflow artifacts after installing the package.
 
 Reference: `repos/pi/packages/coding-agent/docs/packages.md`.
 

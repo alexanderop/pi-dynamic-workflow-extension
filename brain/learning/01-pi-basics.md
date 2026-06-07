@@ -52,7 +52,7 @@ export default function extension(pi: ExtensionAPI) {
 }
 ```
 
-This project's extension entrypoint is `src/extension/index.ts`. It is wired into Pi through the `pi.extensions` array in `package.json:41-45`. The real default export is named `dynamicWorkflowExtension` (`src/extension/index.ts:10`) and registers a single command.
+This project's extension entrypoint is `src/extension/index.ts`. It is wired into Pi through the `pi.extensions` array in `package.json`. The package also exposes skills through `pi.skills`, including `skills/workflow-debugger/SKILL.md`. The real extension default export is named `dynamicWorkflowExtension` and registers `/workflows`, the model-facing `Workflow` tool, ultracode hooks, feature flags, and status-line behavior.
 
 ## Commands
 

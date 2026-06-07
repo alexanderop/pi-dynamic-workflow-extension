@@ -1,4 +1,8 @@
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
+import type {
+  WorkflowFeatureDecision,
+  WorkflowFeatureFlags,
+} from "#src/extension/features/registry.ts";
 import type { WorkflowAgentRunner } from "#src/workflows/agent/scheduler.ts";
 import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
 import type { WorkflowModelRoutingModel } from "#src/workflows/model-routing/resolve.ts";
@@ -68,6 +72,8 @@ export interface WorkflowRuntimeOptions {
   budgetTotal?: number | null;
   defaultModel?: string;
   defaultThinkingLevel?: AgentOptions["thinkingLevel"];
+  features?: WorkflowFeatureFlags;
+  featureDecisions?: readonly WorkflowFeatureDecision[];
   availableModels?: readonly WorkflowModelRoutingModel[];
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;

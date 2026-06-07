@@ -25,25 +25,26 @@ Then output a brief orchestration plan before calling Workflow:
 6. Verification and synthesis: how findings or code changes will be adversarially
    checked, then combined into the final answer or implementation plan.
 
-## Soft model routing
+## Model and thinking guidance
 
-Use cheaper/faster models for fan-out, simple scouting, and redundant verification.
-Use stronger models for final synthesis and higher thinking for final judgment or tasks
-where one wrong answer would poison the result. Pick an exact model id from the available Pi models list:
-for example, use \`openai-codex/gpt-5.4-mini\` for cheap fan-out and \`openai-codex/gpt-5.5\`
-for heavy synthesis when those models are available. Set model hints at workflow,
-phase, or agent level with \`model\`, and set \`thinkingLevel\` as \`off\`, \`minimal\`,
-\`low\`, \`medium\`, \`high\`, or \`xhigh\`. These are soft hints: invalid or unavailable model/thinking hints fall back
-to the current Pi model/thinking instead of failing the workflow; exact model id typos,
-ambiguous short ids, or unsupported thinking levels are treated as fallback cases too.
+Select the desired Pi model before launching the workflow. Do not set \`model\` by default:
+workflow subagents inherit the current Pi model selected at launch, and use \`thinkingLevel\`
+as \`off\`, \`minimal\`, \`low\`, \`medium\`, \`high\`, or \`xhigh\` to vary reasoning effort
+for individual phases or agents.
+
+The compatibility \`model\` fields are ignored unless the user explicitly enables
+\`experimental-model-routing\` with \`/workflows features enable experimental-model-routing\`.
+Only when experimental-model-routing is enabled may a workflow use exact
+\`provider/model-id\` hints at workflow, phase, or agent level; invalid, unavailable,
+or ambiguous model hints fall back to the current Pi model.
 
 ## Hard rules (violating these breaks the run)
 
 - The script MUST begin with a pure literal \`export const meta = { ... }\` block.
   \`meta\` is a PURE LITERAL - no variables, function calls, spreads, or template
   strings inside it. \`meta.phases\` MUST be an array of objects, for example
-  \`phases: [{ title: "Generate jokes", detail: "Draft independent candidates", model: "default", agentCount: 4, agents: [{ label: "joke:animals" }] }, { title: "Select best joke", agentCount: 1 }]\`.
-  Include \`detail\`, \`model\`, \`agentCount\`, and known \`agents: [{ label, model?, agentType? }]\`
+  \`phases: [{ title: "Generate jokes", detail: "Draft independent candidates", agentCount: 4, agents: [{ label: "joke:animals" }] }, { title: "Select best joke", agentCount: 1 }]\`.
+  Include \`detail\`, \`agentCount\`, and known \`agents: [{ label, agentType? }]\`
   when the phase fan-out is known up front so \`/workflows\` can show useful planned
   context before runtime agent labels exist. Omit them for open-ended or
   result-dependent phases. NEVER use string phases like \`phases: ["Generate jokes"]\`;
@@ -62,8 +63,8 @@ ambiguous short ids, or unsupported thinking levels are treated as fallback case
   \`opts.schema\` must be a plain JSON object schema suitable for tool parameters
   (\`{ type: 'object', properties: ..., required: ... }\`); define it as a normal
   JavaScript object in the workflow script.
-  opts: \`{ label, phase, model, thinkingLevel, isolation: 'worktree', agentType, schema }\`.
-  Prefer exact \`provider/model-id\` strings for model hints; short ids must be unique.
+  opts: \`{ label, phase, thinkingLevel, isolation: 'worktree', agentType, schema, model }\`.
+  Do not set \`model\` unless experimental-model-routing is enabled; by default it is ignored.
   Returns \`null\` if the agent is skipped or a non-schema agent dies -
   \`.filter(Boolean)\` defensively for arrays of nullable results. Schema failures throw.
 - \`pipeline(items, stage1, stage2, ...)\` -> each item flows through all stages

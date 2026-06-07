@@ -240,11 +240,12 @@ describe("WorkflowsTuiComponent State A overview", () => {
     expect(screen).toContain("6 agents expected; names appear after enqueue.");
   });
 
-  it("should render phase detail, model hints, and planned agent labels before enqueue", () => {
+  it("should render phase detail, model hints, and planned agent labels before enqueue when experimental routing is enabled", () => {
     const run = runState({
       workflowName: "profile_research",
       status: "running",
       defaultModel: "openai-codex/gpt-5.5",
+      features: { experimentalModelRouting: true },
       phases: [
         {
           title: "Adversarially verify claims",

@@ -143,9 +143,10 @@ Requirements:
   description.
 - `meta.whenToUse` MAY describe when to reach for this workflow. It is shown in
   the saved-workflow list.
-- `meta.model` MAY name a default workflow model. The Pi extension parser
-  preserves this field and the runtime applies it as the default model for
-  `agent()` calls that omit `options.model`.
+- `meta.model` MAY name a default workflow model hint. The Pi extension parser
+  preserves this field for compatibility, but the runtime ignores it by default:
+  subagents inherit the current Pi model selected at launch. The hint is applied
+  only when the `experimental-model-routing` workflow feature flag is enabled.
 - `meta.requiredTools` MAY declare external Pi tools that must be available to
   workflow subagents before the run starts. Each entry MUST be an object with a
   non-empty `name` string and MAY include a `purpose` string. This is a Pi
@@ -377,7 +378,8 @@ Each `agent()` call MUST create a fresh sidechain session with:
 - Prompt as the first user message.
 - Same project cwd as the workflow run.
 - Selected `agentType`, if provided.
-- Selected model or runtime default model.
+- Current Pi model selected at launch by default, or the feature-enabled routed
+  model when `experimental-model-routing` is enabled.
 - Selected Pi thinking level / provider reasoning-effort level when available.
 - Normal tool permission policy for background work.
 - If the workflow declares `meta.requiredTools`, those tools MUST be available to
@@ -874,8 +876,8 @@ contract. It maps the Claude-like dynamic workflow model onto the public Pi
 extension API.
 
 `ultracode` is a user-facing trigger word and session policy, not a public LLM
-tool name. When a user submits a prompt beginning with `ultracode <goal>`, the
-extension SHOULD:
+tool name. When a user submits a prompt containing `ultracode` as a standalone
+word, including in the middle of a sentence, the extension SHOULD:
 
 1. transition a per-session `ultracode` mode state machine to `on`;
 2. persist the transition as a Pi custom session entry;
@@ -965,6 +967,47 @@ remain external to this project. For example, `deep-research` may require
 workflow declares those requirements through `meta.requiredTools`; the extension
 preflights them and fails fast with install/enable guidance instead of silently
 running a web research workflow without web tools.
+
+### 19.2 Workflow Feature Flags
+
+This section is a Pi integration decision, not an observed Claude Code internal
+contract.
+
+The extension has a small workflow feature-flag system. The first flag is
+`experimentalModelRouting`, exposed as `experimental-model-routing`, defaulting
+to `false`.
+
+Resolution is last-writer-wins in this order: built-in defaults, user config
+`~/.pi/agent/dynamic-workflows.json`, project/workspace config
+`<workflow-root>/config.json`, synchronous hook contributions on
+`dynamic-workflows:features:resolve`, environment variables, Pi CLI flags,
+session toggles, and explicit launch/test overrides. User-facing names use
+kebab-case; environment variables use the
+`PI_DYNAMIC_WORKFLOWS_EXPERIMENTAL_MODEL_ROUTING` form. Pi currently does not
+expose boolean flag provenance, so only a CLI value of `true` is treated as an
+explicit CLI source.
+
+`/workflows features` shows resolved values and winning sources. `/workflows
+features enable|disable|reset experimental-model-routing` writes a session
+entry by default; `--scope project` and `--scope user` write the config files
+above while preserving unknown JSON keys.
+
+Resolved `features` and `featureDecisions` are persisted in run manifests so
+historical runs can be audited without rereading current config files.
+
+When `experimental-model-routing` is disabled, `meta.model`, phase/planned-agent
+`model`, and `agent({ model })` are compatibility hints only. They are ignored
+for execution and journal keys, and subagents use the current Pi model captured
+at launch. `thinkingLevel` remains active at workflow, phase, planned-agent, and
+agent-call level. If any non-default model hint appears, the run logs:
+
+```text
+Workflow model hints are ignored because experimental-model-routing is disabled; using the current Pi model.
+```
+
+When `experimental-model-routing` is enabled, the previous routed-model behavior
+is active: exact or unique short model hints may select subagent models;
+unavailable or ambiguous hints fall back to the current Pi model with a warning.
 
 ## 20. Security Requirements
 

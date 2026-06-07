@@ -1,6 +1,6 @@
 # ADR 0017: Use Workflow Feature Flags
 
-Status: proposed
+Status: accepted
 
 ## Context
 
@@ -18,7 +18,7 @@ When disabled, workflow model hints are accepted for compatibility but ignored f
 
 When enabled, the current explicit model-routing behavior is restored as an experimental feature.
 
-Users should be able to control flags through `/workflows features`, project/user config files, environment variables, and Pi CLI flags. Resolved feature values should be persisted in run manifests.
+Users can control flags through `/workflows features`, project/user config files, environment variables, and Pi CLI flags. Resolved feature values are persisted in run manifests. Pi currently exposes boolean flag values but not flag provenance, so this package treats only `--workflow-experimental-model-routing` resolving to `true` as a CLI source; explicit CLI `false` is not distinguishable from the default and therefore does not override config/env/session sources.
 
 ## Consequences
 

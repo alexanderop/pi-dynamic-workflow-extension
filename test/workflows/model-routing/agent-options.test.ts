@@ -21,6 +21,7 @@ describe("resolveEffectiveAgentOptions", () => {
             { title: "Synthesize", model: "openai-codex/gpt-5.5", thinkingLevel: "high" },
           ],
         },
+        features: { experimentalModelRouting: true },
       },
     );
 
@@ -32,6 +33,7 @@ describe("resolveEffectiveAgentOptions", () => {
         thinkingLevel: "high",
       },
       warnings: [],
+      ignoredModelHint: false,
     });
   });
 
@@ -50,6 +52,7 @@ describe("resolveEffectiveAgentOptions", () => {
           thinkingLevel: "low",
           phases: [{ title: "Review", model: "openai-codex/gpt-5.5", thinkingLevel: "high" }],
         },
+        features: { experimentalModelRouting: true },
       },
     );
 
@@ -61,6 +64,7 @@ describe("resolveEffectiveAgentOptions", () => {
         thinkingLevel: "minimal",
       },
       warnings: [],
+      ignoredModelHint: false,
     });
   });
 
@@ -72,6 +76,7 @@ describe("resolveEffectiveAgentOptions", () => {
         availableModels: [{ provider: "openai-codex", id: "gpt-5.5" }],
         currentModelReference: "openai-codex/gpt-5.5",
         currentThinkingLevel: "high",
+        features: { experimentalModelRouting: true },
       },
     );
 
@@ -89,6 +94,7 @@ describe("resolveEffectiveAgentOptions", () => {
         },
         { kind: "thinking-fallback", requested: "hihg", effective: "high" },
       ],
+      ignoredModelHint: false,
     });
   });
 });

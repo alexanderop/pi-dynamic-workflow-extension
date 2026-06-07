@@ -51,7 +51,7 @@ describe("registerUltracode", () => {
     expect(result).toEqual({ block: true, reason: expect.stringContaining("ultracode") });
   });
 
-  it("should allow a Workflow tool call once ultracode is active for the session", async () => {
+  it("should allow a Workflow tool call once ultracode appears in the user sentence", async () => {
     const handlers = new Map<string, RegisteredHandler>();
     const pi = {
       on: vi.fn<(event: string, handler: RegisteredHandler) => void>((event, handler) => {
@@ -64,7 +64,7 @@ describe("registerUltracode", () => {
 
     registerUltracode(fakePi(pi));
     await handlers.get("input")?.(
-      { type: "input", text: "ultracode audit repo", source: "interactive" },
+      { type: "input", text: "please ultracode audit repo", source: "interactive" },
       ctx,
     );
 
@@ -169,7 +169,7 @@ describe("handleUltracodeInput", () => {
 
   it("should continue non-trigger input", async () => {
     const result = await handleUltracodeInput(
-      { type: "input", text: "please ultracode audit", source: "interactive" },
+      { type: "input", text: "please audit normally", source: "interactive" },
       contextForTest(),
     );
 
@@ -188,7 +188,7 @@ describe("handleUltracodeInput", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: ultracode <workflow goal>", "warning");
   });
 
-  it("should transform a valid trigger, persist mode, and not launch a workflow", async () => {
+  it("should transform a valid leading trigger, persist mode, and not launch a workflow", async () => {
     let mode: UltracodeModeState = { state: "off" };
     const appendModeEntry = vi.fn<(mode: UltracodeModeState) => void>();
     const launchWorkflow = vi.fn<() => void>();
@@ -215,6 +215,29 @@ describe("handleUltracodeInput", () => {
     expect(appendModeEntry).toHaveBeenCalledWith(mode);
     expect(launchWorkflow).not.toHaveBeenCalled();
     expect(ctx.ui.notify).toHaveBeenCalledWith("ultracode is ON for this session", "info");
+  });
+
+  it("should activate ultracode when the trigger word appears inside a sentence", async () => {
+    let mode: UltracodeModeState = { state: "off" };
+    const ctx = contextForTest({ sessionId: "session_current" });
+
+    const result = await handleUltracodeInput(
+      { type: "input", text: "please ultracode audit repo", source: "interactive" },
+      ctx,
+      {
+        getMode: () => mode,
+        setMode: (next) => {
+          mode = next;
+        },
+      },
+    );
+
+    expect(result).toEqual({ action: "transform", text: "please ultracode audit repo" });
+    expect(mode).toEqual({
+      state: "on",
+      activatedBy: "session_current",
+      goal: "please ultracode audit repo",
+    });
   });
 
   it("should append a mode entry when wired through the registered input handler", async () => {

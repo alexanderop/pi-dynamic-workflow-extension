@@ -23,11 +23,12 @@ projects above.
 
 - [structured-output-retry](./workflows/structured-output-retry/) — bounded two-nudge correction loop for structured output.
 - [atomic-manifest-writes](./workflows/atomic-manifest-writes/) — single-writer / CAS policy for `manifest.json`.
-- [feature-flags](./workflows/feature-flags/spec.md) — feature flag registry, user/project/session config UX, and `experimental-model-routing` default-off simplification.
+- [sidechain-transcripts](./workflows/sidechain-transcripts/spec.md) — Pi-native sidechain session persistence and raw transcript replay; keep overview/detail manifest-only.
 - [align-with-pi](./workflows/align-with-pi/) — pi-author convention alignment workstreams (W1-W6).
 
 ## Done
 
+- **feature-flags** — feature flag registry/resolver, `/workflows features`, user/project/session/env/CLI controls, manifest persistence, and default-off `experimental-model-routing` model inheritance are implemented and covered by tests. Spec remains in [workflows/feature-flags/spec.md](./workflows/feature-flags/spec.md).
 - **agent-mock-boundary** — MSW-style fake-agent fixture now includes
   `setupDefaultAgentTestServer(...)` for shared default mocks and
   `agents.boundary(...)` scoped runtime overrides with nested and concurrent

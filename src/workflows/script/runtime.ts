@@ -3,7 +3,11 @@ import { parseWorkflowScript } from "./parser.ts";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { WorkflowAgentScheduler } from "#src/workflows/agent/scheduler.ts";
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
-import { resolveEffectiveAgentOptions } from "#src/workflows/model-routing/agent-options.ts";
+import { DEFAULT_WORKFLOW_FEATURES } from "#src/extension/features/registry.ts";
+import {
+  isNonDefaultModelHint,
+  resolveEffectiveAgentOptions,
+} from "#src/workflows/model-routing/agent-options.ts";
 import type { WorkflowModelRoutingWarning } from "#src/workflows/model-routing/resolve.ts";
 import type {
   WorkflowBudget,
@@ -20,6 +24,8 @@ export type {
 } from "./model.ts";
 
 export const WORKFLOW_COLLECTION_ITEM_LIMIT = 4096;
+export const DISABLED_MODEL_ROUTING_LOG_MESSAGE =
+  "Workflow model hints are ignored because experimental-model-routing is disabled; using the current Pi model.";
 
 export async function runWorkflowScript(
   source: string,
@@ -41,10 +47,20 @@ async function executeWorkflowScript(
   let spentTokens = 0;
   let emitStateChange = noop;
   const routingWarnings: WorkflowModelRoutingWarning[] = [];
+  const features = options.features ?? DEFAULT_WORKFLOW_FEATURES;
+  let ignoredModelHintsLogged = false;
+  const logIgnoredModelHintsOnce = () => {
+    if (ignoredModelHintsLogged) return;
+    ignoredModelHintsLogged = true;
+    logs.push(DISABLED_MODEL_ROUTING_LOG_MESSAGE);
+    emitStateChange();
+  };
   const scheduler = new WorkflowAgentScheduler({
     maxConcurrent: options.maxConcurrentAgents,
     maxTotalAgents: options.maxTotalAgents,
-    defaultModel: parsed.meta.model ?? options.defaultModel,
+    defaultModel: features.experimentalModelRouting
+      ? (parsed.meta.model ?? options.defaultModel)
+      : options.defaultModel,
     defaultThinkingLevel: parsed.meta.thinkingLevel ?? options.defaultThinkingLevel,
     cwd: options.cwd,
     journal: options.journal,
@@ -73,6 +89,10 @@ async function executeWorkflowScript(
     isStopped: () => scheduler.isStopped(),
   });
 
+  if (features.experimentalModelRouting !== true && metaHasNonDefaultModelHint(parsed.meta)) {
+    logIgnoredModelHintsOnce();
+  }
+
   const budget: WorkflowBudget = {
     total: options.budgetTotal ?? null,
     spent: () => spentTokens,
@@ -92,7 +112,9 @@ async function executeWorkflowScript(
       currentModelReference: options.defaultModel,
       currentThinkingLevel: options.defaultThinkingLevel,
       previousWarnings: routingWarnings,
+      features,
     });
+    if (effectiveOptions.ignoredModelHint) logIgnoredModelHintsOnce();
     routingWarnings.push(...effectiveOptions.warnings);
     for (const warning of effectiveOptions.warnings) logs.push(formatRoutingWarning(warning));
     const progressCountBeforeSchedule = scheduler.progress().length;
@@ -166,6 +188,23 @@ export async function tryRunWorkflowScript(
       cause,
     });
   }
+}
+
+function metaHasNonDefaultModelHint(meta: {
+  readonly model?: string;
+  readonly phases?: readonly {
+    readonly model?: string;
+    readonly agents?: readonly { readonly model?: string }[];
+  }[];
+}): boolean {
+  if (isNonDefaultModelHint(meta.model)) return true;
+  return (
+    meta.phases?.some(
+      (phase) =>
+        isNonDefaultModelHint(phase.model) ||
+        phase.agents?.some((agent) => isNonDefaultModelHint(agent.model)) === true,
+    ) === true
+  );
 }
 
 function formatRoutingWarning(warning: WorkflowModelRoutingWarning): string {

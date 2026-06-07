@@ -6,6 +6,7 @@ import {
   registerWorkflowsCommand,
   type RegisterWorkflowsCommandOptions,
 } from "#src/extension/commands/workflows-command.ts";
+import { WORKFLOW_FEATURE_SESSION_ENTRY_TYPE } from "#src/extension/features/resolve.ts";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
 import type { ShowWorkflowsTuiOptions } from "#src/extension/tui/workflows-view.ts";
 import {
@@ -32,6 +33,96 @@ describe("registerWorkflowsCommand", () => {
   afterEach(async () => {
     unregisterWorkflowRunControl("wf_test");
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("should print resolved workflow features in headless mode", async () => {
+    const command = registerCommand();
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("features", {
+        cwd: tempDir,
+        mode: "print",
+        hasUI: false,
+        featureConfigPaths: { userConfigPath: join(tempDir, "user.json") },
+        ui: { notify: vi.fn<() => void>() },
+      });
+
+      expect(stdoutWrite).toHaveBeenCalledWith(
+        expect.stringContaining("experimental-model-routing: disabled (default, experimental)"),
+      );
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should enable a workflow feature in session scope by default", async () => {
+    const appendEntry = vi.fn<(customType: string, data: unknown) => void>();
+    const command = registerCommand({ appendEntry });
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("features enable experimental-model-routing", {
+        cwd: tempDir,
+        mode: "print",
+        hasUI: false,
+        ui: { notify: vi.fn<() => void>() },
+      });
+
+      expect(appendEntry).toHaveBeenCalledWith(WORKFLOW_FEATURE_SESSION_ENTRY_TYPE, {
+        key: "experimentalModelRouting",
+        action: "enable",
+      });
+      expect(stdoutWrite).toHaveBeenCalledWith(
+        expect.stringContaining("Enabled experimental-model-routing for this session."),
+      );
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should write durable project workflow feature config when scope is explicit", async () => {
+    const command = registerCommand();
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("features disable experimental-model-routing --scope project", {
+        cwd: tempDir,
+        mode: "print",
+        hasUI: false,
+        ui: { notify: vi.fn<() => void>() },
+      });
+
+      const config = JSON.parse(
+        await readFile(join(tempDir, ".pi", "workflows", "config.json"), "utf8"),
+      );
+      expect(config).toEqual({ features: { experimentalModelRouting: false } });
+      expect(stdoutWrite).toHaveBeenCalledWith(
+        expect.stringContaining("Disabled experimental-model-routing for project config."),
+      );
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should reject unknown workflow feature names", async () => {
+    const command = registerCommand();
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    try {
+      await command.handler("features enable missing-feature", {
+        cwd: tempDir,
+        mode: "print",
+        hasUI: false,
+        ui: { notify: vi.fn<() => void>() },
+      });
+
+      expect(stderrWrite).toHaveBeenCalledWith(
+        expect.stringContaining("Unknown workflow feature 'missing-feature'."),
+      );
+    } finally {
+      stderrWrite.mockRestore();
+    }
   });
 
   it("should wire pause and resume run callbacks to live run controls in the interactive TUI", async () => {
@@ -357,12 +448,17 @@ interface RegisteredCommandForTest {
   handler: (args: string, ctx: unknown) => Promise<void>;
 }
 
-function registerCommand(options: RegisterWorkflowsCommandOptions = {}): RegisteredCommandForTest {
+function registerCommand(
+  options: RegisterWorkflowsCommandOptions & {
+    readonly appendEntry?: (customType: string, data: unknown) => void;
+  } = {},
+): RegisteredCommandForTest {
   const registerCommandSpy = vi.fn<(...args: unknown[]) => void>();
 
   registerWorkflowsCommand(
     fakePi({
       registerCommand: registerCommandSpy,
+      appendEntry: options.appendEntry,
     }),
     options,
   );

@@ -50,6 +50,9 @@
   "pi": {
     "extensions": [
       "./src/extension/index.ts"
+    ],
+    "skills": [
+      "./skills"
     ]
   }
 }

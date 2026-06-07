@@ -237,7 +237,81 @@ return await agent("scan src", { label: "scan-agent", phase: "Scan" });
     agents.expectNoUnhandledAgents();
   });
 
-  it("should persist meta.model as the run default model and apply it to agents", async () => {
+  it("should persist resolved workflow features and decisions in initial and final manifests", async () => {
+    const scan = agent.pending({ prompt: "scan src", label: "scan-agent" });
+    const agents = setupAgentMock(scan);
+    const script = workflowScript({
+      meta: { name: "feature-audit", description: "Persist feature decisions" },
+      body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          schedulerRunner: agents.schedulerRunner,
+          features: { experimentalModelRouting: true },
+        }),
+      ),
+    );
+    await scan.waitUntilStarted();
+
+    const initialManifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun(launch.runId));
+    expect(initialManifest).toMatchObject({
+      features: { experimentalModelRouting: true },
+      featureDecisions: [{ key: "experimentalModelRouting", value: true, source: "override" }],
+    });
+
+    scan.resolve(AgentResponse.text("ok"));
+    now = 150;
+    const completed = unwrap(await launch.completion);
+    expect(completed).toMatchObject({
+      features: { experimentalModelRouting: true },
+      featureDecisions: [{ key: "experimentalModelRouting", value: true, source: "override" }],
+    });
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should inherit the current Pi model by default and ignore meta.model", async () => {
+    const agents = setupAgentMock(
+      agent.call({ label: "scan-agent", model: "current" }, () =>
+        AgentResponse.text("model result"),
+      ),
+    );
+    const script = workflowScript({
+      meta: {
+        name: "model-default-disabled",
+        description: "Ignore workflow model metadata by default",
+        model: "opus",
+      },
+      body: `
+return await agent("scan src", { label: "scan-agent" });
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({ schedulerRunner: agents.schedulerRunner, defaultModel: "current" }),
+      ),
+    );
+    now = 150;
+    const completed = unwrap(await launch.completion);
+
+    expect(completed).toMatchObject({
+      status: "completed",
+      defaultModel: "current",
+      workflowProgress: [{ type: "workflow_agent", label: "scan-agent", model: "current" }],
+    });
+    expect(completed.logs).toEqual([
+      "Workflow model hints are ignored because experimental-model-routing is disabled; using the current Pi model.",
+    ]);
+    agents.expectNoUnhandledAgents();
+  });
+
+  it("should persist meta.model as the run default model and apply it to agents when experimental model routing is enabled", async () => {
     const agents = setupAgentMock(
       agent.call({ label: "scan-agent", model: "opus" }, () => AgentResponse.text("model result")),
     );
@@ -253,7 +327,13 @@ return await agent("scan src", { label: "scan-agent" });
     });
 
     const launch = unwrap(
-      await launchWorkflow({ script }, launchOptions({ schedulerRunner: agents.schedulerRunner })),
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          schedulerRunner: agents.schedulerRunner,
+          features: { experimentalModelRouting: true },
+        }),
+      ),
     );
     now = 150;
     const completed = unwrap(await launch.completion);
@@ -1058,6 +1138,52 @@ return { scan };
       { type: "workflow_phase", title: "Scan" },
       { type: "workflow_agent", label: "scan-agent", state: "done" },
     ]);
+  });
+
+  it("should reuse cached journal results when only ignored model hints change during resume", async () => {
+    const originalScript = workflowScript({
+      meta: { name: "resume-ignored-model", model: "opus" },
+      body: `return await agent("scan src", { label: "scan-agent", model: "haiku" });`,
+    });
+    const changedScript = workflowScript({
+      meta: { name: "resume-ignored-model", model: "sonnet" },
+      body: `return await agent("scan src", { label: "scan-agent", model: "opus" });`,
+    });
+    const originalAgents = setupAgentMock(
+      agent.call({ prompt: "scan src", label: "scan-agent", model: "current" }, () =>
+        AgentResponse.text("cached result"),
+      ),
+    );
+    const resumedAgents = setupAgentMock();
+
+    const original = unwrap(
+      await launchWorkflow(
+        { script: originalScript },
+        launchOptions({
+          createRunId: () => "wf_ignored_model",
+          defaultModel: "current",
+          schedulerRunner: originalAgents.schedulerRunner,
+        }),
+      ),
+    );
+    unwrap(await original.completion);
+
+    const resumed = unwrap(
+      await launchWorkflow(
+        { script: changedScript, resumeFromRunId: "wf_ignored_model" },
+        launchOptions({
+          createRunId: () => "wf_ignored_model_resumed",
+          defaultModel: "current",
+          schedulerRunner: resumedAgents.schedulerRunner,
+        }),
+      ),
+    );
+
+    expect(unwrap(await resumed.completion)).toMatchObject({
+      status: "completed",
+      result: "cached result",
+    });
+    resumedAgents.expectNoAgents();
   });
 
   it("should rerun agent calls when stable key inputs change during resume", async () => {

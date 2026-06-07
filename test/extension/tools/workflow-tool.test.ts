@@ -87,10 +87,12 @@ describe("Workflow tool", () => {
     expect(tool?.description).toContain('never strings such as ["Generate"]');
     expect(tool?.description).toContain("opts.schema");
     expect(tool?.description).toContain("plain JSON object schema");
-    expect(tool?.description).toContain("model and thinking hints");
-    expect(tool?.description).toContain("cheap fan-out");
-    expect(tool?.description).toContain("heavy synthesis");
-    expect(tool?.description).toContain("fall back to the current Pi model");
+    expect(tool?.description).toContain("select the desired Pi model before launching");
+    expect(tool?.description).toContain("do not set model hints by default");
+    expect(tool?.description).toContain("use thinkingLevel");
+    expect(tool?.description).toContain("experimental-model-routing");
+    expect(tool?.description).not.toContain("cheap fan-out");
+    expect(tool?.description).not.toContain("heavy synthesis");
     expect(tool?.description).toContain("at most 4096 items");
     expect(tool?.description).toContain("stop the current assistant turn");
     expect(tool?.description).not.toContain("nested workflow");

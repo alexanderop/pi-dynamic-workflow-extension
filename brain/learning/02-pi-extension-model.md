@@ -4,12 +4,13 @@ This file explains the Pi extension layer as it applies to this repository.
 
 ## The entrypoint
 
-Pi loads the extension declared in `package.json` (`package.json:41-45`):
+Pi loads the extension and packaged skills declared in `package.json`:
 
 ```json
 {
   "pi": {
-    "extensions": ["./src/extension/index.ts"]
+    "extensions": ["./src/extension/index.ts"],
+    "skills": ["./skills"]
   }
 }
 ```

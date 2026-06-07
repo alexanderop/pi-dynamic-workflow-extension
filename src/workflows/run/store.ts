@@ -3,6 +3,12 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
+import { isWorkflowFeatureKey } from "#src/extension/features/registry.ts";
+import type {
+  WorkflowFeatureDecision,
+  WorkflowFeatureDecisionSource,
+  WorkflowFeatureFlags,
+} from "#src/extension/features/registry.ts";
 import type {
   WorkflowFailure,
   WorkflowPhaseProgress,
@@ -201,6 +207,8 @@ function toWorkflowRunState(value: unknown): WorkflowRunState | undefined {
       defaultThinkingLevel: isWorkflowThinkingLevel(value.defaultThinkingLevel)
         ? value.defaultThinkingLevel
         : undefined,
+      features: normalizeWorkflowFeatures(value.features),
+      featureDecisions: normalizeFeatureDecisions(value.featureDecisions),
       script: value.script,
       scriptPath: value.scriptPath,
       phases: normalizePhases(value.phases),
@@ -258,6 +266,8 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
     defaultThinkingLevel: isWorkflowThinkingLevel(value.defaultThinkingLevel)
       ? value.defaultThinkingLevel
       : undefined,
+    features: normalizeWorkflowFeatures(value.features),
+    featureDecisions: normalizeFeatureDecisions(value.featureDecisions),
     script: value.script,
     scriptPath: value.scriptPath,
     phases,
@@ -285,6 +295,42 @@ function observedManifestToRunState(value: Record<string, unknown>): WorkflowRun
     outputPath: isString(value.outputPath) ? value.outputPath : undefined,
     failures: error === undefined ? undefined : [{ scope: "run", message: error }],
   };
+}
+
+function normalizeWorkflowFeatures(value: unknown): WorkflowFeatureFlags | undefined {
+  if (!isRecord(value)) return undefined;
+  return typeof value.experimentalModelRouting === "boolean"
+    ? { experimentalModelRouting: value.experimentalModelRouting }
+    : undefined;
+}
+
+function normalizeFeatureDecisions(value: unknown): readonly WorkflowFeatureDecision[] | undefined {
+  if (!isArray(value)) return undefined;
+  const decisions = value.filter(isWorkflowFeatureDecision);
+  return decisions.length === 0 ? undefined : decisions;
+}
+
+function isWorkflowFeatureDecision(value: unknown): value is WorkflowFeatureDecision {
+  if (!isRecord(value)) return false;
+  return (
+    isWorkflowFeatureKey(value.key) &&
+    typeof value.value === "boolean" &&
+    isWorkflowFeatureDecisionSource(value.source) &&
+    (value.detail === undefined || isString(value.detail))
+  );
+}
+
+function isWorkflowFeatureDecisionSource(value: unknown): value is WorkflowFeatureDecisionSource {
+  return (
+    value === "default" ||
+    value === "user" ||
+    value === "project" ||
+    value === "hook" ||
+    value === "env" ||
+    value === "cli" ||
+    value === "session" ||
+    value === "override"
+  );
 }
 
 function normalizePhases(phases: unknown[]): WorkflowRunPhase[] {

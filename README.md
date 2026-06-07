@@ -34,9 +34,9 @@ pi -e .
 
 ## Current Behavior
 
-The package announces auth-configured Pi models and their supported thinking modes when a session starts, then registers a `/workflows` command that lists project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`.
+The package announces auth-configured Pi models and their supported thinking modes when a session starts, registers a `/workflows` command for project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`, and ships the `workflow-debugger` skill for investigating failed or surprising workflow runs.
 
-The core workflow modules now support metadata parsing, sandboxed script execution, scheduler-capped `agent()` calls, run-state discovery, inline launch persistence, saved workflow launch by name or explicit path, saved workflow listing with `description`/`whenToUse` guidance, per-run `journal.jsonl` audit/cache events, resume cache replay for inline launches, terminal `output.json` files, and testable task-notification payloads. The `ultracode` trigger wires plain-text agents to real Pi sidechain sessions and sends completion notifications back through `pi.sendMessage()`; structured-output subagents are still a planned slice.
+The core workflow modules now support metadata parsing, sandboxed script execution, scheduler-capped `agent()` calls, run-state discovery, inline launch persistence, saved workflow launch by name or explicit path, saved workflow listing with `description`/`whenToUse` guidance, per-run `journal.jsonl` audit/cache events, resume cache replay for inline launches, terminal `output.json` files, structured-output capture for Pi subagents, and testable task-notification payloads. The `ultracode` trigger wires agents to real Pi sidechain sessions and sends completion notifications back through `pi.sendMessage()`.
 
 ## Development
 
@@ -58,12 +58,13 @@ Pi loads this package through the `pi` manifest in `package.json`:
 ```json
 {
   "pi": {
-    "extensions": ["./src/extension/index.ts"]
+    "extensions": ["./src/extension/index.ts"],
+    "skills": ["./skills"]
   }
 }
 ```
 
-The extension entrypoint stays small. Most behavior should live in ordinary TypeScript modules so the workflow runtime can be unit-tested without launching Pi.
+The extension entrypoint stays small. Most behavior should live in ordinary TypeScript modules so the workflow runtime can be unit-tested without launching Pi. Packaged skills live under `skills/`; `workflow-debugger` teaches agents how to diagnose existing workflow artifacts without relaunching work by default.
 
 Current module structure follows [ADR 0007](./brain/decisions/adr/0007-organize-workflows-as-domain-modules.md):
 

@@ -20,16 +20,16 @@ describe("WORKFLOW_AUTHORING_INSTRUCTIONS", () => {
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).not.toContain("Do not pass schema yet");
   });
 
-  it("should teach soft model routing for cheap fan-out and heavy synthesis", () => {
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Use cheaper/faster models for fan-out");
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Use stronger models for final synthesis");
+  it("should teach the default inherited-model behavior and guard model hints behind the experimental flag", () => {
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain(
-      "exact model id from the available Pi models list",
+      "Select the desired Pi model before launching the workflow",
     );
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain(
-      "invalid or unavailable model/thinking hints fall back",
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Do not set `model` by default");
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("use `thinkingLevel`");
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("experimental-model-routing");
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).not.toContain("Use cheaper/faster models for fan-out");
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).not.toContain(
+      "Use stronger models for final synthesis",
     );
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("openai-codex/gpt-5.4-mini");
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("openai-codex/gpt-5.5");
   });
 });

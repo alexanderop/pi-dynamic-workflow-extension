@@ -1,5 +1,10 @@
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import { createPiWorkflowAgentRunner } from "#src/workflows/agent/pi-runner.ts";
+import {
+  WORKFLOW_FEATURE_DEFINITIONS,
+  cliFlagNameForWorkflowFeature,
+} from "#src/extension/features/registry.ts";
+import { resolveWorkflowFeatures } from "#src/extension/features/resolve.ts";
 import type { WorkflowLaunchOptions } from "#src/workflows/launch/launcher.ts";
 import type { WorkflowRunTriggerSource } from "#src/workflows/run/model.ts";
 
@@ -12,12 +17,26 @@ export interface WorkflowLaunchContext {
   readonly modelRegistry?: CreateAgentSessionOptions["modelRegistry"] & {
     readonly getAvailable?: () => Promise<AvailableModels> | AvailableModels;
   };
-  readonly sessionManager?: { readonly getSessionId?: () => string | undefined };
+  readonly sessionManager?: {
+    readonly getSessionId?: () => string | undefined;
+    readonly getEntries?: () => readonly {
+      readonly type?: unknown;
+      readonly customType?: unknown;
+      readonly data?: unknown;
+    }[];
+  };
+  readonly featureConfigPaths?: {
+    readonly userConfigPath?: string;
+    readonly projectConfigPath?: string;
+  };
+  readonly env?: Record<string, string | undefined>;
 }
 
 /** The host-API slice that reports the active thinking level, when available. */
 export interface WorkflowThinkingProvider {
   readonly getThinkingLevel?: () => WorkflowLaunchOptions["defaultThinkingLevel"];
+  readonly getFlag?: (name: string) => unknown;
+  readonly events?: Parameters<typeof resolveWorkflowFeatures>[0]["events"];
 }
 
 /** Per-launch values that differ between the tool, command, and resume paths. */
@@ -26,6 +45,7 @@ export interface WorkflowLaunchOverrides {
   readonly triggerSource: WorkflowRunTriggerSource;
   readonly operations?: WorkflowLaunchOptions["operations"];
   readonly notifyTerminal?: WorkflowLaunchOptions["notifyTerminal"];
+  readonly features?: WorkflowLaunchOptions["features"];
 }
 
 /**
@@ -39,6 +59,18 @@ export async function buildWorkflowLaunchOptions(
   overrides: WorkflowLaunchOverrides,
 ): Promise<WorkflowLaunchOptions> {
   const thinkingLevel = currentThinkingLevel(pi);
+  const resolvedFeatures = await resolveWorkflowFeatures({
+    cwd: ctx.cwd,
+    workflowRoot: overrides.rootDir,
+    sessionId: currentSessionId(ctx),
+    userConfigPath: ctx.featureConfigPaths?.userConfigPath,
+    projectConfigPath: ctx.featureConfigPaths?.projectConfigPath,
+    env: ctx.env,
+    cliFlags: currentCliFlags(pi),
+    sessionEntries: currentSessionEntries(ctx),
+    overrides: overrides.features,
+    events: pi.events,
+  });
   return {
     rootDir: overrides.rootDir,
     operations: overrides.operations,
@@ -48,6 +80,8 @@ export async function buildWorkflowLaunchOptions(
     defaultModel: currentModelReference(ctx.model),
     defaultThinkingLevel: thinkingLevel,
     availableModels: await currentAvailableModels(ctx),
+    features: resolvedFeatures.features,
+    featureDecisions: resolvedFeatures.decisions,
     schedulerRunner: createPiWorkflowAgentRunner({
       cwd: ctx.cwd,
       model: ctx.model,
@@ -88,6 +122,31 @@ export async function currentAvailableModels(ctx: {
   } catch {
     return undefined;
   }
+}
+
+function currentSessionEntries(ctx: WorkflowLaunchContext): readonly {
+  readonly type?: unknown;
+  readonly customType?: unknown;
+  readonly data?: unknown;
+}[] {
+  try {
+    return ctx.sessionManager?.getEntries?.() ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function currentCliFlags(pi: WorkflowThinkingProvider): Record<string, boolean | undefined> {
+  const flags: Record<string, boolean | undefined> = {};
+  for (const definition of WORKFLOW_FEATURE_DEFINITIONS) {
+    const flagName = cliFlagNameForWorkflowFeature(definition.key);
+    try {
+      flags[flagName] = pi.getFlag?.(flagName) === true;
+    } catch {
+      flags[flagName] = undefined;
+    }
+  }
+  return flags;
 }
 
 export function currentModelReference(model: unknown): string | undefined {

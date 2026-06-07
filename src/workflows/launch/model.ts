@@ -6,6 +6,10 @@ import type {
 } from "#src/workflows/run/model.ts";
 import type { WorkflowParseError } from "#src/workflows/script/parser.ts";
 import type { WorkflowRuntimeOptions } from "#src/workflows/script/model.ts";
+import type {
+  WorkflowFeatureDecision,
+  WorkflowFeatureFlags,
+} from "#src/extension/features/registry.ts";
 import type { WorkflowLaunchOperations } from "./operations.ts";
 import type {
   WorkflowSavedWorkflowError,
@@ -47,6 +51,8 @@ export interface WorkflowLaunchOptions {
   readonly onRunStateChange?: WorkflowRunStateObserver;
   readonly inlineResultMaxChars?: number;
   readonly savedWorkflowDirs?: WorkflowSavedWorkflowLocations;
+  readonly features?: Partial<WorkflowFeatureFlags>;
+  readonly featureDecisions?: readonly WorkflowFeatureDecision[];
 }
 
 export interface WorkflowLaunch {

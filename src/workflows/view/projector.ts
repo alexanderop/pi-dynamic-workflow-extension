@@ -24,14 +24,20 @@ export function buildMonitorView(
 ): MonitorViewModel {
   const now = options.now ?? Date.now();
   const agents = uniqueAgentProgress(run.workflowProgress.filter(isWorkflowAgentProgress));
+  const modelRoutingEnabled = run.features?.experimentalModelRouting === true;
   const phaseMetadata = uniquePhaseMetadata(run, agents);
   const phases = phaseMetadata.map((phase) => {
     const phaseAgents = agentsForPhase(agents, phase.title);
-    const plannedAgents = plannedAgentsForPhase(phase, phaseAgents, run.defaultModel);
+    const plannedAgents = plannedAgentsForPhase(
+      phase,
+      phaseAgents,
+      run.defaultModel,
+      modelRoutingEnabled,
+    );
     return {
       title: phase.title,
       detail: phase.detail,
-      modelLabel: phase.model ?? run.defaultModel,
+      modelLabel: modelRoutingEnabled ? (phase.model ?? run.defaultModel) : run.defaultModel,
       totalAgents: Math.max(
         phaseAgents.length + plannedAgents.length,
         phase.agentCount ?? 0,
@@ -247,13 +253,14 @@ function plannedAgentsForPhase(
   phase: WorkflowRunPhase,
   actualAgents: WorkflowAgentProgress[],
   defaultModel: string | undefined,
+  modelRoutingEnabled: boolean,
 ): MonitorPlannedAgentRow[] {
   const actualLabels = new Set(actualAgents.map((agent) => agent.label));
   return (phase.agents ?? [])
     .filter((agent) => !actualLabels.has(agent.label))
     .map((agent) => ({
       label: agent.label,
-      modelLabel: agent.model ?? phase.model ?? defaultModel,
+      modelLabel: modelRoutingEnabled ? (agent.model ?? phase.model ?? defaultModel) : undefined,
       agentType: agent.agentType,
     }));
 }

@@ -6,19 +6,22 @@ For the broader picture of what an extension *is* and how its API is shaped, rea
 
 ## Package manifest
 
-The package declaration is in [`../../package.json`](../../../package.json) (`pi.extensions` at `package.json:41-45`):
+The package declaration is in [`../../package.json`](../../../package.json):
 
 ```json
 {
   "name": "pi-dynamic-workflow-extension",
   "keywords": ["pi-extension", "pi-package", "workflows"],
   "pi": {
-    "extensions": ["./src/extension/index.ts"]
+    "extensions": ["./src/extension/index.ts"],
+    "skills": ["./skills"]
   }
 }
 ```
 
-Pi reads the `pi.extensions` array and loads the listed extension entrypoints. The single entrypoint here is `src/extension/index.ts`, whose default export is `dynamicWorkflowExtension(pi: ExtensionAPI)` (`src/extension/index.ts:10`). That function registers one command, `/workflows`.
+Pi reads the `pi.extensions` array and loads the listed extension entrypoints. The single entrypoint here is `src/extension/index.ts`, whose default export is `dynamicWorkflowExtension(pi: ExtensionAPI)` (`src/extension/index.ts:10`). That function registers `/workflows`, the model-facing `Workflow` tool, ultracode hooks, feature flags, and status-line behavior.
+
+Pi also reads `pi.skills` and loads packaged skills under `skills/`. This package currently ships `skills/workflow-debugger/SKILL.md`, a diagnostic guide for investigating existing workflow artifacts.
 
 ## Local development
 
@@ -105,10 +108,11 @@ Use this checklist:
 1. Does `package.json` have a `pi.extensions` entry?
 2. Does the referenced file exist?
 3. Does the file default-export a function? (Pi's loader rejects non-function default exports.)
-4. Are runtime dependencies listed in `dependencies`?
-5. Are Pi core packages listed as `peerDependencies` with `"*"`?
-6. Does `pi -e .` show extension loading errors?
-7. Does `test/extension/index.test.ts` still pass? (`pnpm test`)
+4. If packaged skills should load, does `package.json` have a `pi.skills` entry and does each skill have `SKILL.md` frontmatter with `name` and `description`?
+5. Are runtime dependencies listed in `dependencies`?
+6. Are Pi core packages listed as `peerDependencies` with `"*"`?
+7. Does `pi -e .` show extension or skill loading errors?
+8. Do package/extension tests still pass? (`pnpm test`)
 
 ## Source references
 
