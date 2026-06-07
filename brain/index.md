@@ -1,0 +1,85 @@
+# Brain
+
+## Codebase
+- [[codebase/workflow-model-policy-direction]]
+
+## Contracts
+- [[contracts/spec-coverage]]
+
+## Decisions
+- [[decisions/adr/0001-use-adrs-for-workflow-architecture]]
+- [[decisions/adr/0002-use-acorn-and-node-vm-for-first-workflow-runtime]]
+- [[decisions/adr/0003-use-explicit-workflow-state-machines]]
+- [[decisions/adr/0004-use-pi-extension-context-for-mode-and-prompt-aware-workflows]]
+- [[decisions/adr/0005-use-project-local-pi-workflow-run-storage]]
+- [[decisions/adr/0006-use-terminal-notification-hook-before-pi-message-wiring]]
+- [[decisions/adr/0007-organize-workflows-as-domain-modules]]
+- [[decisions/adr/0008-use-v2-stable-agent-keys-and-jsonl-journals]]
+- [[decisions/adr/0009-use-pi-saved-workflow-script-locations]]
+- [[decisions/adr/0010-split-workflows-tui-projection-navigation-and-pi-adapter]]
+- [[decisions/adr/0011-scope-workflows-view-to-current-pi-session]]
+- [[decisions/adr/0012-use-pi-session-policy-for-ultracode]]
+- [[decisions/adr/0013-use-pi-footer-status-for-active-workflows]]
+- [[decisions/adr/0014-use-terminating-pi-tool-for-structured-output]]
+- [[decisions/adr/0015-use-phase-agent-count-planning-hints]]
+- [[decisions/adr/0016-use-terminating-workflow-launch-tool]]
+- [[decisions/adr/0017-use-workflow-feature-flags]]
+- [[decisions/adr/README]]
+
+## Learning
+- [[learning/00-orientation]]
+- [[learning/01-pi-basics]]
+- [[learning/02-pi-extension-model]]
+- [[learning/03-pi-package-loading]]
+- [[learning/04-dynamic-workflow-concepts]]
+- [[learning/05-spec-to-code-map]]
+- [[learning/06-current-implementation-walkthrough]]
+- [[learning/07-workflow-script-runtime]]
+- [[learning/08-state-persistence-and-workflows-command]]
+- [[learning/09-testing-and-debugging]]
+- [[learning/10-roadmap-next-slices]]
+- [[learning/README]]
+- [[learning/exercises]]
+- [[learning/glossary]]
+- [[learning/references]]
+
+## Plans
+- [[plans/index]]
+- [[plans/workflows/agent-mock-boundary/spec]]
+- [[plans/workflows/align-with-pi/plan]]
+- [[plans/workflows/atomic-manifest-writes/chunk]]
+- [[plans/workflows/feature-flags/spec]]
+- [[plans/workflows/live-feedback/spec]]
+- [[plans/workflows/saved-workflow-scopes/spec]]
+- [[plans/workflows/structured-output-retry/chunk]]
+- [[plans/workflows/test-page-objects/spec]]
+- [[plans/workflows/workflows-monitor/plan]]
+- [[plans/workflows/workflows-monitor/ticket]]
+
+## Principles
+- [[principles/boundary-discipline]]
+- [[principles/cost-aware-delegation]]
+- [[principles/encode-lessons-in-structure]]
+- [[principles/exhaust-the-design-space]]
+- [[principles/experience-first]]
+- [[principles/fix-root-causes]]
+- [[principles/foundational-thinking]]
+- [[principles/guard-the-context-window]]
+- [[principles/make-operations-idempotent]]
+- [[principles/migrate-callers-then-delete-legacy-apis]]
+- [[principles/never-block-on-the-human]]
+- [[principles/outcome-oriented-execution]]
+- [[principles/prove-it-works]]
+- [[principles/redesign-from-first-principles]]
+- [[principles/serialize-shared-state-mutations]]
+- [[principles/subtract-before-you-add]]
+
+## References
+- [[references/claude-code-workflow-tool]]
+- [[references/error-handling]]
+- [[references/pi-extension-reference]]
+- [[references/testing-reference]]
+
+## Other
+- [[decisions-adr-0006-use-terminal-notification-hook-before-pi-message-wiring]]
+- [[principles]]

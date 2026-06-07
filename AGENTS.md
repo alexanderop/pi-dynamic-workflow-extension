@@ -24,7 +24,7 @@ Before making changes in this repo:
 - Do not claim exact Claude Code internals unless the evidence is present; describe observed behavior and inferred contracts separately.
 - Keep implementation changes connected to the learning goal: building a Pi extension that helps us understand dynamic workflows.
 - When adding or changing behavior, document how it maps back to the workflow specification.
-- When making or relying on a durable architecture decision, add or update an ADR in `docs/areas/adr/`.
+- When making or relying on a durable architecture decision, add or update an ADR in `brain/decisions/adr/`.
 
 ## Important files
 
@@ -54,29 +54,31 @@ The Oxfmt scripts intentionally do not target the whole repository. Do not forma
 - No emojis in commits, PRs, or code. Technical prose only.
 - Do not commit unless asked.
 
-## Docs index
+## Brain index
 
-`docs/` is organized with the PARA method — by actionability, not topic:
+Project documentation lives under `brain/` so the brain index can discover it.
+The docs are organized by topic:
 
-- **`docs/projects/`** — active work with a finish line. Start here.
-- **`docs/areas/`** — living standards & contracts maintained alongside the code.
-- **`docs/resources/`** — material to learn from (onboarding, examples, blog).
-- **`docs/archive/`** — done or superseded; history only.
+- **`brain/plans/`** — active work, status ledger, and workflow project specs.
+- **`brain/contracts/`** — living contracts maintained alongside the code.
+- **`brain/decisions/`** — architecture decision records.
+- **`brain/references/`** — stable reference material.
+- **`brain/learning/`** — guided onboarding and learning material.
+- **`brain/blog/`**, **`brain/examples/`**, and **`brain/assets/`** — supporting docs material.
 
 Use these like wiki links when orienting:
 
 - [[spec.md]] — current working specification for Claude-Code-like dynamic workflows.
 - [[README.md]] — package overview, install commands, planned structure, and `/workflows` UI plan.
-- [[docs/projects/README.md]] — **the status ledger**: what's implemented vs. what's next, verified against code. Supersedes the old backlog.
-- [[docs/areas/spec-coverage.md]] — spec-to-code ownership map showing production files, tests, status, and next gaps by spec area.
-- [[docs/areas/adr/README.md]] — how to record architecture decisions for this project.
-- [[docs/areas/references/pi-extension-reference.md]] — Pi extension/package behavior, source files to inspect, dependency rules, loader behavior, and custom UI references.
-- [[docs/areas/references/testing-reference.md]] — Pi testing patterns to copy from the real Pi codebase.
-- [[docs/areas/references/error-handling.md]] — project-local Result pattern and workflow error-handling conventions.
-- [[docs/resources/learning/README.md]] — guided onboarding path for learning Pi, dynamic workflows, and the current implementation.
+- [[brain/index.md]] — top-level brain index.
+- [[brain/plans/index.md]] — **the status ledger**: what's implemented vs. what's next, verified against code.
+- [[brain/contracts/spec-coverage.md]] — spec-to-code ownership map showing production files, tests, status, and next gaps by spec area.
+- [[brain/decisions/adr/README.md]] — how to record architecture decisions for this project.
+- [[brain/references/pi-extension-reference.md]] — Pi extension/package behavior, source files to inspect, dependency rules, loader behavior, and custom UI references.
+- [[brain/references/testing-reference.md]] — Pi testing patterns to copy from the real Pi codebase.
+- [[brain/references/error-handling.md]] — project-local Result pattern and workflow error-handling conventions.
+- [[brain/learning/README.md]] — guided onboarding path for learning Pi, dynamic workflows, and the current implementation.
 
 ## Reference repositories
 
-Source-of-truth code for libraries we depend on. Treat as **read-only reference material** — do not edit files under `repos/`. When asked about a library listed below, explore its source here first instead of guessing or relying on training data.
-
-- `repos/pi/` — https://github.com/earendil-works/pi @ main (squashed)
+No reference repositories are currently vendored under `repos/`. If a dependency source tree is added there later, treat it as **read-only reference material** and explore it before guessing or relying on training data.
