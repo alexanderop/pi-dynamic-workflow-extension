@@ -77,6 +77,12 @@ export interface WorkflowRuntimeOptions {
   availableModels?: readonly WorkflowModelRoutingModel[];
   maxConcurrentAgents?: number;
   maxTotalAgents?: number;
+  /**
+   * Total wall-clock deadline for the whole run, in milliseconds. When the
+   * deadline fires the run rejects, in-flight agents are cancelled via the
+   * scheduler, and any further `agent()` call throws. Omit for no deadline.
+   */
+  deadlineMs?: number;
   agentRunner?: (prompt: string, options: AgentOptions) => Promise<unknown>;
   schedulerRunner?: WorkflowAgentRunner;
   journal?: WorkflowAgentJournal;

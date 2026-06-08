@@ -11,7 +11,11 @@ import {
   workflowRunScriptPath,
   workflowRunTranscriptDir,
 } from "#src/workflows/run/root-dir.ts";
-import { transitionRun } from "#src/workflows/run/state-machine.ts";
+import {
+  transitionRun,
+  type WorkflowRunEvent,
+  type WorkflowTransitionError,
+} from "#src/workflows/run/state-machine.ts";
 import { projectSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import { toTaskNotification, toTerminalOutput } from "./notification.ts";
 import {
@@ -400,8 +404,10 @@ async function executeWorkflowInBackground({
       runtimeResult.value.stopped === true
         ? stopRunState(initialState, runtimeResult.value, now(), outputPath)
         : completeRunState(initialState, runtimeResult.value, now(), outputPath);
+    if (terminalState.status === "error")
+      return err(backgroundError(initialState.runId, terminalState.error));
     const terminal = await writeTerminalArtifacts({
-      state: terminalState,
+      state: terminalState.value,
       outputPath,
       summarySource,
       notifyTerminal,
@@ -411,8 +417,8 @@ async function executeWorkflowInBackground({
     });
     if (terminal.status === "error")
       return err(backgroundError(initialState.runId, terminal.error));
-    notifyRunStateChange(onRunStateChange, terminalState);
-    return ok(terminalState);
+    notifyRunStateChange(onRunStateChange, terminalState.value);
+    return ok(terminalState.value);
   }
 
   const failed = failRunState(
@@ -422,8 +428,9 @@ async function executeWorkflowInBackground({
     outputPath,
     runtimeResult.error.partialState,
   );
+  if (failed.status === "error") return err(backgroundError(initialState.runId, failed.error));
   const terminal = await writeTerminalArtifacts({
-    state: failed,
+    state: failed.value,
     outputPath,
     summarySource,
     notifyTerminal,
@@ -432,7 +439,7 @@ async function executeWorkflowInBackground({
     operations,
   });
   if (terminal.status === "error") return err(backgroundError(initialState.runId, terminal.error));
-  notifyRunStateChange(onRunStateChange, failed);
+  notifyRunStateChange(onRunStateChange, failed.value);
   return err(backgroundError(initialState.runId, runtimeResult.error));
 }
 
@@ -523,22 +530,32 @@ function notifyRunStateChange(
   }
 }
 
+function applyRunTransitions(
+  state: WorkflowRunState,
+  ...events: readonly WorkflowRunEvent[]
+): Result<WorkflowRunState, WorkflowTransitionError> {
+  let current = state;
+  for (const event of events) {
+    const transitioned = transitionRun(current, event);
+    if (transitioned.status === "error") return transitioned;
+    current = transitioned.value;
+  }
+  return ok(current);
+}
+
 function completeRunState(
   initialState: WorkflowRunState,
   runtimeState: WorkflowRuntimeState,
   now: number,
   outputPath: string,
-): WorkflowRunState {
-  const withRuntimeState = mergeRuntimeState(initialState, runtimeState);
-  const completing = transitionRun(withRuntimeState, { type: "run_complete_requested", now });
-  if (completing.status === "error") throw new Error(completing.error.message);
-  const completed = transitionRun(completing.value, {
-    type: "run_completed",
-    now,
-    result: runtimeState.result,
-  });
-  if (completed.status === "error") throw new Error(completed.error.message);
-  return { ...completed.value, outputPath };
+): Result<WorkflowRunState, WorkflowTransitionError> {
+  const transitioned = applyRunTransitions(
+    mergeRuntimeState(initialState, runtimeState),
+    { type: "run_complete_requested", now },
+    { type: "run_completed", now, result: runtimeState.result },
+  );
+  if (transitioned.status === "error") return transitioned;
+  return ok({ ...transitioned.value, outputPath });
 }
 
 function stopRunState(
@@ -546,13 +563,14 @@ function stopRunState(
   runtimeState: WorkflowRuntimeState,
   now: number,
   outputPath: string,
-): WorkflowRunState {
-  const withRuntimeState = mergeRuntimeState(initialState, runtimeState);
-  const stopping = transitionRun(withRuntimeState, { type: "run_stop_requested", now });
-  if (stopping.status === "error") throw new Error(stopping.error.message);
-  const stopped = transitionRun(stopping.value, { type: "run_stopped", now });
-  if (stopped.status === "error") throw new Error(stopped.error.message);
-  return { ...stopped.value, result: runtimeState.result, outputPath };
+): Result<WorkflowRunState, WorkflowTransitionError> {
+  const transitioned = applyRunTransitions(
+    mergeRuntimeState(initialState, runtimeState),
+    { type: "run_stop_requested", now },
+    { type: "run_stopped", now },
+  );
+  if (transitioned.status === "error") return transitioned;
+  return ok({ ...transitioned.value, result: runtimeState.result, outputPath });
 }
 
 function failRunState(
@@ -561,15 +579,17 @@ function failRunState(
   now: number,
   outputPath: string,
   runtimeState?: WorkflowRuntimeState,
-): WorkflowRunState {
+): Result<WorkflowRunState, WorkflowTransitionError> {
   const failure = { scope: "run" as const, message };
   const state =
     runtimeState === undefined ? initialState : mergeRuntimeState(initialState, runtimeState);
-  const failing = transitionRun(state, { type: "run_fail_requested", now, failure });
-  if (failing.status === "error") throw new Error(failing.error.message);
-  const failed = transitionRun(failing.value, { type: "run_failed", now, failure });
-  if (failed.status === "error") throw new Error(failed.error.message);
-  return { ...failed.value, outputPath };
+  const transitioned = applyRunTransitions(
+    state,
+    { type: "run_fail_requested", now, failure },
+    { type: "run_failed", now, failure },
+  );
+  if (transitioned.status === "error") return transitioned;
+  return ok({ ...transitioned.value, outputPath });
 }
 
 function mergeRuntimeState(

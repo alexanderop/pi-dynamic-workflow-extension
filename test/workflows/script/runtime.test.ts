@@ -376,6 +376,37 @@ return m.random();
     });
   });
 
+  it("should abort an async runaway loop when the wall-clock deadline fires", async () => {
+    const agents = setupAgentMock(
+      agent.call({}, ({ prompt }) => AgentResponse.delay(1, AgentResponse.text(`tick:${prompt}`))),
+    );
+
+    const result = await tryRunWorkflowScript(
+      workflowScript({
+        meta: { name: "runaway", description: "Loops forever awaiting agents" },
+        body: `
+let n = 0;
+while (true) {
+  await agent("tick " + n++);
+}
+`,
+      }),
+      {
+        schedulerRunner: agents.schedulerRunner,
+        deadlineMs: 25,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: {
+        _tag: "WorkflowRuntimeError",
+        message: expect.stringContaining("deadline"),
+        partialState: { stopped: true },
+      },
+    });
+  });
+
   it("should enforce budget.total as a hard ceiling before scheduling further agents", async () => {
     const agents = setupAgentMock(
       agent.call({ prompt: "first" }, () => AgentResponse.text("first result")),

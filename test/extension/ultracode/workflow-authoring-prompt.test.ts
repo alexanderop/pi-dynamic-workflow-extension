@@ -29,9 +29,13 @@ describe("WORKFLOW_AUTHORING_INSTRUCTIONS", () => {
   it("should include concrete reusable workflow shapes without repo-specific filenames", () => {
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Example workflow shapes to adapt");
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Review/audit with adversarial verification");
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Scope/search/fetch/verify/synthesize research");
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain(
+      "Scope/search/fetch/verify/synthesize research",
+    );
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("reviewPrompt(d)");
-    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).not.toContain(".claude/workflows/saved-command-review.js");
+    expect(WORKFLOW_AUTHORING_INSTRUCTIONS).not.toContain(
+      ".claude/workflows/saved-command-review.js",
+    );
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).not.toContain("deep-research2.js");
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Root-cause or flaky-test investigation");
     expect(WORKFLOW_AUTHORING_INSTRUCTIONS).toContain("Tournament/generate-and-filter");

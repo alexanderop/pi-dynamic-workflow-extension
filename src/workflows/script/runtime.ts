@@ -24,6 +24,14 @@ export type {
 } from "./model.ts";
 
 export const WORKFLOW_COLLECTION_ITEM_LIMIT = 4096;
+/**
+ * Bounds a single *synchronous* execution slice between awaits (e.g. a
+ * `while (true) {}` loop with no await). This is NOT a total wall-clock limit:
+ * an async `while (true) { await agent() }` loop yields the event loop on every
+ * iteration, so the synchronous slice is tiny and this timer never fires. Total
+ * run time is bounded separately by `deadlineMs` in {@link WorkflowRuntimeOptions}.
+ */
+export const WORKFLOW_SYNCHRONOUS_SLICE_TIMEOUT_MS = 1000;
 export const DISABLED_MODEL_ROUTING_LOG_MESSAGE =
   "Workflow model hints are ignored because experimental-model-routing is disabled; using the current Pi model.";
 
@@ -46,6 +54,8 @@ async function executeWorkflowScript(
   const agentCalls: WorkflowRuntimeState["agentCalls"] = [];
   let spentTokens = 0;
   let emitStateChange = noop;
+  const deadlineMs = options.deadlineMs;
+  let deadlineExceeded = false;
   const routingWarnings: WorkflowModelRoutingWarning[] = [];
   const features = options.features ?? DEFAULT_WORKFLOW_FEATURES;
   let ignoredModelHintsLogged = false;
@@ -102,6 +112,11 @@ async function executeWorkflowScript(
 
   const agent = async (prompt: string, agentOptions: AgentOptions = {}) => {
     if (typeof prompt !== "string") throw new TypeError("agent(prompt) requires a string prompt.");
+    if (deadlineExceeded) {
+      throw new Error(
+        `Workflow exceeded its wall-clock deadline of ${deadlineMs}ms; no further agent() calls are allowed.`,
+      );
+    }
     if (budget.total !== null && spentTokens >= budget.total) {
       throw new Error("Workflow token budget exhausted; no further agent() calls are allowed.");
     }
@@ -161,10 +176,29 @@ async function executeWorkflowScript(
   });
   emitStateChange = () => options.onStateChange?.(currentState());
 
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     const wrapped = `(async () => {\n${parsed.body}\n})()`;
     const script = new vm.Script(wrapped, { filename: "workflow.js" });
-    return ok(currentState(await script.runInContext(context, { timeout: 1000 })));
+    // The vm `timeout` only bounds the synchronous slice of the run (the IIFE
+    // returns a Promise almost immediately), so it guards against `while (true) {}`
+    // style sync busy-loops but not async loops. Total wall-clock is bounded by the
+    // deadline race below, which also cancels in-flight agents via the scheduler.
+    const bodyPromise = Promise.resolve(
+      script.runInContext(context, { timeout: WORKFLOW_SYNCHRONOUS_SLICE_TIMEOUT_MS }),
+    );
+    if (deadlineMs === undefined) {
+      return ok(currentState(await bodyPromise));
+    }
+    const deadlinePromise = new Promise<never>((_, reject) => {
+      deadlineTimer = setTimeout(() => {
+        deadlineExceeded = true;
+        scheduler.stopRun();
+        reject(new Error(`Workflow exceeded its wall-clock deadline of ${deadlineMs}ms.`));
+      }, deadlineMs);
+      deadlineTimer.unref?.();
+    });
+    return ok(currentState(await Promise.race([bodyPromise, deadlinePromise])));
   } catch (cause) {
     return err({
       _tag: "WorkflowRuntimeError",
@@ -172,6 +206,8 @@ async function executeWorkflowScript(
       cause,
       partialState: currentState(),
     });
+  } finally {
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
   }
 }
 

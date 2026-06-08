@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
@@ -56,8 +56,15 @@ export interface WorkflowRunInvalidError {
   readonly path: string;
 }
 
+interface WorkflowRunCacheEntry {
+  readonly mtimeMs: number;
+  readonly size: number;
+  readonly state: WorkflowRunState;
+}
+
 export class WorkflowRunStore {
   readonly #rootDir: string;
+  readonly #cache = new Map<string, WorkflowRunCacheEntry>();
 
   constructor(options: WorkflowRunStoreOptions) {
     this.#rootDir = options.rootDir;
@@ -72,15 +79,44 @@ export class WorkflowRunStore {
       return err(readError(this.#rootDir, cause));
     }
 
-    const results = await Promise.all(
-      entries.filter((entry) => entry.isDirectory()).map((entry) => this.#readManifest(entry.name)),
-    );
+    const runIds = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    const present = new Set(runIds);
+    for (const runId of this.#cache.keys()) {
+      if (!present.has(runId)) this.#cache.delete(runId);
+    }
+
+    const results = await Promise.all(runIds.map((runId) => this.#loadCachedManifest(runId)));
     const runs: WorkflowRunState[] = [];
     for (const result of results) {
-      if (result.status === "ok") runs.push(result.value);
+      if (result !== undefined) runs.push(result);
     }
 
     return ok(runs.toSorted(compareRunsNewestFirst));
+  }
+
+  async #loadCachedManifest(runId: string): Promise<WorkflowRunState | undefined> {
+    const path = manifestPath(this.#rootDir, runId);
+    let stats: { mtimeMs: number; size: number };
+    try {
+      stats = await stat(path);
+    } catch {
+      this.#cache.delete(runId);
+      return undefined;
+    }
+
+    const cached = this.#cache.get(runId);
+    if (cached !== undefined && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+      return cached.state;
+    }
+
+    const result = await this.#readManifest(runId);
+    if (result.status !== "ok") {
+      this.#cache.delete(runId);
+      return undefined;
+    }
+
+    this.#cache.set(runId, { mtimeMs: stats.mtimeMs, size: stats.size, state: result.value });
+    return result.value;
   }
 
   async readRun(runId: string): Promise<Result<WorkflowRunState, WorkflowRunStoreError>> {

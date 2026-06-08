@@ -38,9 +38,9 @@ Use `pnpm` for project scripts:
 - `pnpm run verify` — canonical local harness for code changes; runs type checking, lint, format check, and the Vitest suite.
 - `pnpm run check` — run TypeScript type checking with `tsc --noEmit`.
 - `pnpm test` — run the Vitest test suite once.
-- `pnpm run lint` — run Oxlint on `src`, `test`, and `.pi/workflows/scripts`.
+- `pnpm run lint` — run Oxlint on `src`, `test`, and `tools`.
 - `pnpm run lint:fix` — apply safe Oxlint fixes in the same lint scope.
-- `pnpm run fmt` — run Oxfmt on code, tests, workflow scripts, and project config files.
+- `pnpm run fmt` — run Oxfmt on `src`, `test`, `tools`, and project config files.
 - `pnpm run fmt:check` — check that the Oxfmt-targeted files are formatted.
 
 For code changes, prefer `pnpm run verify` before reporting completion unless the task specifically calls for a narrower check or the user asks not to run the full harness.

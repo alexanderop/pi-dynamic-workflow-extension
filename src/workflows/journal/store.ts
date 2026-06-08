@@ -8,6 +8,7 @@ export interface WorkflowJournalStoreOptions {
 
 export class WorkflowJournalStore {
   readonly #journalPath: string;
+  #dirEnsured: Promise<void> | undefined;
 
   constructor(options: WorkflowJournalStoreOptions) {
     this.#journalPath = options.journalPath;
@@ -18,12 +19,25 @@ export class WorkflowJournalStore {
   }
 
   async append(event: WorkflowJournalEvent): Promise<void> {
-    await mkdir(dirname(this.#journalPath), { recursive: true });
+    await this.#ensureDir();
     await appendFile(
       this.#journalPath,
       `${JSON.stringify(serializeJournalEvent(event))}\n`,
       "utf8",
     );
+  }
+
+  #ensureDir(): Promise<void> {
+    // Memoize the promise (not a boolean) so concurrent first-appends share a
+    // single mkdir instead of racing one each. recursive: true is idempotent,
+    // so a retry after failure is safe.
+    this.#dirEnsured ??= mkdir(dirname(this.#journalPath), { recursive: true })
+      .then(() => undefined)
+      .catch((cause) => {
+        this.#dirEnsured = undefined;
+        throw cause;
+      });
+    return this.#dirEnsured;
   }
 
   async readEvents(): Promise<WorkflowJournalEvent[]> {

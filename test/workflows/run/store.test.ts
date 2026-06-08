@@ -1,6 +1,24 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// The production store reads manifests via a *named* `readFile` import from
+// `node:fs/promises`. In this ESM setup the module namespace is not
+// configurable, so `vi.spyOn(fs, "readFile")` throws. Mocking the module and
+// wrapping the real `readFile` with a spy is the way to intercept that named
+// import while preserving real behavior, so efficiency assertions observe the
+// actual read calls the store makes.
+const readFileSpy = vi.fn<(...args: unknown[]) => void>();
+vi.mock("node:fs/promises", async (importActual) => {
+  const actual = await importActual<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    readFile: (...args: Parameters<typeof actual.readFile>) => {
+      readFileSpy(...args);
+      return actual.readFile(...args);
+    },
+  };
+});
 import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import type { Result } from "#src/workflows/result.ts";
@@ -369,6 +387,95 @@ describe("WorkflowRunStore", () => {
   });
 });
 
+describe("WorkflowRunStore caching", () => {
+  let tempDir: string;
+  let rootDir: string;
+
+  beforeEach(async () => {
+    tempDir = await tempWorkflowDir("pi-workflow-store-cache-");
+    rootDir = join(tempDir, ".pi", "workflows");
+  });
+
+  it("should include a run added after the first listing", async () => {
+    await writeRunManifest(rootDir, runState({ runId: "wf_one", workflowName: "one" }));
+    const store = new WorkflowRunStore({ rootDir });
+
+    expect(unwrap(await store.listRuns()).map((run) => run.workflowName)).toEqual(["one"]);
+
+    await writeRunManifest(rootDir, runState({ runId: "wf_two", workflowName: "two" }));
+
+    expect(
+      unwrap(await store.listRuns())
+        .map((run) => run.workflowName)
+        .toSorted(),
+    ).toEqual(["one", "two"]);
+  });
+
+  it("should reflect changes to a run that was modified after caching", async () => {
+    await writeRunManifest(rootDir, runState({ runId: "wf_mut", status: "running" }));
+    const store = new WorkflowRunStore({ rootDir });
+
+    expect(unwrap(await store.listRuns())[0]?.status).toBe("running");
+
+    await touchAndWrite(rootDir, runState({ runId: "wf_mut", status: "completed" }));
+
+    expect(unwrap(await store.listRuns())[0]?.status).toBe("completed");
+  });
+
+  it("should drop a run whose manifest was deleted after caching", async () => {
+    await writeRunManifest(rootDir, runState({ runId: "wf_keep", workflowName: "keep" }));
+    await writeRunManifest(rootDir, runState({ runId: "wf_drop", workflowName: "drop" }));
+    const store = new WorkflowRunStore({ rootDir });
+
+    expect(unwrap(await store.listRuns())).toHaveLength(2);
+
+    await rm(join(rootDir, "wf_drop"), { recursive: true, force: true });
+
+    const runs = unwrap(await store.listRuns());
+    expect(runs.map((run) => run.runId)).toEqual(["wf_keep"]);
+  });
+
+  it("should not re-read unchanged manifests on the second listing", async () => {
+    await writeRunManifest(rootDir, runState({ runId: "wf_a" }));
+    await writeRunManifest(rootDir, runState({ runId: "wf_b" }));
+    const store = new WorkflowRunStore({ rootDir });
+
+    await store.listRuns();
+
+    readFileSpy.mockClear();
+    await store.listRuns();
+    expect(readFileSpy).not.toHaveBeenCalled();
+  });
+
+  it("should re-read only the manifest that changed", async () => {
+    await writeRunManifest(rootDir, runState({ runId: "wf_a", status: "running" }));
+    await writeRunManifest(rootDir, runState({ runId: "wf_b", status: "running" }));
+    const store = new WorkflowRunStore({ rootDir });
+
+    await store.listRuns();
+
+    await touchAndWrite(rootDir, runState({ runId: "wf_b", status: "completed" }));
+
+    readFileSpy.mockClear();
+    await store.listRuns();
+    expect(readFileSpy).toHaveBeenCalledTimes(1);
+    expect(String(readFileSpy.mock.calls[0]?.[0])).toContain("wf_b");
+  });
+
+  it("should re-read when contents change but mtime is unchanged via size difference", async () => {
+    await writeRunManifest(rootDir, runState({ runId: "wf_size" }));
+    const store = new WorkflowRunStore({ rootDir });
+
+    expect(unwrap(await store.listRuns())[0]?.description).toBeUndefined();
+
+    const originalMtime = (await stat(manifestFilePath(rootDir, "wf_size"))).mtime;
+    await writeRunManifest(rootDir, runState({ runId: "wf_size", description: "D".repeat(500) }));
+    await utimes(manifestFilePath(rootDir, "wf_size"), originalMtime, originalMtime);
+
+    expect(unwrap(await store.listRuns())[0]?.description).toBe("D".repeat(500));
+  });
+});
+
 function agentEntry(overrides: Partial<WorkflowAgentProgress> = {}): WorkflowAgentProgress {
   return {
     type: "workflow_agent",
@@ -406,6 +513,24 @@ function runState(overrides: Partial<WorkflowRunState> = {}): WorkflowRunState {
 
 async function writeRunManifest(rootDir: string, state: WorkflowRunState): Promise<void> {
   await writeInvalidManifest(rootDir, state.runId, JSON.stringify(state));
+}
+
+function manifestFilePath(rootDir: string, runId: string): string {
+  return join(rootDir, runId, "manifest.json");
+}
+
+/**
+ * Write a manifest and force a strictly-newer mtime. Writing a file twice in
+ * quick succession can yield identical mtimes (filesystem resolution), which
+ * would make change-detection tests flaky; bumping mtimeMs guarantees the
+ * second write looks newer than the cached entry.
+ */
+async function touchAndWrite(rootDir: string, state: WorkflowRunState): Promise<void> {
+  await writeRunManifest(rootDir, state);
+  const path = manifestFilePath(rootDir, state.runId);
+  const { mtimeMs } = await stat(path);
+  const next = new Date(mtimeMs + 1000);
+  await utimes(path, next, next);
 }
 
 async function writeInvalidManifest(rootDir: string, runId: string, source: string): Promise<void> {
