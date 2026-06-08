@@ -2,7 +2,7 @@ import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowFeatureDecision,
   WorkflowFeatureFlags,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 
 export type WorkflowRunStatus =
   | "created"

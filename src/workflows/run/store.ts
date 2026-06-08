@@ -3,12 +3,12 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
-import { isWorkflowFeatureKey } from "#src/extension/features/registry.ts";
+import { isWorkflowFeatureKey } from "#src/workflows/features/registry.ts";
 import type {
   WorkflowFeatureDecision,
   WorkflowFeatureDecisionSource,
   WorkflowFeatureFlags,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 import type {
   WorkflowFailure,
   WorkflowPhaseProgress,

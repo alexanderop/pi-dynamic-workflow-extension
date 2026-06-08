@@ -13,7 +13,7 @@ import {
   type WorkflowFeatureDecisionSource,
   type WorkflowFeatureFlags,
   type WorkflowFeatureKey,
-} from "./registry.ts";
+} from "#src/workflows/features/registry.ts";
 
 export const WORKFLOW_FEATURE_SESSION_ENTRY_TYPE = "dynamic-workflows:features";
 export const WORKFLOW_FEATURE_RESOLVE_EVENT = "dynamic-workflows:features:resolve";

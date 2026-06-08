@@ -1,5 +1,5 @@
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
-import type { WorkflowFeatureFlags } from "#src/extension/features/registry.ts";
+import type { WorkflowFeatureFlags } from "#src/workflows/features/registry.ts";
 import type { WorkflowMeta } from "#src/workflows/script/model.ts";
 import {
   modelReference,

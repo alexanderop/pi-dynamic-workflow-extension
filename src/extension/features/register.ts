@@ -1,5 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { WORKFLOW_FEATURE_DEFINITIONS, cliFlagNameForWorkflowFeature } from "./registry.ts";
+import {
+  WORKFLOW_FEATURE_DEFINITIONS,
+  cliFlagNameForWorkflowFeature,
+} from "#src/workflows/features/registry.ts";
 
 export type RegisterWorkflowFeatureFlagsPi = Partial<Pick<ExtensionAPI, "registerFlag">>;
 

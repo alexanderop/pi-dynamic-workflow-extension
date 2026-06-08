@@ -23,11 +23,85 @@ function isTestCaseCallee(callee) {
   );
 }
 
+function compileBoundaryPatterns(options) {
+  const entries = options?.patterns ?? [];
+  return entries.map((entry) => ({
+    regex: new RegExp(entry.pattern),
+    message: entry.message ?? `Import "${entry.pattern}" crosses a forbidden feature boundary.`,
+  }));
+}
+
 export default {
   meta: {
     name: "local",
   },
   rules: {
+    "no-restricted-feature-imports": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Forbid imports whose specifier matches a declared feature/layer boundary pattern. Scope the 'from' side with the override 'files' glob; list forbidden target specifiers in options.",
+        },
+        messages: {
+          forbidden: '{{message}} (import "{{specifier}}")',
+        },
+        schema: [
+          {
+            type: "object",
+            properties: {
+              patterns: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    pattern: { type: "string" },
+                    message: { type: "string" },
+                  },
+                  required: ["pattern"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            additionalProperties: false,
+          },
+        ],
+      },
+      create(context) {
+        const patterns = compileBoundaryPatterns(context.options?.[0]);
+        if (patterns.length === 0) return {};
+
+        function check(source) {
+          const specifier = source?.value;
+          if (typeof specifier !== "string") return;
+          for (const { regex, message } of patterns) {
+            if (regex.test(specifier)) {
+              context.report({
+                node: source,
+                messageId: "forbidden",
+                data: { specifier, message },
+              });
+              return;
+            }
+          }
+        }
+
+        return {
+          ImportDeclaration(node) {
+            check(node.source);
+          },
+          ExportNamedDeclaration(node) {
+            if (node.source) check(node.source);
+          },
+          ExportAllDeclaration(node) {
+            check(node.source);
+          },
+          ImportExpression(node) {
+            if (node.source?.type === "Literal") check(node.source);
+          },
+        };
+      },
+    },
     "test-name-should": {
       meta: {
         type: "suggestion",

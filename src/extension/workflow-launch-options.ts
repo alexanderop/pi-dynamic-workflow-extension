@@ -3,7 +3,7 @@ import { createPiWorkflowAgentRunner } from "#src/workflows/agent/pi-runner.ts";
 import {
   WORKFLOW_FEATURE_DEFINITIONS,
   cliFlagNameForWorkflowFeature,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 import { resolveWorkflowFeatures } from "#src/extension/features/resolve.ts";
 import type { WorkflowLaunchOptions } from "#src/workflows/launch/launcher.ts";
 import type { WorkflowRunTriggerSource } from "#src/workflows/run/model.ts";

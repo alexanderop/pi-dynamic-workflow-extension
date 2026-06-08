@@ -38,7 +38,7 @@ import {
   featureKeyFromPublicName,
   publicNameForWorkflowFeature,
   type WorkflowFeatureKey,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 import {
   WORKFLOW_FEATURE_SESSION_ENTRY_TYPE,
   resolveWorkflowFeatures,

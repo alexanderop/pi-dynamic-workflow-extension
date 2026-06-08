@@ -6,7 +6,7 @@ import {
   featureKeyFromPublicName,
   publicNameForWorkflowFeature,
   cliFlagNameForWorkflowFeature,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 
 describe("workflow feature registry", () => {
   it("should expose the experimental model routing flag with shared public names", () => {

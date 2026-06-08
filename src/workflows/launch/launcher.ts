@@ -24,7 +24,7 @@ import {
   workflowFeatureKeys,
   type WorkflowFeatureDecision,
   type WorkflowFeatureFlags,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 import { WORKFLOW_SCRIPT_MAX_LENGTH } from "./model.ts";
 import type {
   WorkflowLaunch,

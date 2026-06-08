@@ -3,7 +3,7 @@ import { parseWorkflowScript } from "./parser.ts";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { WorkflowAgentScheduler } from "#src/workflows/agent/scheduler.ts";
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
-import { DEFAULT_WORKFLOW_FEATURES } from "#src/extension/features/registry.ts";
+import { DEFAULT_WORKFLOW_FEATURES } from "#src/workflows/features/registry.ts";
 import {
   isNonDefaultModelHint,
   resolveEffectiveAgentOptions,

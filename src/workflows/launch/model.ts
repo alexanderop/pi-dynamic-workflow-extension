@@ -9,7 +9,7 @@ import type { WorkflowRuntimeOptions } from "#src/workflows/script/model.ts";
 import type {
   WorkflowFeatureDecision,
   WorkflowFeatureFlags,
-} from "#src/extension/features/registry.ts";
+} from "#src/workflows/features/registry.ts";
 import type { WorkflowLaunchOperations } from "./operations.ts";
 import type {
   WorkflowSavedWorkflowError,

@@ -7,7 +7,7 @@ import {
   type WorkflowFeatureFlags,
   type WorkflowFeatureKey,
   type WorkflowFeatureDecisionSource,
-} from "./registry.ts";
+} from "#src/workflows/features/registry.ts";
 
 export type WorkflowFeatureConfigScope = Extract<WorkflowFeatureDecisionSource, "user" | "project">;
 

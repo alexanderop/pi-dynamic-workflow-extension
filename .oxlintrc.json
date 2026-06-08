@@ -18,6 +18,22 @@
       }
     },
     {
+      "files": ["src/workflows/**/*.ts"],
+      "rules": {
+        "local/no-restricted-feature-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "pattern": "^#src/extension/",
+                "message": "src/workflows (domain core) must not import from src/extension (outer layer); the allowed dependency direction is extension -> workflows."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["test/**/*.ts"],
       "rules": {
         "vitest/no-standalone-expect": "off"
