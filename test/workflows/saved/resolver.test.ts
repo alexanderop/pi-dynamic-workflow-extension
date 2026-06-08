@@ -1,7 +1,7 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import { resolveSavedWorkflowByName, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { invalidWorkflowScript, workflowScript } from "../script/workflow-factory.ts";
 import { unwrap } from "../../support.ts";
@@ -24,12 +24,8 @@ describe("saved workflow resolver", () => {
   let projectDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-saved-workflows-"));
+    tempDir = await tempWorkflowDir("pi-saved-workflows-");
     projectDir = join(tempDir, "project", ".pi", "workflows");
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should resolve a project saved workflow by command name", async () => {

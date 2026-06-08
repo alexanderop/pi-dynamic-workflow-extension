@@ -3,8 +3,8 @@ title: Align With Pi Author Conventions
 status: partial
 priority: P7
 last_audited: 2026-06-07
-implementation: "W1 (docs/process) done, W2 (parser `any` removal) done, and W3 (the 9 dotted-infix test files renamed behavior-first) done; structural workstreams W4-W6 remain planned."
-next: "Continue with the remaining W4-W6 workstreams only when convention alignment is the active goal."
+implementation: "W1 (docs/process) done, W2 (parser `any` removal) done, W3 (dotted-infix test renames) done, and W5 kernel done (test/suite/ tmpdir helper + FakePiSession lift; tree-flatten and regressions/ deliberately skipped); W4 and W6 remain planned."
+next: "Continue with W4 (domain-encode source filenames) and W6 (TUI color extraction) only when convention alignment is the active goal."
 ---
 
 # Refactor plan: align with pi author conventions
@@ -163,16 +163,30 @@ packages/coding-agent/src/core/settings-manager.ts
 So `run/model.ts` → `run/run-model.ts` (or `run-state.ts`), `view/projector.ts`
 → `view/view-projector.ts`, etc.
 
-## W5 — Flatten the test tree + add `test/suite/`  (effort: M–L, risk: medium)
+## W5 — Flatten the test tree + add `test/suite/`  (effort: M–L, risk: medium) — PARTIAL (harness kernel done)
 
 Today `test/` mirrors `src/` as a nested tree. pi uses a **flat** `test/` plus a
 `test/suite/` harness.
 
-- Flatten the per-feature test directories into a flat `test/`.
-- Add `test/suite/` with a `harness.ts` (single shared cleanup) + `README` +
-  `regressions/` directory, following pi's faux-provider harness shape.
-- Optional: push the `pi-runner` `FakePiSession` down to the provider boundary
-  so the harness owns the fake, matching pi's faux-provider pattern.
+Re-audit (2026-06-07) found most of this workstream's *premise* was already met:
+the agent fake is centralized in `test/workflows/agent/agent-mock.ts` and scenario
+cleanup is centralized via the `activeScenarios` `afterEach` in
+`workflow-scenario.ts`. So only the genuinely valuable kernel was done, and the
+cosmetic relocation was deliberately skipped:
+
+- DONE: added `test/suite/` with `tmpdir.ts` (`tempWorkflowDir()` + one shared
+  `afterEach` cleanup), `fake-pi-session.ts`, and a `README.md`. The 15 test files
+  that hand-rolled `mkdtemp` + `afterEach(rm)` now call `tempWorkflowDir()`.
+- DONE: pushed the `pi-runner` `FakePiSession` down to `test/suite/fake-pi-session.ts`
+  (it had been an inline class used ~15× in `pi-runner.test.ts`).
+- SKIPPED (deliberate): flattening the nested `test/` tree — W3 just made the
+  directory the domain carrier, so flattening would force domain prefixes back
+  onto ~59 files for no real gain.
+- SKIPPED (deliberate): `test/suite/regressions/<issue>-<slug>.test.ts` — that
+  convention assumes a GitHub-issue workflow this repo does not use; add it only
+  when numbered regressions actually start landing.
+- SKIPPED (redundant): a new agent `harness.ts` — `agent-mock.ts` already is the
+  centralized faux-provider boundary.
 
 We adapt rather than copy: we do **not** import pi's verbatim `registerFauxProvider`.
 

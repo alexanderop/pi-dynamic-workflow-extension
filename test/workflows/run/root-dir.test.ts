@@ -1,18 +1,14 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 
 describe("workflowRootDirForCwd", () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-root-"));
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    tempDir = await tempWorkflowDir("pi-workflow-root-");
   });
 
   it("should fall back to the cwd-local workflow root when no Pi workflow root exists", () => {

@@ -1,7 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import type { WorkflowJournalKey } from "#src/workflows/journal/model.ts";
 import {
   buildWorkflowJournalResultCache,
@@ -13,12 +12,8 @@ describe("WorkflowJournalStore", () => {
   let journalPath: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-journal-"));
+    tempDir = await tempWorkflowDir("pi-workflow-journal-");
     journalPath = join(tempDir, "wf_test", "journal.jsonl");
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should append and read workflow journal events as JSONL", async () => {

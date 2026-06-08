@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import {
   launchWorkflow,
   workflowRunJournalPath,
@@ -25,13 +25,9 @@ describe("one-agent workflow smoke", () => {
   let now: number;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-one-agent-smoke-"));
+    tempDir = await tempWorkflowDir("pi-workflow-one-agent-smoke-");
     rootDir = join(tempDir, ".pi", "workflows");
     now = 100;
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should launch a fake one-agent workflow end to end", async () => {

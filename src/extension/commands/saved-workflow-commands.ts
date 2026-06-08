@@ -44,7 +44,8 @@ export type SavedWorkflowCommandStatus =
   | "registered"
   | "skipped_invalid_name"
   | "skipped_reserved"
-  | "skipped_collision";
+  | "skipped_collision"
+  | "error";
 
 export interface SavedWorkflowCommandRegistration {
   readonly workflowName: string;
@@ -93,6 +94,30 @@ export interface SavedWorkflowCommandRegistryOptions {
 export type SyncDirectCommandsResult =
   | { readonly status: "ok"; readonly registrations: SavedWorkflowCommandRegistration[] }
   | { readonly status: "error"; readonly message: string };
+
+/**
+ * Render a user-facing diagnostic for a sync result, or `undefined` when every
+ * saved workflow was handled cleanly. Listing failures and per-command
+ * registration failures are surfaced; expected skips (reserved/collision/invalid
+ * name) are not — those are normal and reported through `/workflows` instead.
+ */
+export function formatSyncDirectCommandsDiagnostics(
+  result: SyncDirectCommandsResult,
+): string | undefined {
+  if (result.status === "error") {
+    return `Could not load saved workflows: ${result.message}`;
+  }
+
+  const failed = result.registrations.filter((registration) => registration.status === "error");
+  if (failed.length === 0) return undefined;
+
+  return [
+    "Some saved workflow commands could not be registered:",
+    ...failed.map(
+      (registration) => `- /${registration.commandName}: ${registration.reason ?? "unknown error"}`,
+    ),
+  ].join("\n");
+}
 
 /**
  * Is `name` shaped like a safe Pi slash command? Pure structural check; does
@@ -157,6 +182,10 @@ function collisionReason(commandName: string, source: SlashCommandInfo["source"]
         ? "a skill command"
         : "another command";
   return `/${commandName} is already used by ${sourceLabel}; launch with /${GENERIC_WORKFLOW_COMMAND_NAME} ${commandName} <args> or Workflow({ name: "${commandName}" }).`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -241,12 +270,22 @@ export class SavedWorkflowCommandRegistry {
     if (classification.status !== "registered") return classification;
 
     const name = classification.commandName;
-    this.pi.registerCommand(name, {
-      description: workflow.meta.description ?? `Launch saved workflow '${name}'`,
-      handler: async (args, ctx) => {
-        await this.handleDirectInvocation(name, args, ctx as SavedWorkflowCommandContext);
-      },
-    });
+    try {
+      this.pi.registerCommand(name, {
+        description: workflow.meta.description ?? `Launch saved workflow '${name}'`,
+        handler: async (args, ctx) => {
+          await this.handleDirectInvocation(name, args, ctx as SavedWorkflowCommandContext);
+        },
+      });
+    } catch (error) {
+      return {
+        workflowName: workflow.name,
+        commandName: name,
+        path: workflow.path,
+        status: "error",
+        reason: `Failed to register /${name}: ${errorMessage(error)}`,
+      };
+    }
     this.registeredDirectNames.add(name);
     return classification;
   }
@@ -293,7 +332,7 @@ export class SavedWorkflowCommandRegistry {
     const separator = trimmed.search(/\s/);
     const name = separator === -1 ? trimmed : trimmed.slice(0, separator);
     const workflowArgs = separator === -1 ? "" : trimmed.slice(separator + 1).trimStart();
-    await this.launchByName(name, workflowArgs, ctx);
+    await this.launchByName(name, workflowArgs, ctx, GENERIC_WORKFLOW_COMMAND_NAME);
   }
 
   private async handleDirectInvocation(
@@ -301,13 +340,16 @@ export class SavedWorkflowCommandRegistry {
     args: string,
     ctx: SavedWorkflowCommandContext,
   ): Promise<void> {
-    await this.launchByName(name, args.trimStart(), ctx);
+    // The direct command name is the workflow name, so it doubles as the
+    // invoked command name for non-interactive output envelopes.
+    await this.launchByName(name, args.trimStart(), ctx, name);
   }
 
   private async launchByName(
     name: string,
     args: string,
     ctx: SavedWorkflowCommandContext,
+    commandName: string,
   ): Promise<void> {
     const rootDir = workflowRootDirForCwd(ctx.cwd);
     const launchOptions = await buildWorkflowLaunchOptions(ctx, this.pi, {
@@ -322,13 +364,13 @@ export class SavedWorkflowCommandRegistry {
     );
 
     if (launch.status === "error") {
-      emitWorkflowCommandOutput(ctx, name, launch.error.message, "error");
+      emitWorkflowCommandOutput(ctx, commandName, launch.error.message, "error");
       return;
     }
 
     emitWorkflowCommandOutput(
       ctx,
-      name,
+      commandName,
       `Launched workflow '${name}' as ${launch.value.runId}. Watch with /workflows.`,
       "info",
     );

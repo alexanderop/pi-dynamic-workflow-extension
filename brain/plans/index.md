@@ -31,7 +31,7 @@ to prevent.
 | P6 | [structured-output-retry](./workflows/structured-output-retry/) | implemented | `structured_output`/`give_up`, two-nudge retry, schema envelopes, live retry events, and journal safety are implemented and tested. | No active work. | [spec](./workflows/structured-output-retry/spec.md) · [chunk](./workflows/structured-output-retry/chunk.md) |
 | P6 | [feature-flags](./workflows/feature-flags/) | implemented | Registry/resolver, `/workflows features`, user/project/session/env/CLI controls, manifest persistence, and default-off model inheritance are implemented. | No active gap beyond the known Pi explicit-CLI-false limitation. | [spec](./workflows/feature-flags/spec.md) |
 | P6 | [agent-mock-boundary](./workflows/agent-mock-boundary/) | implemented | `setupDefaultAgentTestServer(...)` and scoped `agents.boundary(...)` runtime overrides are implemented and covered. | No active work. | [spec](./workflows/agent-mock-boundary/spec.md) |
-| P7 | [align-with-pi](./workflows/align-with-pi/) | partial | W1 docs/process items are largely present: Git rules, changelog, and ADR status normalization. | Continue W2-W6 only when convention alignment becomes active. | [plan](./workflows/align-with-pi/plan.md) |
+| P7 | [align-with-pi](./workflows/align-with-pi/) | partial | W1 (docs/process), W2 (parser `any` removal), W3 (dotted-infix test renames), and the W5 harness kernel (`test/suite/` tmpdir helper + `FakePiSession` lift) are done. | Continue W4 (domain-encode source filenames) and W6 (TUI color extraction) only when convention alignment becomes active. | [plan](./workflows/align-with-pi/plan.md) |
 | P8 | [saved-workflow-scopes](./workflows/saved-workflow-scopes/) | blocked | Not implemented; ADR 0009 intentionally keeps saved workflows project/workspace-local only. | Revisit ADR 0009 before adding user-home saved workflow scope. | [spec](./workflows/saved-workflow-scopes/spec.md) |
 
 ## Ongoing Infra Work
@@ -41,7 +41,7 @@ above.
 
 - [atomic-manifest-writes](./workflows/atomic-manifest-writes/) — finish partial-trailing-line journal recovery.
 - [sidechain-transcripts](./workflows/sidechain-transcripts/spec.md) — Pi-native sidechain session persistence and raw transcript replay; keep overview/detail manifest-only.
-- [align-with-pi](./workflows/align-with-pi/) — pi-author convention alignment workstreams W2-W6.
+- [align-with-pi](./workflows/align-with-pi/) — pi-author convention alignment workstreams W4 and W6 (W1-W3 and the W5 harness kernel are done).
 
 ## Done
 

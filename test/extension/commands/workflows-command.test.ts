@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import {
   registerWorkflowsCommand,
   type RegisterWorkflowsCommandOptions,
@@ -27,13 +27,12 @@ describe("registerWorkflowsCommand", () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflows-command-"));
+    tempDir = await tempWorkflowDir("pi-workflows-command-");
     vi.mocked(showWorkflowsTui).mockClear();
   });
 
   afterEach(async () => {
     unregisterWorkflowRunControl("wf_test");
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should print resolved workflow features in headless mode", async () => {

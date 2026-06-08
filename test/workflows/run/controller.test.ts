@@ -1,7 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import {
   WorkflowRunController,
   type WorkflowRunExecutionControl,
@@ -16,12 +14,8 @@ describe("WorkflowRunController", () => {
   let store: WorkflowRunStore;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-run-controller-"));
+    tempDir = await tempWorkflowDir("pi-workflow-run-controller-");
     store = new WorkflowRunStore({ rootDir: tempDir });
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should pause a running run and persist the paused status", async () => {

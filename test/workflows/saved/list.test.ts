@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
 import { savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
 import { invalidWorkflowScript, workflowScript } from "../script/workflow-factory.ts";
@@ -25,12 +25,8 @@ describe("saved workflow listing", () => {
   let projectDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-saved-workflow-list-"));
+    tempDir = await tempWorkflowDir("pi-saved-workflow-list-");
     projectDir = join(tempDir, "project", ".pi", "workflows");
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should list project saved workflows with user-facing metadata", async () => {

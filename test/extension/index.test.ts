@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tempWorkflowDir } from "../suite/tmpdir.ts";
 import dynamicWorkflowExtension from "#src/extension/index.ts";
 import type { WorkflowsComponentTheme } from "#src/extension/tui/workflows-component.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
@@ -13,11 +13,7 @@ describe("dynamicWorkflowExtension", () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflows-extension-"));
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    tempDir = await tempWorkflowDir("pi-workflows-extension-");
   });
 
   it("should register the workflows command when extension loads", () => {
@@ -55,6 +51,47 @@ describe("dynamicWorkflowExtension", () => {
     expect(on).toHaveBeenCalledWith("input", expect.any(Function));
     expect(on.mock.calls.filter(([event]) => event === "session_start")).toHaveLength(4);
     expect(on.mock.calls.filter(([event]) => event === "session_shutdown")).toHaveLength(2);
+  });
+
+  it("should register a saved workflow as a direct command on session start", async () => {
+    await writeSavedWorkflow(
+      tempDir,
+      "deep-research",
+      workflowScript({
+        meta: { name: "deep-research", description: "Research a question" },
+        body: "return await agent('go');",
+      }),
+    );
+    const registerCommand = vi.fn<(...args: unknown[]) => void>();
+    const on = vi.fn<(...args: unknown[]) => void>();
+
+    dynamicWorkflowExtension(
+      fakePi({
+        registerCommand,
+        registerTool: vi.fn<(...args: unknown[]) => void>(),
+        registerFlag: vi.fn<(...args: unknown[]) => void>(),
+        on,
+      }),
+    );
+
+    // The saved-command registry is the first session_start handler index.ts
+    // wires (before model-availability, statusline, and ultracode). Invoking
+    // only it keeps this test from depending on unrelated handlers' richer ctx.
+    const savedCommandSessionStart = on.mock.calls.find(
+      ([event]) => event === "session_start",
+    )?.[1] as (event: unknown, ctx: unknown) => Promise<void>;
+    await savedCommandSessionStart(
+      { type: "session_start", reason: "startup" },
+      { cwd: tempDir, hasUI: false, ui: { notify: vi.fn<NotifyForTest>() } },
+    );
+
+    expect(registerCommand).toHaveBeenCalledWith(
+      "deep-research",
+      expect.objectContaining({
+        description: "Research a question",
+        handler: expect.any(Function),
+      }),
+    );
   });
 
   it("should render an empty state when no workflow runs or saved workflows exist", async () => {

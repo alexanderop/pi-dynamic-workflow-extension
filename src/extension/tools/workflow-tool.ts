@@ -22,6 +22,8 @@ export const WORKFLOW_TOOL_NAME = "Workflow";
 
 export const WORKFLOW_TOOL_DESCRIPTION = `Orchestrates many subagents deterministically by running a self-contained JavaScript workflow script in the background.
 
+Think of Workflow as a custom harness/conductor for tasks where one context window is weak: the JavaScript orchestrator owns deterministic control flow, each subagent gets a focused prompt and separate context window, and synthesis/verification happen explicitly to reduce agentic laziness, self-preferential bias, and goal drift.
+
 Use Workflow only when the user explicitly opted into multi-agent orchestration, such as by typing ultracode, asking to use a workflow, being in an ultracode session, or invoking a skill that instructs workflow use. Otherwise, use ordinary single-agent work or ask first.
 
 Workflow accepts one of script, scriptPath, or name. Precedence is scriptPath > script > name. Every launch persists the script under the workflow run directory and returns the path in the tool result. To iterate, edit that persisted script file and relaunch with scriptPath instead of resending the full script.

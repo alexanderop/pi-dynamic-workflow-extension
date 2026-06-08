@@ -83,6 +83,11 @@ describe("Workflow tool", () => {
       | undefined;
     expect(parameters?.required).toBeUndefined();
     expect(parameters?.properties.args.type).toBeUndefined();
+    expect(tool?.description).toContain("custom harness/conductor");
+    expect(tool?.description).toContain("separate context window");
+    expect(tool?.description).toContain("agentic laziness");
+    expect(tool?.description).toContain("self-preferential bias");
+    expect(tool?.description).toContain("goal drift");
     expect(tool?.description).toContain("phases must be an array of objects");
     expect(tool?.description).toContain('never strings such as ["Generate"]');
     expect(tool?.description).toContain("opts.schema");

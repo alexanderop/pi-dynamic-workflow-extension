@@ -4,50 +4,10 @@ import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent"
 import {
   buildStructuredOutputFollowUpPrompt,
   createPiWorkflowAgentRunner,
-  type PiWorkflowAgentSession,
   type PiWorkflowAgentSessionFactory,
 } from "#src/workflows/agent/pi-runner.ts";
 import type { WorkflowAgentRunRequest } from "#src/workflows/agent/scheduler.ts";
-
-class FakePiSession implements PiWorkflowAgentSession {
-  readonly messages: unknown[] = [];
-  readonly prompt = vi.fn<(text: string, options?: unknown) => Promise<void>>(
-    async (text, options) => {
-      this.promptText = text;
-      this.promptTexts.push(text);
-      this.promptOptions.push(options);
-      await this.onPrompt?.(text, options, this.promptTexts.length - 1);
-      this.messages.push({
-        role: "assistant",
-        content: [{ type: "text", text: "subagent result" }],
-      });
-    },
-  );
-  readonly abort = vi.fn<() => void>();
-  readonly dispose = vi.fn<() => void>();
-  readonly unsubscribe = vi.fn<() => void>();
-  #listeners: Array<(event: unknown) => void> = [];
-  promptText = "";
-  readonly promptTexts: string[] = [];
-  readonly promptOptions: unknown[] = [];
-
-  constructor(
-    private readonly onPrompt?: (
-      text: string,
-      options: unknown,
-      callIndex: number,
-    ) => Promise<void> | void,
-  ) {}
-
-  subscribe(listener: (event: unknown) => void): () => void {
-    this.#listeners.push(listener);
-    return this.unsubscribe;
-  }
-
-  emit(event: unknown): void {
-    for (const listener of this.#listeners) listener(event);
-  }
-}
+import { FakePiSession } from "../../suite/fake-pi-session.ts";
 
 describe("createPiWorkflowAgentRunner", () => {
   it("should run a Pi sidechain session and return the final assistant text", async () => {

@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";
 import type { Result } from "#src/workflows/result.ts";
 import type { WorkflowRunState } from "#src/workflows/run/model.ts";
@@ -12,12 +12,8 @@ describe("WorkflowRunStore", () => {
   let rootDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-store-"));
+    tempDir = await tempWorkflowDir("pi-workflow-store-");
     rootDir = join(tempDir, ".pi", "workflows");
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should list workflow runs from manifest files", async () => {

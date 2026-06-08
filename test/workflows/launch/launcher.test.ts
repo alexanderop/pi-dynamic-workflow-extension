@@ -1,7 +1,7 @@
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import {
   launchWorkflow,
   workflowRunJournalPath,
@@ -27,13 +27,9 @@ describe("launchWorkflow", () => {
   let now: number;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-launcher-"));
+    tempDir = await tempWorkflowDir("pi-workflow-launcher-");
     rootDir = join(tempDir, ".pi", "workflows");
     now = 100;
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should reject launch requests that do not provide a source", async () => {

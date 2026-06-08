@@ -1,7 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import {
   WORKFLOW_FEATURE_SESSION_ENTRY_TYPE,
   resolveWorkflowFeatures,
@@ -10,11 +10,7 @@ import {
 let tempDir: string;
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(join(tmpdir(), "pi-workflow-feature-resolve-"));
-});
-
-afterEach(async () => {
-  await rm(tempDir, { recursive: true, force: true });
+  tempDir = await tempWorkflowDir("pi-workflow-feature-resolve-");
 });
 
 describe("resolveWorkflowFeatures", () => {

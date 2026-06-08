@@ -1,10 +1,11 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RegisteredCommand, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import {
   classifySavedWorkflowCommand,
+  formatSyncDirectCommandsDiagnostics,
   isCommandSafeName,
   SavedWorkflowCommandRegistry,
   type RegisterSavedWorkflowCommandsPi,
@@ -139,17 +140,64 @@ describe("command-name classification", () => {
   });
 });
 
+describe("formatSyncDirectCommandsDiagnostics", () => {
+  it("should return undefined for a clean sync", () => {
+    expect(
+      formatSyncDirectCommandsDiagnostics({ status: "ok", registrations: [] }),
+    ).toBeUndefined();
+  });
+
+  it("should surface listing errors", () => {
+    const message = formatSyncDirectCommandsDiagnostics({
+      status: "error",
+      message: "workflow root unreadable",
+    });
+    expect(message).toContain("workflow root unreadable");
+  });
+
+  it("should surface per-command registration failures", () => {
+    const message = formatSyncDirectCommandsDiagnostics({
+      status: "ok",
+      registrations: [
+        {
+          workflowName: "boom",
+          commandName: "boom",
+          path: "/p/boom.js",
+          status: "error",
+          reason: "kaboom",
+        },
+        { workflowName: "ok", commandName: "ok", path: "/p/ok.js", status: "registered" },
+      ],
+    });
+    expect(message).toContain("/boom");
+    expect(message).toContain("kaboom");
+  });
+
+  it("should ignore expected skips", () => {
+    expect(
+      formatSyncDirectCommandsDiagnostics({
+        status: "ok",
+        registrations: [
+          {
+            workflowName: "review",
+            commandName: "review",
+            path: "/p/review.js",
+            status: "skipped_collision",
+            reason: "already used",
+          },
+        ],
+      }),
+    ).toBeUndefined();
+  });
+});
+
 describe("SavedWorkflowCommandRegistry", () => {
   let tempDir: string;
   let rootDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-saved-commands-"));
+    tempDir = await tempWorkflowDir("pi-saved-commands-");
     rootDir = join(tempDir, ".pi", "workflows");
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should register the generic /workflow command with completions", () => {
@@ -279,6 +327,76 @@ describe("SavedWorkflowCommandRegistry", () => {
     } finally {
       stdoutWrite.mockRestore();
     }
+  });
+
+  it("should label generic launch output with the /workflow command name in json mode", async () => {
+    const { pi, commands } = fakeHarness();
+    const launchWorkflow = launchSpy();
+    new SavedWorkflowCommandRegistry(pi, { launchWorkflow }).registerGenericCommand();
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await commands.get("workflow")?.handler("deep-research who is alex", {
+        cwd: tempDir,
+        mode: "json",
+        hasUI: false,
+        ui: { notify: vi.fn<() => void>() },
+      } as never);
+
+      const output = String(stdoutWrite.mock.calls[0]?.[0]);
+      expect(JSON.parse(output)).toMatchObject({
+        type: "workflow_command_output",
+        command: "workflow",
+        severity: "info",
+      });
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should label direct launch output with the workflow command name in json mode", async () => {
+    await writeSavedWorkflow(rootDir, "deep-research", "Research a question");
+    const { pi, commands } = fakeHarness();
+    const launchWorkflow = launchSpy();
+    const registry = new SavedWorkflowCommandRegistry(pi, { launchWorkflow });
+    await registry.syncDirectCommands({ cwd: tempDir });
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    try {
+      await commands.get("deep-research")?.handler("who is alex", {
+        cwd: tempDir,
+        mode: "json",
+        hasUI: false,
+        ui: { notify: vi.fn<() => void>() },
+      } as never);
+
+      const output = String(stdoutWrite.mock.calls[0]?.[0]);
+      expect(JSON.parse(output)).toMatchObject({
+        type: "workflow_command_output",
+        command: "deep-research",
+        severity: "info",
+      });
+    } finally {
+      stdoutWrite.mockRestore();
+    }
+  });
+
+  it("should report an error status without throwing when registerCommand fails", async () => {
+    await writeSavedWorkflow(rootDir, "boom", "Boom");
+    const pi = fakePi<RegisterSavedWorkflowCommandsPi>({
+      registerCommand: (name: string) => {
+        if (name === "boom") throw new Error("registry exploded");
+      },
+      getCommands: () => [],
+    });
+    const registry = new SavedWorkflowCommandRegistry(pi);
+
+    const result = await registry.syncDirectCommands({ cwd: tempDir });
+
+    if (result.status !== "ok") throw new Error("expected ok");
+    const registration = result.registrations.find((entry) => entry.workflowName === "boom");
+    expect(registration?.status).toBe("error");
+    expect(registration?.reason).toContain("registry exploded");
   });
 
   it("should surface resolver errors for a missing saved workflow in json mode", async () => {

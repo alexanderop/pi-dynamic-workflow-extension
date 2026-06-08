@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import { launchWorkflow } from "#src/workflows/launch/launcher.ts";
 import { saveRunScript } from "#src/workflows/saved/save-run-script.ts";
 import { projectSavedWorkflowDir, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
@@ -15,13 +15,9 @@ describe("saveRunScript", () => {
   let now: number;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "pi-save-run-script-"));
+    tempDir = await tempWorkflowDir("pi-save-run-script-");
     rootDir = join(tempDir, ".pi", "workflows");
     now = 100;
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("should save a completed inline run as a project workflow that can be relaunched by name", async () => {
