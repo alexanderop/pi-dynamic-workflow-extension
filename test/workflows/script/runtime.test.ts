@@ -376,6 +376,19 @@ return m.random();
     });
   });
 
+  it("should block runtime code generation (eval) inside workflow scripts", async () => {
+    const result = await tryRunWorkflowScript(
+      workflowScript({
+        meta: { name: "no-eval" },
+        body: `return eval("1 + 1");`,
+      }),
+    );
+
+    expect(result.status).toBe("error");
+    const message = result.status === "error" ? result.error.message : "";
+    expect(message).toMatch(/[Cc]ode generation|eval/);
+  });
+
   it("should abort an async runaway loop when the wall-clock deadline fires", async () => {
     const agents = setupAgentMock(
       agent.call({}, ({ prompt }) => AgentResponse.delay(1, AgentResponse.text(`tick:${prompt}`))),

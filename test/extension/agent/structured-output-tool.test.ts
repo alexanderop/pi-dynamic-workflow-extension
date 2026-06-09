@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createWorkflowStructuredOutputToolBundle,
   WorkflowAgentSchemaError,
-} from "#src/workflows/agent/structured-output-tool.ts";
+} from "#src/extension/agent/structured-output-tool.ts";
 
 describe("createWorkflowStructuredOutputToolBundle", () => {
   it("should create structured_output and give_up tools", () => {

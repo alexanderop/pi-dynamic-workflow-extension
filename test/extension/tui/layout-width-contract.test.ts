@@ -7,7 +7,7 @@ import {
   truncateEllipsis,
   twoPaneBox,
   wordWrap,
-} from "#src/workflows/view/layout.ts";
+} from "#src/extension/tui/layout.ts";
 
 const propertyRuns = { numRuns: 200 };
 

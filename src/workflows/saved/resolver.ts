@@ -1,6 +1,6 @@
 import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { tryParseWorkflowScript, WorkflowParseError } from "#src/workflows/script/parser.ts";
 import type { WorkflowMeta } from "#src/workflows/script/model.ts";
@@ -205,6 +205,23 @@ async function readSavedWorkflowSource(
       cause,
     });
   }
+}
+
+/**
+ * Lexical containment check for a caller-supplied `scriptPath`. Resolving the
+ * candidate against `root` collapses `..` segments; an absolute candidate
+ * ignores `root` entirely. The path is contained iff the relative path from the
+ * resolved root neither escapes upward (`..`) nor is itself absolute (a
+ * different drive on Windows). This blocks reads of `/etc/passwd`,
+ * `~/.ssh/id_rsa`, and `../../escape` while still allowing any file under the
+ * workflow project tree. It is intentionally lexical — it does not resolve
+ * symlinks — which matches the local-dev threat model.
+ */
+export function isScriptPathWithinRoot(root: string, candidate: string): boolean {
+  const resolvedRoot = resolve(root);
+  const resolvedCandidate = resolve(resolvedRoot, candidate);
+  const rel = relative(resolvedRoot, resolvedCandidate);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 export function validateSavedWorkflowName(

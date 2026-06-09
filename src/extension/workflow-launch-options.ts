@@ -1,5 +1,5 @@
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
-import { createPiWorkflowAgentRunner } from "#src/workflows/agent/pi-runner.ts";
+import { createPiWorkflowAgentRunner } from "#src/extension/agent/pi-runner.ts";
 import {
   WORKFLOW_FEATURE_DEFINITIONS,
   cliFlagNameForWorkflowFeature,

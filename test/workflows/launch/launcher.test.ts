@@ -83,6 +83,39 @@ describe("launchWorkflow", () => {
     expect(await pathExists(rootDir)).toBe(false);
   });
 
+  it("should refuse to read a scriptPath outside the workflow project root", async () => {
+    const outsideDir = await tempWorkflowDir("pi-workflow-outside-");
+    const secretPath = join(outsideDir, "secret.txt");
+    await writeFile(secretPath, "return 'leaked secret';", "utf8");
+
+    const result = await launchWorkflow({ scriptPath: secretPath }, launchOptions());
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowLaunchInvalidRequestError" },
+    });
+    // The traversal must be rejected before the file is ever read.
+    const errorMessage =
+      result.status === "error" && "message" in result.error ? String(result.error.message) : "";
+    expect(errorMessage).not.toContain("leaked secret");
+    expect(await pathExists(rootDir)).toBe(false);
+  });
+
+  it("should reject a resumeFromRunId that is not a well-formed run id", async () => {
+    const script = workflowScript({ meta: { name: "resume-guard" }, body: "return 'ok';" });
+
+    const result = await launchWorkflow(
+      { script, resumeFromRunId: "../../../etc/passwd" },
+      launchOptions(),
+    );
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { _tag: "WorkflowLaunchInvalidRequestError" },
+    });
+    expect(await pathExists(rootDir)).toBe(false);
+  });
+
   it("should reject nondeterministic inline scripts before run storage is created", async () => {
     const result = await launchWorkflow(
       {
@@ -809,6 +842,77 @@ return await parallel([
     }
   });
 
+  it("should not clobber a paused status in the live manifest when an in-flight agent settles after pause", async () => {
+    type PausableRuntimeControl = { pause(): void; resume(): void; isPaused(): boolean };
+
+    let control: PausableRuntimeControl | undefined;
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const script = workflowScript({
+      meta: { name: "pause-live-manifest", phases: [{ title: "Scan" }] },
+      body: `
+phase("Scan");
+return await parallel([
+  () => agent("first", { label: "first", phase: "Scan" }),
+  () => agent("second", { label: "second", phase: "Scan" }),
+]);
+`,
+    });
+
+    const launch = unwrap(
+      await launchWorkflow(
+        { script },
+        launchOptions({
+          maxConcurrentAgents: 1,
+          onRuntimeControlReady: (runtimeControl) => {
+            control = runtimeControl;
+          },
+          schedulerRunner: async ({ prompt }) => {
+            if (prompt === "first") return first.promise;
+            return second.promise;
+          },
+        }),
+      ),
+    );
+
+    try {
+      await delay(0);
+      expect(control?.pause).toEqual(expect.any(Function));
+
+      control!.pause();
+      expect(control!.isPaused()).toBe(true);
+
+      // The in-flight `first` agent settles while the run is paused. Its
+      // completion fires a scheduler progress event, which drives the live
+      // manifest persister. That write must not overwrite the paused status.
+      first.resolve("first result");
+
+      const store = new WorkflowRunStore({ rootDir });
+      let liveManifest = unwrap(await store.readRun("wf_test"));
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const firstDone = liveManifest.workflowProgress.some(
+          (entry) =>
+            entry.type === "workflow_agent" && entry.label === "first" && entry.state === "done",
+        );
+        if (firstDone) break;
+        await delay(1);
+        liveManifest = unwrap(await store.readRun("wf_test"));
+      }
+
+      expect(liveManifest.status).toBe("paused");
+      expect(liveManifest.workflowProgress).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "workflow_agent", label: "first", state: "done" }),
+        ]),
+      );
+    } finally {
+      control?.resume();
+      first.resolve("cleanup first result");
+      second.resolve("cleanup second result");
+      await launch.completion.catch(() => undefined);
+    }
+  });
+
   it("should write terminal output and notify after the completed run manifest is persisted", async () => {
     const notifications: WorkflowTaskNotification[] = [];
     const script = workflowScript({
@@ -1156,7 +1260,7 @@ return { scan };
       await launchWorkflow(
         { script: originalScript },
         launchOptions({
-          createRunId: () => "wf_ignored_model",
+          createRunId: () => "wf_ignoredmodel",
           defaultModel: "current",
           schedulerRunner: originalAgents.schedulerRunner,
         }),
@@ -1166,7 +1270,7 @@ return { scan };
 
     const resumed = unwrap(
       await launchWorkflow(
-        { script: changedScript, resumeFromRunId: "wf_ignored_model" },
+        { script: changedScript, resumeFromRunId: "wf_ignoredmodel" },
         launchOptions({
           createRunId: () => "wf_ignored_model_resumed",
           defaultModel: "current",
@@ -1206,7 +1310,7 @@ return { scan };
       await launchWorkflow(
         { script: originalScript },
         launchOptions({
-          createRunId: () => "wf_changed_key",
+          createRunId: () => "wf_changedkey",
           schedulerRunner: originalAgents.schedulerRunner,
         }),
       ),
@@ -1215,7 +1319,7 @@ return { scan };
 
     const resumed = unwrap(
       await launchWorkflow(
-        { script: changedScript, resumeFromRunId: "wf_changed_key" },
+        { script: changedScript, resumeFromRunId: "wf_changedkey" },
         launchOptions({
           createRunId: () => "wf_changed_key_resumed",
           schedulerRunner: resumedAgents.schedulerRunner,

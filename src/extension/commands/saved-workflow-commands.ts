@@ -5,7 +5,7 @@ import type {
   SlashCommandInfo,
 } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-import type { PiWorkflowAgentRunnerOptions } from "#src/workflows/agent/pi-runner.ts";
+import type { PiWorkflowAgentRunnerOptions } from "#src/extension/agent/pi-runner.ts";
 import { buildWorkflowLaunchOptions } from "#src/extension/workflow-launch-options.ts";
 import { terminalNotifier } from "#src/extension/workflow-notifications.ts";
 import {

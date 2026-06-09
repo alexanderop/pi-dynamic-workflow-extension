@@ -12,9 +12,8 @@ import type {
   MonitorPlannedAgentRow,
   MonitorViewModel,
 } from "#src/workflows/view/model.ts";
+import { formatIdle, formatTokens } from "#src/workflows/view/layout.ts";
 import {
-  formatIdle,
-  formatTokens,
   headerSummaryLine,
   padTo,
   paneInnerWidths,
@@ -22,7 +21,7 @@ import {
   truncateEllipsis,
   twoPaneBox,
   wordWrap,
-} from "#src/workflows/view/layout.ts";
+} from "#src/extension/tui/layout.ts";
 import {
   buildChooserView,
   buildMonitorView,

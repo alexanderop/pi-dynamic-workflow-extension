@@ -27,6 +27,10 @@
               {
                 "pattern": "^#src/extension/",
                 "message": "src/workflows (domain core) must not import from src/extension (outer layer); the allowed dependency direction is extension -> workflows."
+              },
+              {
+                "pattern": "^@earendil-works/pi",
+                "message": "src/workflows (domain core) must stay Pi-SDK-free; keep Pi TUI/agent adapters under src/extension (e.g. src/extension/agent, src/extension/tui)."
               }
             ]
           }

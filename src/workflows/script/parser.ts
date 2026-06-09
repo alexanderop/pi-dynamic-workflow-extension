@@ -271,7 +271,7 @@ function isMemberCall(node: AnyNode, objectName: string, propertyName: string): 
 function walk(node: AnyNode, visit: (node: AnyNode) => void): void {
   visit(node);
 
-  for (const [key, child] of Object.entries(node as unknown as Record<string, unknown>)) {
+  for (const [key, child] of Object.entries(node)) {
     if (key === "parent") continue;
     if (Array.isArray(child)) {
       for (const item of child) {

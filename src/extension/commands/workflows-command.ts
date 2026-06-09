@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { PiWorkflowAgentRunnerOptions } from "#src/workflows/agent/pi-runner.ts";
+import type { PiWorkflowAgentRunnerOptions } from "#src/extension/agent/pi-runner.ts";
 import { showWorkflowsTui } from "#src/extension/tui/workflows-view.ts";
 import { getWorkflowRunControl } from "#src/workflows/run/control-registry.ts";
 import {

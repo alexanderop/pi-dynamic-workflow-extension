@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { PiWorkflowAgentSession } from "#src/workflows/agent/pi-runner.ts";
+import type { PiWorkflowAgentSession } from "#src/extension/agent/pi-runner.ts";
 
 /**
  * Provider-level fake for a Pi sidechain agent session.
@@ -26,7 +26,12 @@ export class FakePiSession implements PiWorkflowAgentSession {
   );
   readonly abort = vi.fn<() => void>();
   readonly dispose = vi.fn<() => void>();
-  readonly unsubscribe = vi.fn<() => void>();
+  /**
+   * One spy per `subscribe()` call. Each entry removes only its own listener, so
+   * assertions distinguish "the single subscription was torn down" from "some
+   * shared spy was poked", which a single shared unsubscribe spy would conflate.
+   */
+  readonly unsubscribes: Array<ReturnType<typeof vi.fn<() => void>>> = [];
   #listeners: Array<(event: unknown) => void> = [];
   promptText = "";
   readonly promptTexts: string[] = [];
@@ -42,10 +47,22 @@ export class FakePiSession implements PiWorkflowAgentSession {
 
   subscribe(listener: (event: unknown) => void): () => void {
     this.#listeners.push(listener);
-    return this.unsubscribe;
+    const unsubscribe = vi.fn<() => void>(() => {
+      const index = this.#listeners.indexOf(listener);
+      if (index !== -1) this.#listeners.splice(index, 1);
+    });
+    this.unsubscribes.push(unsubscribe);
+    return unsubscribe;
+  }
+
+  /** Number of currently-subscribed listeners (after any unsubscribes). */
+  get listenerCount(): number {
+    return this.#listeners.length;
   }
 
   emit(event: unknown): void {
-    for (const listener of this.#listeners) listener(event);
+    // Snapshot via slice so a listener that unsubscribes mid-emit does not
+    // disturb iteration over the live array.
+    for (const listener of this.#listeners.slice()) listener(event);
   }
 }

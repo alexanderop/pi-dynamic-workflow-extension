@@ -16,7 +16,7 @@ import {
   type WorkflowRunEvent,
   type WorkflowTransitionError,
 } from "#src/workflows/run/state-machine.ts";
-import { projectSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
+import { isScriptPathWithinRoot, projectSavedWorkflowDir } from "#src/workflows/saved/resolver.ts";
 import { toTaskNotification, toTerminalOutput } from "./notification.ts";
 import {
   defaultWorkflowLaunchOperations,
@@ -42,8 +42,16 @@ import type {
   WorkflowTerminalNotificationError,
   WorkflowTerminalNotifier,
 } from "./model.ts";
-import type { WorkflowProgressEntry, WorkflowRunState } from "#src/workflows/run/model.ts";
-import type { WorkflowRuntimeOptions, WorkflowRuntimeState } from "#src/workflows/script/model.ts";
+import type {
+  WorkflowProgressEntry,
+  WorkflowRunState,
+  WorkflowRunStatus,
+} from "#src/workflows/run/model.ts";
+import type {
+  WorkflowRuntimeControl,
+  WorkflowRuntimeOptions,
+  WorkflowRuntimeState,
+} from "#src/workflows/script/model.ts";
 
 export {
   workflowRunJournalPath,
@@ -77,6 +85,14 @@ export type {
   WorkflowSavedWorkflowReadError,
 } from "#src/workflows/saved/resolver.ts";
 
+/**
+ * Domain-layer guard for `resumeFromRunId`. The Pi tool schema also enforces
+ * this shape, but the launcher must not trust callers: the id is interpolated
+ * into a journal file path, so a traversal value (`../../etc/...`) would read an
+ * arbitrary journal. Mirrors the tool-layer TypeBox pattern.
+ */
+const WORKFLOW_RUN_ID_PATTERN = /^wf_[a-z0-9-]{6,}$/;
+
 export async function launchWorkflow(
   request: WorkflowLaunchRequest,
   options: WorkflowLaunchOptions,
@@ -91,6 +107,16 @@ export async function launchWorkflow(
       _tag: "WorkflowLaunchParseError",
       message: parsed.error.message,
       cause: parsed.error,
+    });
+  }
+
+  if (
+    request.resumeFromRunId !== undefined &&
+    !WORKFLOW_RUN_ID_PATTERN.test(request.resumeFromRunId)
+  ) {
+    return err({
+      _tag: "WorkflowLaunchInvalidRequestError",
+      message: `Workflow resumeFromRunId '${request.resumeFromRunId}' is not a valid run id.`,
     });
   }
 
@@ -264,6 +290,13 @@ async function loadLaunchSource(
       return ok({ kind: "script", script: resolved.value.source });
     }
     case "scriptPath": {
+      const projectRoot = workflowProjectCwdFromRootDir(options.rootDir);
+      if (!isScriptPathWithinRoot(projectRoot, selected.value.scriptPath)) {
+        return err({
+          _tag: "WorkflowLaunchInvalidRequestError",
+          message: `Workflow scriptPath '${selected.value.scriptPath}' is outside the workflow project directory '${projectRoot}'.`,
+        });
+      }
       const source = await operations.readSavedWorkflowScriptPath(selected.value.scriptPath);
       if (source.status === "error") return source;
       return ok({ kind: "script", script: source.value });
@@ -388,12 +421,26 @@ async function executeWorkflowInBackground({
 }: ExecuteWorkflowInBackgroundOptions): Promise<
   Result<WorkflowRunState, WorkflowLaunchBackgroundError>
 > {
-  const liveManifest = createLiveManifestPersister({ initialState, rootDir, operations });
+  let runtimeControl: WorkflowRuntimeControl | undefined;
+  const getLiveStatus = (): WorkflowRunStatus | undefined => deriveLiveStatus(runtimeControl);
+  const liveManifest = createLiveManifestPersister({
+    initialState,
+    rootDir,
+    operations,
+    getLiveStatus,
+  });
   const runtimeResult = await tryRunWorkflowScript(source, {
     ...runtimeOptions,
+    onControlReady: (control) => {
+      runtimeControl = control;
+      runtimeOptions.onControlReady?.(control);
+    },
     onStateChange: (runtimeState) => {
       runtimeOptions.onStateChange?.(runtimeState);
-      notifyRunStateChange(onRunStateChange, mergeRuntimeState(initialState, runtimeState));
+      notifyRunStateChange(
+        onRunStateChange,
+        mergeRuntimeState(initialState, runtimeState, getLiveStatus()),
+      );
       liveManifest.persist(runtimeState);
     },
   });
@@ -457,10 +504,12 @@ function createLiveManifestPersister({
   initialState,
   rootDir,
   operations,
+  getLiveStatus,
 }: {
   readonly initialState: WorkflowRunState;
   readonly rootDir: string;
   readonly operations: WorkflowLaunchOperations;
+  readonly getLiveStatus: () => WorkflowRunStatus | undefined;
 }): {
   readonly persist: (runtimeState: WorkflowRuntimeState) => void;
   readonly flush: () => Promise<void>;
@@ -469,7 +518,7 @@ function createLiveManifestPersister({
 
   return {
     persist: (runtimeState) => {
-      const state = mergeRuntimeState(initialState, runtimeState);
+      const state = mergeRuntimeState(initialState, runtimeState, getLiveStatus());
       tail = tail
         .then(async () => {
           await operations.writeRun({ rootDir, state });
@@ -592,12 +641,33 @@ function failRunState(
   return ok({ ...transitioned.value, outputPath });
 }
 
+/**
+ * Derives the status a *live* (non-terminal) manifest write should record from
+ * the runtime control. The live persister fires on every scheduler progress
+ * event, including ones emitted by in-flight agents that settle after the run
+ * was paused or stopped. Without this, {@link mergeRuntimeState} would always
+ * re-stamp `initialState.status` (`"running"`) and clobber a `paused`/`stopped`
+ * status the controller wrote to disk. Returning `undefined` leaves the merged
+ * status untouched (the run is still running). Terminal writes go through the
+ * state-machine builders, not this path, so only the in-flight states matter.
+ */
+function deriveLiveStatus(
+  control: WorkflowRuntimeControl | undefined,
+): WorkflowRunStatus | undefined {
+  if (control === undefined) return undefined;
+  if (control.isStopped()) return "stopped";
+  if (control.isPaused()) return "paused";
+  return undefined;
+}
+
 function mergeRuntimeState(
   initialState: WorkflowRunState,
   runtimeState: WorkflowRuntimeState,
+  statusOverride?: WorkflowRunStatus,
 ): WorkflowRunState {
   return {
     ...initialState,
+    ...(statusOverride === undefined ? {} : { status: statusOverride }),
     phases:
       initialState.phases.length === 0
         ? runtimeState.phases.map((phase) => ({ title: phase.title }))

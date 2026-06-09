@@ -2,7 +2,11 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { tempWorkflowDir } from "../../suite/tmpdir.ts";
-import { resolveSavedWorkflowByName, savedWorkflowPath } from "#src/workflows/saved/resolver.ts";
+import {
+  isScriptPathWithinRoot,
+  resolveSavedWorkflowByName,
+  savedWorkflowPath,
+} from "#src/workflows/saved/resolver.ts";
 import { invalidWorkflowScript, workflowScript } from "../script/workflow-factory.ts";
 import { unwrap } from "../../support.ts";
 
@@ -18,6 +22,28 @@ async function writeSavedWorkflowFile(
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, fileName), source, "utf8");
 }
+
+describe("isScriptPathWithinRoot", () => {
+  const root = "/project";
+
+  it("should accept files inside the root and nested subdirectories", () => {
+    expect(isScriptPathWithinRoot(root, "/project/script.js")).toBe(true);
+    expect(isScriptPathWithinRoot(root, "/project/.pi/workflows/runs/wf_1/script.js")).toBe(true);
+    expect(isScriptPathWithinRoot(root, "relative/script.js")).toBe(true);
+    expect(isScriptPathWithinRoot(root, "/project")).toBe(true);
+  });
+
+  it("should reject absolute paths outside the root", () => {
+    expect(isScriptPathWithinRoot(root, "/etc/passwd")).toBe(false);
+    expect(isScriptPathWithinRoot(root, "/project-sibling/script.js")).toBe(false);
+  });
+
+  it("should reject parent-traversal escapes", () => {
+    expect(isScriptPathWithinRoot(root, "../escape.js")).toBe(false);
+    expect(isScriptPathWithinRoot(root, "../../etc/passwd")).toBe(false);
+    expect(isScriptPathWithinRoot(root, "nested/../../escape.js")).toBe(false);
+  });
+});
 
 describe("saved workflow resolver", () => {
   let tempDir: string;

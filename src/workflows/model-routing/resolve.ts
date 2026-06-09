@@ -4,7 +4,7 @@ export interface WorkflowModelRoutingModel {
   readonly id: string;
   readonly provider: string;
   readonly reasoning?: boolean;
-  readonly thinkingLevelMap?: Partial<Record<WorkflowThinkingLevel, unknown | null>>;
+  readonly thinkingLevelMap?: Partial<Record<WorkflowThinkingLevel, string | null>>;
 }
 
 export type WorkflowModelRoutingWarning =

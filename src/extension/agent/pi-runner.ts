@@ -15,8 +15,8 @@ import type {
   WorkflowAgentLiveEvent,
   WorkflowAgentRunRequest,
   WorkflowAgentRunner,
-} from "./scheduler.ts";
-import type { WorkflowAgentActivityState } from "./model.ts";
+} from "#src/workflows/agent/scheduler.ts";
+import type { WorkflowAgentActivityState } from "#src/workflows/agent/model.ts";
 
 export interface PiWorkflowAgentSession {
   readonly messages?: readonly unknown[];

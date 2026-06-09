@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { tempWorkflowDir } from "../../suite/tmpdir.ts";
 import type { WorkflowJournalKey } from "#src/workflows/journal/model.ts";
@@ -42,6 +43,30 @@ describe("WorkflowJournalStore", () => {
 
   it("should read a missing journal as an empty event list", async () => {
     await expect(new WorkflowJournalStore({ journalPath }).readEvents()).resolves.toEqual([]);
+  });
+
+  it("should reject when a journal line is not valid JSON", async () => {
+    await mkdir(dirname(journalPath), { recursive: true });
+    await writeFile(journalPath, "{not json}\n", "utf8");
+
+    await expect(new WorkflowJournalStore({ journalPath }).readEvents()).rejects.toThrow(
+      /JSON|Unexpected/i,
+    );
+  });
+
+  it("should reject a journal line whose JSON is not a known event shape", async () => {
+    const key = journalKey("3".repeat(64));
+    await mkdir(dirname(journalPath), { recursive: true });
+    await writeFile(
+      journalPath,
+      `${JSON.stringify({ type: "started", key, agentId: "a0000000000000000" })}\n` +
+        `${JSON.stringify({ type: "unknown" })}\n`,
+      "utf8",
+    );
+
+    await expect(new WorkflowJournalStore({ journalPath }).readEvents()).rejects.toThrow(
+      "Invalid workflow journal event at line 2",
+    );
   });
 });
 

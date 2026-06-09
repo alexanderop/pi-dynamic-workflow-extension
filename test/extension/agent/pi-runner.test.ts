@@ -5,7 +5,7 @@ import {
   buildStructuredOutputFollowUpPrompt,
   createPiWorkflowAgentRunner,
   type PiWorkflowAgentSessionFactory,
-} from "#src/workflows/agent/pi-runner.ts";
+} from "#src/extension/agent/pi-runner.ts";
 import type { WorkflowAgentRunRequest } from "#src/workflows/agent/scheduler.ts";
 import { FakePiSession } from "../../suite/fake-pi-session.ts";
 
@@ -172,6 +172,34 @@ describe("createPiWorkflowAgentRunner", () => {
     expect(session.dispose).toHaveBeenCalledOnce();
   });
 
+  it("should reject without prompting when the signal is already aborted", async () => {
+    const session = new FakePiSession();
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(runner(requestForTest({ signal: controller.signal }))).rejects.toThrow(
+      "was aborted before it started",
+    );
+    expect(session.prompt).not.toHaveBeenCalled();
+    expect(session.abort).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("should reject when the Pi subagent finishes without a final assistant text response", async () => {
+    const session = new FakePiSession();
+    // Suppress the default assistant message so no final text is produced.
+    session.prompt.mockImplementationOnce(async () => undefined);
+    const sessionFactory = vi.fn<PiWorkflowAgentSessionFactory>(async () => ({ session }));
+    const runner = createPiWorkflowAgentRunner({ cwd: "/repo", sessionFactory });
+
+    await expect(runner(requestForTest())).rejects.toThrow(
+      "finished without a final assistant text response",
+    );
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
   it("should translate Pi AgentSession events into compact workflow live events", async () => {
     const session = new FakePiSession(() => {
       session.emit({ type: "turn_start" });
@@ -212,7 +240,26 @@ describe("createPiWorkflowAgentRunner", () => {
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({ type: "message_update", summary: "working" }),
     );
-    expect(session.unsubscribe).toHaveBeenCalledOnce();
+    expect(session.unsubscribes).toHaveLength(1);
+    expect(session.unsubscribes[0]).toHaveBeenCalledOnce();
+    expect(session.listenerCount).toBe(0);
+  });
+
+  it("should remove only its own listener when a subscription is unsubscribed", () => {
+    const session = new FakePiSession();
+    const first = vi.fn<(event: unknown) => void>();
+    const second = vi.fn<(event: unknown) => void>();
+
+    const unsubscribeFirst = session.subscribe(first);
+    session.subscribe(second);
+    expect(session.listenerCount).toBe(2);
+
+    unsubscribeFirst();
+    session.emit({ type: "turn_start" });
+
+    expect(session.listenerCount).toBe(1);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith({ type: "turn_start" });
   });
 
   it("should return captured structured output when the Pi subagent calls structured_output", async () => {

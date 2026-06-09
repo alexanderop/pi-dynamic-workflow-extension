@@ -145,25 +145,34 @@ async function executeWorkflowScript(
     }
   };
 
-  const context = vm.createContext({
-    args: options.args,
-    budget,
-    phase: (title: string) => {
-      if (typeof title !== "string" || title.length === 0)
-        throw new TypeError("phase(title) requires a non-empty string.");
-      phases.push({ type: "workflow_phase", index: phases.length, title });
-      emitStateChange();
+  const context = vm.createContext(
+    {
+      args: options.args,
+      budget,
+      phase: (title: string) => {
+        if (typeof title !== "string" || title.length === 0)
+          throw new TypeError("phase(title) requires a non-empty string.");
+        phases.push({ type: "workflow_phase", index: phases.length, title });
+        emitStateChange();
+      },
+      log: (message: string) => {
+        logs.push(String(message));
+        emitStateChange();
+      },
+      agent,
+      parallel,
+      pipeline,
+      Date: deterministicDate(),
+      Math: deterministicMath(),
     },
-    log: (message: string) => {
-      logs.push(String(message));
-      emitStateChange();
+    {
+      // Defense-in-depth, not a trust boundary: workflow scripts are plain JS and
+      // never need runtime codegen, so disabling eval()/new Function()/wasm shrinks
+      // the surface a malformed or hostile script can reach. The vm itself is not a
+      // sandbox against a determined attacker; this only blocks accidental codegen.
+      codeGeneration: { strings: false, wasm: false },
     },
-    agent,
-    parallel,
-    pipeline,
-    Date: deterministicDate(),
-    Math: deterministicMath(),
-  });
+  );
 
   const currentState = (result?: unknown): WorkflowRuntimeState => ({
     meta: parsed.meta,
