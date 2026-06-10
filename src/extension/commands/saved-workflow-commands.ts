@@ -1,25 +1,16 @@
+// Registers saved workflows as direct slash commands, classifying name
+// collisions against existing commands before registering.
 import type {
   ExtensionAPI,
-  ExtensionCommandContext,
   ExtensionContext,
   SlashCommandInfo,
 } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-import type { PiWorkflowAgentRunnerOptions } from "#src/extension/agent/pi-runner.ts";
+import type { WorkflowCommandHandlerContext } from "#src/extension/commands/context.ts";
 import { buildWorkflowLaunchOptions } from "#src/extension/workflow-launch-options.ts";
 import { terminalNotifier } from "#src/extension/workflow-notifications.ts";
-import {
-  emitWorkflowCommandOutput,
-  type WorkflowCommandMode,
-} from "#src/extension/commands/command-output.ts";
-import {
-  launchWorkflow,
-  type WorkflowLaunch,
-  type WorkflowLaunchError,
-  type WorkflowLaunchOptions,
-  type WorkflowLaunchRequest,
-} from "#src/workflows/launch/launcher.ts";
-import type { Result } from "#src/workflows/result.ts";
+import { emitWorkflowCommandOutput } from "#src/extension/commands/command-output.ts";
+import { launchWorkflow, type WorkflowLauncher } from "#src/workflows/launch/launcher.ts";
 import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 import { listSavedWorkflows } from "#src/workflows/saved/list.ts";
 import {
@@ -57,23 +48,10 @@ export interface SavedWorkflowCommandRegistration {
 
 /**
  * The command-handler context fields the saved-workflow launch path reads.
- * Mirrors the richer shape Pi passes at runtime without depending on private
- * SDK types; every extra field is optional so tests can supply a partial mock.
+ * Alias for the shared workflow command context; see
+ * {@link WorkflowCommandHandlerContext} for the field documentation.
  */
-export type SavedWorkflowCommandContext = ExtensionCommandContext & {
-  readonly mode?: WorkflowCommandMode;
-  readonly model?: PiWorkflowAgentRunnerOptions["model"];
-  readonly modelRegistry?: PiWorkflowAgentRunnerOptions["modelRegistry"] & {
-    readonly getAvailable?: () =>
-      | Promise<WorkflowLaunchOptions["availableModels"]>
-      | WorkflowLaunchOptions["availableModels"];
-  };
-  readonly env?: Record<string, string | undefined>;
-  readonly featureConfigPaths?: {
-    readonly userConfigPath?: string;
-    readonly projectConfigPath?: string;
-  };
-};
+export type SavedWorkflowCommandContext = WorkflowCommandHandlerContext;
 
 /** The slice of the host API that the saved-workflow command registry depends on. */
 export type RegisterSavedWorkflowCommandsPi = Pick<ExtensionAPI, "registerCommand"> &
@@ -85,10 +63,7 @@ export type RegisterSavedWorkflowCommandsPi = Pick<ExtensionAPI, "registerComman
   >;
 
 export interface SavedWorkflowCommandRegistryOptions {
-  readonly launchWorkflow?: (
-    request: WorkflowLaunchRequest,
-    options: WorkflowLaunchOptions,
-  ) => Promise<Result<WorkflowLaunch, WorkflowLaunchError>>;
+  readonly launchWorkflow?: WorkflowLauncher;
 }
 
 export type SyncDirectCommandsResult =

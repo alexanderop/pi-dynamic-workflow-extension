@@ -540,6 +540,18 @@ return await agent("scan explicit path", { label: "scan-agent", phase: "Scan" })
     agents.expectNoUnhandledAgents();
   });
 
+  it("should strip a markdown fence from an inline script and persist the unfenced source", async () => {
+    const script = workflowScript({ meta: { name: "fenced-launch" } });
+    const fenced = ["```js", script, "```"].join("\n");
+
+    const result = await launchWorkflow({ script: fenced }, launchOptions());
+
+    const launch = unwrap(result);
+    await expect(readFile(launch.scriptPath, "utf8")).resolves.toBe(script);
+    const manifest = unwrap(await new WorkflowRunStore({ rootDir }).readRun("wf_test"));
+    expect(manifest.script).toBe(script);
+  });
+
   it("should persist the script copy and initial run manifest before fake agents start", async () => {
     const scan = agent.pending({ prompt: "scan src", label: "scan-agent", phase: "Scan" });
     const agents = setupAgentMock(scan);

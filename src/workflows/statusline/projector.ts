@@ -1,3 +1,5 @@
+// Projects run state into the single-line statusline summary. The full TUI
+// view-model projector is separate in src/workflows/view/projector.ts.
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type { WorkflowRunState, WorkflowRunStatus } from "#src/workflows/run/model.ts";
 import { formatDuration, formatTokens } from "#src/workflows/view/layout.ts";

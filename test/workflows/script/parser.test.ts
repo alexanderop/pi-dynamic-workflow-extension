@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseWorkflowScript,
+  stripMarkdownFence,
   tryParseWorkflowScript,
   WorkflowParseError,
 } from "#src/workflows/script/parser.ts";
@@ -280,5 +281,35 @@ return await agent("Audit code that mentions Date.now in docs");
       status: "error",
       error: { name: "WorkflowParseError" },
     });
+  });
+
+  it("should reject a fenced script because the parser stays strict for on-disk sources", () => {
+    const fenced = ["```js", workflowScript({ meta: { name: "fenced" } }), "```"].join("\n");
+
+    const result = tryParseWorkflowScript(fenced);
+
+    expect(result).toMatchObject({
+      status: "error",
+      error: { name: "WorkflowParseError" },
+    });
+  });
+});
+
+describe("stripMarkdownFence", () => {
+  const body = 'export const meta = { name: "x", description: "y" };\nreturn null;';
+
+  it.each([
+    ["a js language tag", `\`\`\`js\n${body}\n\`\`\``],
+    ["a bare fence with surrounding whitespace", `\n  \`\`\`\n${body}\n\`\`\`  \n`],
+    ["an info string with attributes", `\`\`\`js title=workflow copy\n${body}\n\`\`\``],
+    ["CRLF line endings on the fence lines", `\`\`\`javascript\r\n${body}\r\n\`\`\``],
+  ])("should strip a surrounding fence with %s", (_variant, fenced) => {
+    expect(stripMarkdownFence(fenced)).toBe(body);
+  });
+
+  it("should leave unfenced sources and interior backticks untouched", () => {
+    const withInteriorBackticks = `${body}\nlog(\`\`\` + "fence-like");`;
+
+    expect(stripMarkdownFence(withInteriorBackticks)).toBe(withInteriorBackticks);
   });
 });

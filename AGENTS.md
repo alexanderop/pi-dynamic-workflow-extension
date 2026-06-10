@@ -36,7 +36,7 @@ Before making changes in this repo:
 Use `pnpm` for project scripts:
 
 - `pnpm run verify` — canonical local harness for code changes; runs type checking, lint, format check, and the Vitest suite.
-- `pnpm run check` — run TypeScript type checking with `tsc --noEmit`.
+- `pnpm run check` — run TypeScript type checking. `tsc` runs twice: `tsc --noEmit` for the main project and `tsc --noEmit -p types` for the `types/` directory, which has its own `tsconfig.json`.
 - `pnpm test` — run the Vitest test suite once.
 - `pnpm run lint` — run Oxlint on `src`, `test`, and `tools`.
 - `pnpm run lint:fix` — apply safe Oxlint fixes in the same lint scope.
@@ -46,6 +46,12 @@ Use `pnpm` for project scripts:
 For code changes, prefer `pnpm run verify` before reporting completion unless the task specifically calls for a narrower check or the user asks not to run the full harness.
 
 The Oxfmt scripts intentionally do not target the whole repository. Do not format `spec.md`, ADRs, or exploratory docs unless the task is specifically about formatting those documents.
+
+### Build and test gotchas
+
+- `types/workflow.d.ts` is the published type contract for workflow scripts. `WORKFLOW_SCRIPT_GLOBALS` in `src/workflows/script/runtime.ts` is contract-tested against it (`test/workflows/script/workflow-globals.test.ts`), so keep `WORKFLOW_SCRIPT_GLOBALS` exported from `runtime.ts`.
+- Tests import `createParallel`, `createPipeline`, and `WORKFLOW_COLLECTION_ITEM_LIMIT` from `src/workflows/script/runtime.ts` (they live in `sandbox-globals.ts`), and `WorkflowsComponentTheme` from `src/extension/tui/workflows-component.ts` (it lives in `render-screens.ts`). Keep those re-exports in place.
+- Oxfmt is opinionated; long import lists get reflowed. Run `pnpm run fmt` before `pnpm run verify` so the format check does not fail on mechanical reflows.
 
 ## Git
 

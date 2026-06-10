@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { array, assert, asyncProperty, boolean, integer } from "fast-check";
-import { parallel, pipeline } from "#src/workflows/script/runtime.ts";
+import { createParallel, createPipeline } from "#src/workflows/script/runtime.ts";
 
 const propertyRuns = { numRuns: 100 };
+const parallel = createParallel();
+const pipeline = createPipeline();
 
 describe("workflow runtime helper properties", () => {
   it("should preserve input order for generated parallel thunk results", async () => {

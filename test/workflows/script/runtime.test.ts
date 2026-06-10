@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  parallel,
-  pipeline,
+  createParallel,
+  createPipeline,
   runWorkflowScript,
   tryRunWorkflowScript,
   WORKFLOW_COLLECTION_ITEM_LIMIT,
@@ -10,6 +10,9 @@ import {
 import { AgentResponse, agent, setupAgentMock } from "../agent/agent-mock.ts";
 import { deferred } from "../../support.ts";
 import { workflowScript } from "./workflow-factory.ts";
+
+const parallel = createParallel();
+const pipeline = createPipeline();
 
 describe("runWorkflowScript", () => {
   it("should capture workflow phases, logs, agent calls, and result when script runs with args", async () => {
@@ -374,6 +377,57 @@ return m.random();
       status: "error",
       error: { _tag: "WorkflowRuntimeError", message: "boom" },
     });
+  });
+
+  it("should log the index and message of a failed parallel branch", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "parallel-failure" },
+        body: `
+await parallel([
+  () => Promise.resolve("ok"),
+  () => { throw new Error("branch boom"); },
+]);
+return null;
+`,
+      }),
+    );
+
+    expect(state.logs).toContainEqual(expect.stringMatching(/parallel\[1\].*branch boom/));
+  });
+
+  it("should log the index and message of a failed pipeline item", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "pipeline-failure" },
+        body: `
+await pipeline(
+  ["ok", "fail"],
+  async (_previous, item, index) => {
+    if (item === "fail") throw new Error("stage boom");
+    return index;
+  },
+);
+return null;
+`,
+      }),
+    );
+
+    expect(state.logs).toContainEqual(expect.stringMatching(/pipeline\[1\].*stage boom/));
+  });
+
+  it("should fail with an await hint when the workflow result is not serializable", async () => {
+    const result = await tryRunWorkflowScript(
+      workflowScript({
+        meta: { name: "forgot-await" },
+        body: `return { pending: parallel([() => Promise.resolve(1)]) };`,
+      }),
+    );
+
+    expect(result.status).toBe("error");
+    const message = result.status === "error" ? result.error.message : "";
+    expect(message).toMatch(/serializable/i);
+    expect(message).toMatch(/await/i);
   });
 
   it("should block runtime code generation (eval) inside workflow scripts", async () => {

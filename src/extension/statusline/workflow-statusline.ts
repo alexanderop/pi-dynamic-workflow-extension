@@ -1,3 +1,4 @@
+// Keeps the Pi statusline entry in sync with the latest workflow run state.
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { workflowRootDirForCwd } from "#src/workflows/run/root-dir.ts";
 import { WorkflowRunStore } from "#src/workflows/run/store.ts";

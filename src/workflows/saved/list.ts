@@ -1,6 +1,7 @@
 import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { isNodeError } from "#src/workflows/guards.ts";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { tryParseWorkflowScript } from "#src/workflows/script/parser.ts";
 import { resolveSavedWorkflowByName } from "./resolver.ts";
@@ -128,8 +129,4 @@ function compareSavedWorkflows(left: WorkflowSavedWorkflow, right: WorkflowSaved
 
 function isMissingFile(cause: unknown): boolean {
   return isNodeError(cause) && cause.code === "ENOENT";
-}
-
-function isNodeError(cause: unknown): cause is NodeJS.ErrnoException {
-  return cause instanceof Error && "code" in cause;
 }

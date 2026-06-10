@@ -1,3 +1,5 @@
+// Entry point for ultracode mode: registers the input trigger and session
+// hooks that drive the mode state machine.
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,

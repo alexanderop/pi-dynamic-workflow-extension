@@ -1,3 +1,4 @@
+// Selection and scrolling math for the workflow TUI screens.
 export type MonitorScreen = "chooser" | "overview" | "agentDetail" | "promptReader";
 
 export interface MonitorNavigationState {

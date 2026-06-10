@@ -1,22 +1,28 @@
+// Core run-state types shared by the store, state machine, launcher, and views.
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowFeatureDecision,
   WorkflowFeatureFlags,
 } from "#src/workflows/features/registry.ts";
 
-export type WorkflowRunStatus =
-  | "created"
-  | "starting"
-  | "running"
-  | "pausing"
-  | "paused"
-  | "resuming"
-  | "completing"
-  | "completed"
-  | "failing"
-  | "failed"
-  | "stopping"
-  | "stopped";
+// Single source of truth for the run-status union: guards derive from this
+// array via .includes(), so adding a status here updates type and guards together.
+export const WORKFLOW_RUN_STATUSES = [
+  "created",
+  "starting",
+  "running",
+  "pausing",
+  "paused",
+  "resuming",
+  "completing",
+  "completed",
+  "failing",
+  "failed",
+  "stopping",
+  "stopped",
+] as const;
+
+export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUSES)[number];
 
 export interface WorkflowRunPlannedAgent {
   label: string;

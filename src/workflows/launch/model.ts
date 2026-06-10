@@ -1,3 +1,4 @@
+// Shared types for workflow launch requests, results, and errors.
 import type { Result } from "#src/workflows/result.ts";
 import type {
   WorkflowFailure,

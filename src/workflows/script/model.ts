@@ -1,3 +1,4 @@
+// Shared types for parsed workflow scripts and runtime options.
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowFeatureDecision,

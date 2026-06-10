@@ -1,3 +1,4 @@
+// Parses and validates the workflow script meta header into WorkflowMeta.
 import {
   parse,
   type AnyNode,
@@ -8,6 +9,7 @@ import {
   type VariableDeclaration,
   type VariableDeclarator,
 } from "acorn";
+import { isRecord } from "#src/workflows/guards.ts";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowMeta, WorkflowPhase, WorkflowPlannedAgent } from "./model.ts";
 
@@ -65,6 +67,23 @@ export function tryParseWorkflowScript(
   } catch (cause) {
     return err(toWorkflowParseError(cause));
   }
+}
+
+/**
+ * Models routinely wrap the workflow `script` argument in a Markdown code fence
+ * (```` ```js ```` … ```` ``` ````) even though the tool asks for raw JavaScript.
+ * Strip a single surrounding fence so a fenced script parses and launches instead
+ * of failing acorn with a confusing syntax error. Only a fence that brackets the
+ * whole source is removed; backticks inside the body are left untouched.
+ *
+ * This normalization is applied where model-emitted script input is accepted
+ * (the Workflow tool preview and the launcher's inline-script source), and the
+ * canonical stripped source is what gets persisted. The parser itself stays
+ * strict: a fence inside a saved or on-disk workflow file is a parse error.
+ */
+export function stripMarkdownFence(source: string): string {
+  const fenced = source.trim().match(/^```[^\n]*\n([\s\S]*?)\r?\n```$/);
+  return fenced === null ? source : fenced[1];
 }
 
 function toWorkflowParseError(cause: unknown): WorkflowParseError {
@@ -213,10 +232,6 @@ function requireNonNegativeInteger(value: unknown, path: string): number {
     throw new WorkflowParseError(`Workflow ${path} must be a non-negative integer.`);
   }
   return value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function assertNoForbiddenDeterminismSubstrings(source: string): void {

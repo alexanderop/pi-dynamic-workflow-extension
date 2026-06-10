@@ -1,4 +1,7 @@
+// Projects WorkflowRunState into pure TUI view models (chooser/monitor rows).
+// The statusline projector is separate in src/workflows/statusline/projector.ts.
 import { dirname } from "node:path";
+import { hasKnownModel } from "#src/workflows/agent/model.ts";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type {
   WorkflowRunPhase,
@@ -79,26 +82,13 @@ function liveDurationLabel(run: WorkflowRunState, now: number): string {
 }
 
 function toAgentRow(agent: WorkflowAgentProgress, now: number): MonitorAgentRow {
-  const hasModel = agent.model !== "" && agent.model !== "unknown" && agent.model !== "default";
-  const hasLiveTelemetry =
-    agent.lastToolName !== undefined ||
-    agent.lastToolSummary !== undefined ||
-    (agent.toolCalls !== undefined && agent.toolCalls > 0);
-  const lastProgressAt = agent.lastProgressAt;
-  const runningWithoutMetrics =
-    agent.state === "running" && agent.tokens === undefined && lastProgressAt !== undefined;
-  const idleMs =
-    runningWithoutMetrics && hasLiveTelemetry && agent.currentToolName === undefined
-      ? Math.max(0, now - lastProgressAt)
-      : undefined;
-  const noTelemetryMs =
-    runningWithoutMetrics && !hasLiveTelemetry ? Math.max(0, now - lastProgressAt) : undefined;
+  const { idleMs, noTelemetryMs } = deriveAgentStaleness(agent, now);
   return {
     glyph: agentGlyph(agent.state),
     label: agent.label,
     agentId: agent.agentId,
     state: agent.state,
-    modelLabel: hasModel ? agent.model : undefined,
+    modelLabel: hasKnownModel(agent.model) ? agent.model : undefined,
     thinkingLevelLabel: formatThinkingLevelLabel(agent.thinkingLevel),
     thinkingLevel: agent.thinkingLevel,
     tokens: agent.tokens !== undefined && agent.tokens > 0 ? agent.tokens : undefined,
@@ -116,6 +106,33 @@ function toAgentRow(agent: WorkflowAgentProgress, now: number): MonitorAgentRow 
     lastToolName: agent.lastToolName,
     lastToolSummary: agent.lastToolSummary,
     resultPreview: agent.resultPreview,
+  };
+}
+
+/**
+ * A running agent with no token metrics is suspicious after a while; surface
+ * how long it has been quiet. `idleMs` means telemetry exists but stopped
+ * arriving (and no tool is mid-flight); `noTelemetryMs` means the agent never
+ * produced telemetry at all. At most one of the two is set.
+ */
+function deriveAgentStaleness(
+  agent: WorkflowAgentProgress,
+  now: number,
+): { idleMs?: number; noTelemetryMs?: number } {
+  const hasLiveTelemetry =
+    agent.lastToolName !== undefined ||
+    agent.lastToolSummary !== undefined ||
+    (agent.toolCalls !== undefined && agent.toolCalls > 0);
+  const lastProgressAt = agent.lastProgressAt;
+  const runningWithoutMetrics =
+    agent.state === "running" && agent.tokens === undefined && lastProgressAt !== undefined;
+  return {
+    idleMs:
+      runningWithoutMetrics && hasLiveTelemetry && agent.currentToolName === undefined
+        ? Math.max(0, now - lastProgressAt)
+        : undefined,
+    noTelemetryMs:
+      runningWithoutMetrics && !hasLiveTelemetry ? Math.max(0, now - lastProgressAt) : undefined,
   };
 }
 

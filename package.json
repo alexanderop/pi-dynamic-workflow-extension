@@ -8,12 +8,22 @@
     "pi-package",
     "workflows"
   ],
+  "files": [
+    "src",
+    "types",
+    "skills"
+  ],
   "type": "module",
   "imports": {
     "#src/*": "./src/*"
   },
+  "exports": {
+    "./workflow": {
+      "types": "./types/workflow.d.ts"
+    }
+  },
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc --noEmit -p types",
     "dup": "jscpd src --min-lines 10 --min-tokens 80 --threshold 1 --reporters console --noTips",
     "fmt": "oxfmt package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test tools",
     "fmt:check": "oxfmt --check package.json tsconfig.json vitest.config.ts .oxlintrc.json .oxfmtrc.json src test tools",

@@ -4,6 +4,8 @@ A Pi package scaffold for building a Claude-Code-like dynamic workflow feature.
 
 This repository is exploratory. The current source is only the installable package shell; the actual workflow launcher, sandbox runtime, scheduler, persistence layer, subagent runner, and `/workflows` UI will be implemented later against the behavior documented in [spec.md](./spec.md).
 
+Wondering where a spec behavior is implemented? [brain/contracts/spec-coverage.md](./brain/contracts/spec-coverage.md) maps each spec area to its production files and tests.
+
 Reference notes for future implementation:
 
 - [Learning guide](./brain/learning/README.md)

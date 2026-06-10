@@ -1,3 +1,4 @@
+// Journal event and key types; the deterministic key is computed in key.ts.
 export type WorkflowJournalKey = `v2:${string}`;
 
 export type WorkflowJournalEvent =

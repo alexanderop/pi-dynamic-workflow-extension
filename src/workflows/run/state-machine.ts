@@ -1,3 +1,6 @@
+// Declarative state machines for run status and agent lifecycle. The
+// TransitionTable shape makes a new status a compile error until its
+// transitions are defined.
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type { WorkflowFailure, WorkflowRunState } from "./model.ts";
@@ -223,31 +226,28 @@ export function transitionAgent(
         currentToolCallId: undefined,
       });
     case "agent_restarted":
+      // Build a fresh queued record from the fields that survive a restart —
+      // identity, routing, phase, and prompt. Everything else (telemetry,
+      // timing, results) resets by omission, so new WorkflowAgentProgress
+      // fields reset on restart by default instead of leaking through.
       return ok({
-        ...nextAgent,
+        type: "workflow_agent",
+        index: agent.index,
+        label: agent.label,
         agentId: event.agentId,
+        agentType: agent.agentType,
+        model: agent.model,
+        thinkingLevel: agent.thinkingLevel,
+        requestedModel: agent.requestedModel,
+        requestedThinkingLevel: agent.requestedThinkingLevel,
+        modelFallbackReason: agent.modelFallbackReason,
+        state: nextState,
         queuedAt: event.now,
         attempt: agent.attempt + 1,
-        startedAt: undefined,
-        lastProgressAt: undefined,
-        durationMs: undefined,
-        lastToolName: undefined,
-        lastToolSummary: undefined,
-        activityState: undefined,
-        activityLabel: undefined,
-        lastEventAt: undefined,
-        lastEventType: undefined,
-        lastEventLabel: undefined,
-        currentToolName: undefined,
-        currentToolCallId: undefined,
-        turnCount: undefined,
-        messageUpdateCount: undefined,
-        observedLiveEvents: undefined,
-        telemetryAvailable: undefined,
-        recentActivity: undefined,
-        resultPreview: undefined,
-        tokens: undefined,
-        toolCalls: undefined,
+        phaseIndex: agent.phaseIndex,
+        phaseTitle: agent.phaseTitle,
+        promptPreview: agent.promptPreview,
+        prompt: agent.prompt,
       });
   }
 }

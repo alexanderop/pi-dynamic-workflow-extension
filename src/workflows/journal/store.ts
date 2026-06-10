@@ -1,5 +1,8 @@
+// Append-only JSONL persistence for the agent journal (the replay/resume
+// source of truth). The run-manifest store is separate in src/workflows/run/store.ts.
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { isRecord } from "#src/workflows/guards.ts";
 import type { WorkflowJournalEvent, WorkflowJournalKey } from "./model.ts";
 
 export interface WorkflowJournalStoreOptions {
@@ -117,10 +120,6 @@ function isWorkflowJournalEvent(value: unknown): value is WorkflowJournalEvent {
 
 function isJournalKey(value: unknown): value is WorkflowJournalKey {
   return typeof value === "string" && /^v2:[0-9a-f]{64}$/.test(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isFileNotFoundError(cause: unknown): boolean {

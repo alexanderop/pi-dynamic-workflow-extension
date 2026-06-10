@@ -1,4 +1,15 @@
-export type WorkflowThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+// Single source of truth for the thinking-level union: guards derive from this
+// array via .includes(), so adding a level here updates type and guards together.
+export const WORKFLOW_THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+
+export type WorkflowThinkingLevel = (typeof WORKFLOW_THINKING_LEVELS)[number];
 
 export interface AgentOptions {
   label?: string;
@@ -8,6 +19,16 @@ export interface AgentOptions {
   thinkingLevel?: string;
   schema?: unknown;
   isolation?: "worktree";
+}
+
+/**
+ * Sentinel contract for agent model labels. `model` is a required string, so
+ * placeholders stand in when no real model is known: the scheduler defaults to
+ * "default", observed-manifest deserialization fills in "unknown", and legacy
+ * snapshots may carry "". Views should hide these rather than render them.
+ */
+export function hasKnownModel(model: string): boolean {
+  return model !== "" && model !== "unknown" && model !== "default";
 }
 
 export type WorkflowAgentActivityState =

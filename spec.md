@@ -339,7 +339,13 @@ Launch rules:
   the real display values come from the script's `meta` block.
 - If `scriptPath` is provided, the launcher runs the script file at that path.
 - Else, if `script` is provided, the launcher compiles and runs that inline
-  workflow. `script` MUST NOT exceed 524288 characters.
+  workflow. `script` MUST NOT exceed 524288 characters. Because models routinely
+  wrap the inline script in a Markdown code fence despite the tool asking for
+  raw JavaScript, the launcher strips a single fence that brackets the whole
+  `script` value before validating or persisting it; the canonical unfenced
+  source is what gets persisted and run. This tolerance applies only to the
+  inline `script` input — a fence inside a `scriptPath` file or saved workflow
+  is a parse error.
 - Else, if `name` is provided, the launcher loads the matching saved workflow.
   Every launch persists its script under the run directory and surfaces that
   path in the confirmation, so a later launch can iterate on or resume the same

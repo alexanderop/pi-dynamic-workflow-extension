@@ -1,3 +1,5 @@
+// Workflow feature-flag registry: definitions, defaults, and name mappings.
+// Layered precedence resolution lives in src/extension/features/resolve.ts.
 export interface WorkflowFeatureFlags {
   /** Allow workflow scripts to route subagents to explicit model hints. */
   readonly experimentalModelRouting: boolean;
@@ -5,15 +7,20 @@ export interface WorkflowFeatureFlags {
 
 export type WorkflowFeatureKey = keyof WorkflowFeatureFlags;
 export type WorkflowFeatureStage = "stable" | "experimental" | "deprecated";
-export type WorkflowFeatureDecisionSource =
-  | "default"
-  | "user"
-  | "project"
-  | "hook"
-  | "env"
-  | "cli"
-  | "session"
-  | "override";
+// Single source of truth for the decision-source union: guards derive from this
+// array via .includes(), so adding a source here updates type and guards together.
+export const WORKFLOW_FEATURE_DECISION_SOURCES = [
+  "default",
+  "user",
+  "project",
+  "hook",
+  "env",
+  "cli",
+  "session",
+  "override",
+] as const;
+
+export type WorkflowFeatureDecisionSource = (typeof WORKFLOW_FEATURE_DECISION_SOURCES)[number];
 
 export interface WorkflowFeatureDefinition<Key extends WorkflowFeatureKey = WorkflowFeatureKey> {
   readonly key: Key;

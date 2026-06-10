@@ -1,3 +1,4 @@
+// Pure view-model types consumed by the TUI renderers.
 import type { WorkflowAgentProgress } from "#src/workflows/agent/model.ts";
 import type { WorkflowRunStatus } from "#src/workflows/run/model.ts";
 

@@ -1,0 +1,14 @@
+{
+  // Checked separately from the main project: workflow.d.ts uses `declare global`,
+  // and including it in the root tsconfig would inject the workflow globals
+  // (agent, args, budget, ...) into every src/test file's scope.
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["workflow.d.ts"]
+}

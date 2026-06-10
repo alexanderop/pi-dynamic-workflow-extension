@@ -1,3 +1,6 @@
+// Layered feature-flag resolution (default, then user, project, hook, env,
+// cli, session, override). Model-hint resolution is separate in
+// src/workflows/model-routing/resolve.ts.
 import {
   defaultProjectWorkflowFeatureConfigPath,
   defaultUserWorkflowFeatureConfigPath,

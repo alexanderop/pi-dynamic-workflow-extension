@@ -1,3 +1,5 @@
+// Applies the model-routing policy to per-agent options for the launcher,
+// runtime, and scheduler.
 import type { AgentOptions } from "#src/workflows/agent/model.ts";
 import type { WorkflowFeatureFlags } from "#src/workflows/features/registry.ts";
 import type { WorkflowMeta } from "#src/workflows/script/model.ts";
@@ -65,6 +67,21 @@ export function resolveEffectiveAgentOptions(
   if (resolved.modelReference !== undefined) options.model = resolved.modelReference;
   if (resolved.thinkingLevel !== undefined) options.thinkingLevel = resolved.thinkingLevel;
   return { options, warnings: resolved.warnings, ignoredModelHint: false };
+}
+
+/**
+ * The run-level default-model policy: a workflow's `meta.model` hint only takes
+ * effect when experimental model routing is enabled; otherwise the current Pi
+ * model always wins.
+ */
+export function resolveDefaultModel(
+  meta: Pick<WorkflowMeta, "model">,
+  options: { readonly defaultModel?: string },
+  features: Pick<WorkflowFeatureFlags, "experimentalModelRouting">,
+): string | undefined {
+  return features.experimentalModelRouting
+    ? (meta.model ?? options.defaultModel)
+    : options.defaultModel;
 }
 
 export function isNonDefaultModelHint(model: string | undefined): boolean {

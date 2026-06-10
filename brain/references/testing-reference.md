@@ -16,6 +16,8 @@ Companion planning spec: `brain/plans/workflows/test-page-objects/spec.md` descr
 
 Use five layers. Do not jump to live model tests early. When a test needs to control `agent()` output, prefer the MSW-style fake agent helper (`test/workflows/agent/agent-mock.ts`) over one-off runner mocks.
 
+Shared cross-cutting fixtures (`FakePiSession`, tracked temp dirs) live in `test/suite/` — read `test/suite/README.md` before hand-rolling new fakes or `mkdtemp` cleanup.
+
 1. Pure unit tests for workflow semantics:
    - `parallel()` result ordering and thunk validation.
    - `pipeline()` per-item stage progression.

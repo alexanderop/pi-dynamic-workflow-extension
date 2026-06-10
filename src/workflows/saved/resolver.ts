@@ -1,6 +1,9 @@
+// Resolves saved-workflow names to parsed script files in the saved-workflow
+// directories, enforcing path containment and parse validity.
 import type { Dirent } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { isNodeError } from "#src/workflows/guards.ts";
 import { err, ok, type Result } from "#src/workflows/result.ts";
 import { tryParseWorkflowScript, WorkflowParseError } from "#src/workflows/script/parser.ts";
 import type { WorkflowMeta } from "#src/workflows/script/model.ts";
@@ -78,33 +81,17 @@ export async function resolveSavedWorkflowByName(
   const scopes = candidateScopes(locations);
   for (const scope of scopes) {
     const exactPath = savedWorkflowPath(scope.dir, name);
-    const exactCandidate = { ...scope, path: exactPath, isExactNamePath: true };
-    const exactSource = await readSavedWorkflowSource(exactPath);
-    if (exactSource.status === "error") {
-      if (!isMissingFile(exactSource.error.cause)) return exactSource;
-    } else {
-      const exact = parseSavedWorkflowCandidate(name, exactCandidate, exactSource.value);
-      if (exact.status === "error") return exact;
-      if (exact.value !== undefined) return ok(exact.value);
-    }
+    const exact = await tryCandidate(name, { ...scope, path: exactPath, isExactNamePath: true });
+    if (exact.kind === "error") return err(exact.error);
+    if (exact.kind === "found") return ok(exact.workflow);
 
     const scanned = await scannedSavedWorkflowPaths(scope.dir, exactPath);
     if (scanned.status === "error") return scanned;
 
-    for (const candidate of scanned.value.map((path) => ({
-      ...scope,
-      path,
-      isExactNamePath: false,
-    }))) {
-      const source = await readSavedWorkflowSource(candidate.path);
-      if (source.status === "error") {
-        if (isMissingFile(source.error.cause)) continue;
-        return source;
-      }
-
-      const parsed = parseSavedWorkflowCandidate(name, candidate, source.value);
-      if (parsed.status === "error") return parsed;
-      if (parsed.value !== undefined) return ok(parsed.value);
+    for (const path of scanned.value) {
+      const outcome = await tryCandidate(name, { ...scope, path, isExactNamePath: false });
+      if (outcome.kind === "error") return err(outcome.error);
+      if (outcome.kind === "found") return ok(outcome.workflow);
     }
   }
 
@@ -123,6 +110,32 @@ export async function readSavedWorkflowScriptPath(
   path: string,
 ): Promise<Result<string, WorkflowSavedWorkflowReadError>> {
   return readSavedWorkflowSource(path);
+}
+
+type SavedWorkflowCandidateOutcome =
+  | { readonly kind: "found"; readonly workflow: WorkflowSavedWorkflow }
+  | { readonly kind: "skip" }
+  | { readonly kind: "error"; readonly error: WorkflowSavedWorkflowError };
+
+/**
+ * Read and parse one candidate file: "found" when it defines the requested
+ * workflow, "skip" when it is missing or defines a different workflow (keep
+ * scanning), "error" when it is unreadable or an exact-name file is invalid.
+ */
+async function tryCandidate(
+  name: string,
+  candidate: WorkflowSavedWorkflowCandidate,
+): Promise<SavedWorkflowCandidateOutcome> {
+  const source = await readSavedWorkflowSource(candidate.path);
+  if (source.status === "error") {
+    if (isMissingFile(source.error.cause)) return { kind: "skip" };
+    return { kind: "error", error: source.error };
+  }
+
+  const parsed = parseSavedWorkflowCandidate(name, candidate, source.value);
+  if (parsed.status === "error") return { kind: "error", error: parsed.error };
+  if (parsed.value === undefined) return { kind: "skip" };
+  return { kind: "found", workflow: parsed.value };
 }
 
 function candidateScopes(locations: WorkflowSavedWorkflowLocations): WorkflowSavedWorkflowScope[] {
@@ -252,8 +265,4 @@ function invalidSavedWorkflow(
 
 function isMissingFile(cause: unknown): boolean {
   return isNodeError(cause) && cause.code === "ENOENT";
-}
-
-function isNodeError(cause: unknown): cause is NodeJS.ErrnoException {
-  return cause instanceof Error && "code" in cause;
 }

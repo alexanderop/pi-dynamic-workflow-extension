@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { registerWorkflowTool } from "#src/extension/tools/workflow-tool.ts";
 import { parseWorkflowScript } from "#src/workflows/script/parser.ts";
 import {
-  pipeline,
+  createPipeline,
   runWorkflowScript,
   WORKFLOW_COLLECTION_ITEM_LIMIT,
 } from "#src/workflows/script/runtime.ts";
@@ -72,7 +72,7 @@ describe("Claude Code Workflow tool reference contract", () => {
   it("should enforce the 4096 item collection cap from the captured Workflow contract", async () => {
     const tooMany = Array.from({ length: WORKFLOW_COLLECTION_ITEM_LIMIT + 1 }, (_, index) => index);
 
-    await expect(pipeline(tooMany, async (_previous, item) => item)).rejects.toThrow(
+    await expect(createPipeline()(tooMany, async (_previous, item) => item)).rejects.toThrow(
       /at most 4096/,
     );
   });

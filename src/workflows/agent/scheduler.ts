@@ -1,8 +1,16 @@
+// Concurrency-capped agent scheduler with journal replay: queues agent() calls,
+// caps how many run at once, and short-circuits repeated journal keys from the
+// replay cache. The Pi-session runner lives in src/extension/agent/ (ADR 0010:
+// the domain core stays Pi-SDK-free).
 import { randomBytes } from "node:crypto";
 import { availableParallelism } from "node:os";
 import { computeWorkflowAgentKey } from "#src/workflows/journal/key.ts";
-import type { WorkflowAgentJournal, WorkflowJournalKey } from "#src/workflows/journal/model.ts";
-import { transitionAgent } from "#src/workflows/run/state-machine.ts";
+import type {
+  WorkflowAgentJournal,
+  WorkflowJournalEvent,
+  WorkflowJournalKey,
+} from "#src/workflows/journal/model.ts";
+import { isTerminalAgentState, transitionAgent } from "#src/workflows/run/state-machine.ts";
 import type {
   AgentOptions,
   WorkflowAgentActivityState,
@@ -80,6 +88,22 @@ export interface WorkflowAgentSchedulerOptions {
   readonly onProgress?: (progress: WorkflowAgentProgress[]) => void;
 }
 
+/** AgentOptions after scheduler defaults have been applied. */
+type ResolvedAgentOptions = AgentOptions & {
+  readonly label: string;
+  readonly agentType: string;
+  readonly model: string;
+};
+
+/**
+ * Journal event minus its `key`; #appendJournalEvent supplies the key after
+ * the shared journal/key guard. The default type parameter distributes Omit
+ * over each union member so discriminants survive.
+ */
+type WorkflowJournalEventInput<E = WorkflowJournalEvent> = E extends WorkflowJournalEvent
+  ? Omit<E, "key">
+  : never;
+
 interface QueuedAgent {
   readonly progressIndex: number;
   readonly prompt: string;
@@ -144,56 +168,13 @@ export class WorkflowAgentScheduler {
     }
 
     const progressIndex = this.#progress.length;
-    const label = options.label ?? `agent:${progressIndex}`;
     const agentId = this.#createAgentId();
-    const agentType = options.agentType ?? this.#defaultAgentType;
-    const model = options.model ?? this.#defaultModel;
-    const thinkingLevel = options.thinkingLevel ?? this.#defaultThinkingLevel;
-    const effectiveOptions: AgentOptions =
-      thinkingLevel === undefined
-        ? { ...options, label, agentType, model }
-        : { ...options, label, agentType, model, thinkingLevel };
-    const journalKey =
-      this.#journal === undefined && this.#replayCache === undefined
-        ? undefined
-        : computeWorkflowAgentKey({
-            prompt,
-            schema: effectiveOptions.schema,
-            label,
-            phase: effectiveOptions.phase,
-            agentType,
-            model,
-            thinkingLevel,
-            cwd: this.#cwd,
-          });
+    const effectiveOptions = this.#resolveAgentOptions(options, progressIndex);
+    const journalKey = this.#computeJournalKey(prompt, effectiveOptions);
+    this.#enqueueProgressEntry(progressIndex, prompt, agentId, effectiveOptions);
 
-    this.#progress.push({
-      type: "workflow_agent",
-      index: progressIndex,
-      label,
-      agentId,
-      agentType,
-      model,
-      ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
-      state: "queued",
-      queuedAt: this.#now(),
-      attempt: 1,
-      phaseTitle: options.phase,
-      promptPreview: prompt.slice(0, 160),
-      prompt,
-    });
-    this.#emitProgress();
-
-    if (journalKey !== undefined && this.#replayCache?.has(journalKey) === true) {
-      const cachedResult = this.#replayCache.get(journalKey);
-      this.#applyAgentEvent(progressIndex, { type: "agent_started", now: this.#now() });
-      this.#applyAgentEvent(progressIndex, {
-        type: "agent_succeeded",
-        now: this.#now(),
-        resultPreview: preview(cachedResult),
-      });
-      return Promise.resolve(cachedResult);
-    }
+    const replayed = this.#replayFromCache(progressIndex, journalKey);
+    if (replayed !== undefined) return replayed;
 
     if (this.#runStopped) {
       this.#stop(progressIndex, "run-stopped", journalKey);
@@ -215,9 +196,77 @@ export class WorkflowAgentScheduler {
     });
   }
 
+  #resolveAgentOptions(options: AgentOptions, progressIndex: number): ResolvedAgentOptions {
+    const label = options.label ?? `agent:${progressIndex}`;
+    const agentType = options.agentType ?? this.#defaultAgentType;
+    const model = options.model ?? this.#defaultModel;
+    const thinkingLevel = options.thinkingLevel ?? this.#defaultThinkingLevel;
+    return thinkingLevel === undefined
+      ? { ...options, label, agentType, model }
+      : { ...options, label, agentType, model, thinkingLevel };
+  }
+
+  #computeJournalKey(
+    prompt: string,
+    options: ResolvedAgentOptions,
+  ): WorkflowJournalKey | undefined {
+    if (this.#journal === undefined && this.#replayCache === undefined) return undefined;
+    return computeWorkflowAgentKey({
+      prompt,
+      schema: options.schema,
+      label: options.label,
+      phase: options.phase,
+      agentType: options.agentType,
+      model: options.model,
+      thinkingLevel: options.thinkingLevel,
+      cwd: this.#cwd,
+    });
+  }
+
+  #enqueueProgressEntry(
+    progressIndex: number,
+    prompt: string,
+    agentId: string,
+    options: ResolvedAgentOptions,
+  ): void {
+    this.#progress.push({
+      type: "workflow_agent",
+      index: progressIndex,
+      label: options.label,
+      agentId,
+      agentType: options.agentType,
+      model: options.model,
+      ...(options.thinkingLevel === undefined ? {} : { thinkingLevel: options.thinkingLevel }),
+      state: "queued",
+      queuedAt: this.#now(),
+      attempt: 1,
+      phaseTitle: options.phase,
+      promptPreview: prompt.slice(0, 160),
+      prompt,
+    });
+    this.#emitProgress();
+  }
+
+  #replayFromCache(
+    progressIndex: number,
+    journalKey: WorkflowJournalKey | undefined,
+  ): Promise<unknown> | undefined {
+    if (journalKey === undefined || this.#replayCache?.has(journalKey) !== true) return undefined;
+    const cachedResult = this.#replayCache.get(journalKey);
+    this.#applyAgentEvent(progressIndex, { type: "agent_started", now: this.#now() });
+    this.#applyAgentEvent(progressIndex, {
+      type: "agent_succeeded",
+      now: this.#now(),
+      resultPreview: preview(cachedResult),
+    });
+    return Promise.resolve(cachedResult);
+  }
+
   stopAgent(agentId: string): boolean {
     const progressIndex = this.#progress.findIndex((agent) => agent.agentId === agentId);
-    if (progressIndex === -1 || isTerminalAgent(this.#progress[progressIndex]!)) return false;
+    if (progressIndex === -1 || isTerminalAgentState(this.#progress[progressIndex]!.state)) {
+      return false;
+    }
 
     const queuedIndex = this.#queue.findIndex((agent) => agent.progressIndex === progressIndex);
     if (queuedIndex !== -1) {
@@ -355,31 +404,25 @@ export class WorkflowAgentScheduler {
     void this.#appendJournalStopped(this.#progress[progressIndex]!, journalKey, reason);
   }
 
-  async #appendJournalStarted(queued: QueuedAgent): Promise<void> {
-    if (this.#journal === undefined || queued.journalKey === undefined) return;
-    await this.#appendJournalEvent({
+  #appendJournalStarted(queued: QueuedAgent): Promise<void> {
+    return this.#appendJournalEvent(queued.journalKey, {
       type: "started",
-      key: queued.journalKey,
       agentId: queued.agentId,
     });
   }
 
-  async #appendJournalResult(queued: QueuedAgent, result: unknown): Promise<void> {
-    if (this.#journal === undefined || queued.journalKey === undefined) return;
-    await this.#appendJournalEvent({
+  #appendJournalResult(queued: QueuedAgent, result: unknown): Promise<void> {
+    return this.#appendJournalEvent(queued.journalKey, {
       type: "result",
-      key: queued.journalKey,
       agentId: queued.agentId,
       result,
     });
   }
 
   async #appendJournalFailed(queued: QueuedAgent, cause: unknown): Promise<void> {
-    if (this.#journal === undefined || queued.journalKey === undefined) return;
     try {
-      await this.#appendJournalEvent({
+      await this.#appendJournalEvent(queued.journalKey, {
         type: "failed",
-        key: queued.journalKey,
         agentId: queued.agentId,
         error: serializeError(cause),
       });
@@ -394,12 +437,10 @@ export class WorkflowAgentScheduler {
     journalKey?: WorkflowJournalKey,
     reason?: string,
   ): Promise<void> {
-    if (this.#journal === undefined || journalKey === undefined) return;
     try {
       await this.#journalStarts.get(agent.index);
-      await this.#appendJournalEvent({
+      await this.#appendJournalEvent(journalKey, {
         type: "stopped",
-        key: journalKey,
         agentId: agent.agentId,
         reason,
       });
@@ -409,12 +450,18 @@ export class WorkflowAgentScheduler {
     }
   }
 
-  #appendJournalEvent(event: Parameters<WorkflowAgentJournal["append"]>[0]): Promise<void> {
-    if (this.#journal === undefined) return Promise.resolve();
+  /** No-ops unless both a journal and the agent's journal key are configured. */
+  #appendJournalEvent(
+    journalKey: WorkflowJournalKey | undefined,
+    event: WorkflowJournalEventInput,
+  ): Promise<void> {
+    const journal = this.#journal;
+    if (journal === undefined || journalKey === undefined) return Promise.resolve();
+    const entry: WorkflowJournalEvent = { ...event, key: journalKey };
     const write =
       this.#journalTail === undefined
-        ? this.#journal.append(event)
-        : this.#journalTail.then(() => this.#journal!.append(event));
+        ? journal.append(entry)
+        : this.#journalTail.then(() => journal.append(entry));
     this.#journalTail = write.catch(() => undefined);
     return write;
   }
@@ -557,8 +604,4 @@ function appendRecentActivity(
   entry: WorkflowAgentActivitySummary,
 ): WorkflowAgentActivitySummary[] {
   return [...(current ?? []), entry].slice(-5);
-}
-
-function isTerminalAgent(agent: WorkflowAgentProgress): boolean {
-  return agent.state === "done" || agent.state === "failed" || agent.state === "stopped";
 }

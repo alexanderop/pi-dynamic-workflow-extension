@@ -45,6 +45,7 @@ above.
 
 ## Done
 
+- **readability-review-2026-06-09** — all five themes landed (god-file splits with ADR 0019, shared `guards.ts` dedup, const-array union guards with an inverted restart transition, module role headers, and the camp-site cleanups); behavior-preserving, suite green. Checked-off review remains in [readability-review-2026-06-09.md](./readability-review-2026-06-09.md).
 - **structured-output-retry** — Flue-inspired `structured_output`/`give_up` bundle, two-nudge same-session retry loop, retry live events, schema-failure journal safety, and non-object schema envelopes are implemented and covered by fake Pi-session tests. Spec remains in [workflows/structured-output-retry/spec.md](./workflows/structured-output-retry/spec.md).
 - **feature-flags** — feature flag registry/resolver, `/workflows features`, user/project/session/env/CLI controls, manifest persistence, and default-off `experimental-model-routing` model inheritance are implemented and covered by tests. Spec remains in [workflows/feature-flags/spec.md](./workflows/feature-flags/spec.md).
 - **agent-mock-boundary** — MSW-style fake-agent fixture now includes `setupDefaultAgentTestServer(...)` for shared default mocks and `agents.boundary(...)` scoped runtime overrides with nested and concurrent boundary coverage. Spec remains in [workflows/agent-mock-boundary/spec.md](./workflows/agent-mock-boundary/spec.md).

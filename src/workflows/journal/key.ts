@@ -1,3 +1,4 @@
+// Computes the deterministic v2 journal key for an agent invocation.
 import { createHash } from "node:crypto";
 import type { WorkflowAgentKeyInput, WorkflowJournalKey } from "./model.ts";
 

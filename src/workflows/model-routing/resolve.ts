@@ -1,3 +1,7 @@
+// Resolves script model/thinking-level hints against the host's available
+// models, emitting fallback warnings. The feature-flag resolver is separate
+// in src/extension/features/resolve.ts.
+import { WORKFLOW_THINKING_LEVELS } from "#src/workflows/agent/model.ts";
 import type { WorkflowThinkingLevel } from "#src/workflows/agent/model.ts";
 
 export interface WorkflowModelRoutingModel {
@@ -175,14 +179,7 @@ export function modelReference(
 }
 
 export function isWorkflowThinkingLevel(value: unknown): value is WorkflowThinkingLevel {
-  return (
-    value === "off" ||
-    value === "minimal" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh"
-  );
+  return WORKFLOW_THINKING_LEVELS.includes(value as WorkflowThinkingLevel);
 }
 
 function sameReference(left: string | undefined, right: string | undefined): boolean {
