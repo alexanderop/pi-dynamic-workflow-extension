@@ -1,10 +1,10 @@
 ---
 title: Rebuild The Pi Workflows TUI
-status: partial
+status: done
 priority: P2
-last_audited: 2026-06-07
-implementation: "Projection, layout, navigation, command page objects, TUI adapter tests, chooser/detail/prompt foundations, save-run action, and stopped-run resume affordance exist."
-next: "Complete the spec §24 four-state monitor rebuild and keep all actions behind controller/projection boundaries."
+last_audited: 2026-06-11
+implementation: "The spec §24 four-state monitor (overview, agent detail, prompt reader, chooser) is implemented in src/extension/tui/ + src/workflows/view/ with width-contract, navigation, and render tests green."
+next: "None — keep docs in sync if spec §24 changes."
 ---
 
 # Implementation Plan — Rebuild the Pi `/workflows` TUI (spec §24)
@@ -537,9 +537,9 @@ tests). New tests:
     `(0) === 'chooser'`.
 - `should move the phase selection in the overview` — overview ↑↓ changes
   `selectedPhaseIndex` (clamped to `phaseCount`) and resets `selectedAgentIndex` to 0.
-- `should open agent detail from overview with left` — overview+`left`+`agentCount>0`
+- `should open agent detail from overview with right when agents exist` — overview+`right`+`agentCount>0`
   → `agentDetail`.
-- `should return to overview from agent detail with right` — agentDetail+`right` → `overview`.
+- `should return to overview from agent detail with left` — agentDetail+`left` → `overview`.
 - `should move the agent selection in the detail view` — agentDetail ↑↓ →
   `selectedAgentIndex` clamped to `agentCount`.
 - `should open the prompt reader from detail with enter and reset scroll` —
@@ -566,8 +566,8 @@ export function initialMonitorNavigation(runCount: number): MonitorNavigationSta
 }
 export function moveMonitorSelection(s, b, dir): MonitorNavigationState { /* per-screen, see tests */ }
 export function focusInMonitor(s, b, dir: "left" | "right"): MonitorNavigationState {
-  if (s.screen === "overview" && dir === "left" && b.agentCount > 0) return { ...s, screen: "agentDetail" };
-  if (s.screen === "agentDetail" && dir === "right") return { ...s, screen: "overview" };
+  if (s.screen === "overview" && dir === "right" && b.agentCount > 0) return { ...s, screen: "agentDetail" };
+  if (s.screen === "agentDetail" && dir === "left") return { ...s, screen: "overview" };
   return s;
 }
 export function enterMonitor(s, b): MonitorNavigationState {
@@ -623,7 +623,7 @@ Add a private `#renderHeader(view: MonitorViewModel, width)`:
     `toContain('Slice · 7 agents')`; `toMatch(/1\/8 agents · 1m ?12s/)`;
     `toContain('› 1 Slice')`; `toContain('0/7')`; `toContain('✓ Author')`;
     `toContain('41.1k tok · 11 tools')`; `toContain('idle ')`;
-    `toContain('↑↓ select · ← detail · x stop workflow · p pause · esc back · s save')`;
+    `toContain('↑↓ select · → detail · x stop workflow · p pause · esc back · s save')`;
     `not.toContain('Progress')`; `not.toContain('Details')`.
 - `should omit absent model and metric fields in State A agent rows`
   - one running agent `model:'', tokens:undefined, toolCalls:undefined`,
@@ -658,7 +658,7 @@ Remove all `Runs/Progress/Phases/Agents/Details` heading pushes and the
   - Arrange running run, phase 'Slice' multiple agents; selected first agent
     `running, model:'Opus 4.8 (1M context)', tokens:41100, toolCalls:11`,
     17-line `promptPreview`, `lastToolName` set, `resultPreview:undefined`.
-  - Act: `handleInput('\x1b[D')` (left); `render(120).join('\n')`.
+  - Act: `handleInput('\x1b[C')` (right); `render(120).join('\n')`.
   - Assert order via `indexOf`: `'● Running' < '41.1k tok' < 'Prompt ·' < 'Activity ·' < 'Outcome'`;
     `toContain('┌ Slice · ')`; `toContain('› ● slice')`;
     `toContain('Opus 4.8 (1M context)')`; `toContain('41.1k tok · 11 tool calls')`;
@@ -706,7 +706,7 @@ All rows are plain strings; `twoPaneBox` pads/truncates into the right pane
 - Add `agentGlyph(state)` module fn (running/queued→`●`, done→`✓`, failed→`!`,
   stopped→`■`). Keep `statusGlyph` for chooser (running-ish→`↻`, completed→`✓`).
 - Replace `#helpText` overview/agentDetail branches with STATIC strings:
-  - overview: `'↑↓ select · ← detail · x stop workflow · p pause · esc back · s save'`
+  - overview: `'↑↓ select · → detail · x stop workflow · p pause · esc back · s save'`
   - agentDetail: `'↑↓ agent · ↵ prompt · x stop · r restart · p pause · esc back · s save'`
   - Remove `#pauseHelpText()` usage (delete or keep unused). `p` still calls
     `#handlePauseResume`.
@@ -915,7 +915,7 @@ change:
 - `should open a workflow chooser when multiple workflows are available` — UPDATE
   to State D shape (`'Dynamic workflows'`, `'N running · N completed'`); drop any
   `'Choose a workflow'`/runId-column assertions.
-- `should switch from overview to structured agent detail with left arrow` —
+- `should switch from overview to structured agent detail with right arrow` —
   UPDATE to expect the bordered State B (`'┌ Slice · '`, `'› ● '`) not the old
   `Agents`/`> done label` list.
 - `should open the selected agent prompt reader from structured detail` — UPDATE

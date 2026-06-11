@@ -52,9 +52,27 @@ export function piSessionEventToWorkflowLiveEvent(
         summary: summarizeUnknown(event.result),
         isError: event.isError === true,
       };
+    case "message_end":
+      return messageEndUsageEvent(event, at);
     default:
       return undefined;
   }
+}
+
+// Pi emits message_end per assistant turn with finalized token usage; surface
+// it as a usage_update so the scheduler can accumulate per-run totals. Non-
+// assistant messages or missing/invalid usage produce no live event.
+function messageEndUsageEvent(
+  event: Record<string, unknown>,
+  at: number,
+): WorkflowAgentLiveEvent | undefined {
+  const message = event.message;
+  if (!isRecord(message) || message.role !== "assistant") return undefined;
+  const usage = message.usage;
+  if (!isRecord(usage)) return undefined;
+  const totalTokens = usage.totalTokens;
+  if (typeof totalTokens !== "number" || !Number.isFinite(totalTokens)) return undefined;
+  return { type: "usage_update", at, tokens: totalTokens };
 }
 
 function messageUpdateSummary(event: Record<string, unknown>): string | undefined {

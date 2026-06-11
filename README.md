@@ -1,10 +1,10 @@
 # Pi Dynamic Workflow Extension
 
-A Pi package scaffold for building a Claude-Code-like dynamic workflow feature.
+A Pi package for Claude-Code-like dynamic workflows: deterministic JavaScript orchestration, background subagents, saved workflow commands, run manifests, notifications, and a `/workflows` monitor.
 
-This repository is exploratory. The current source is only the installable package shell; the actual workflow launcher, sandbox runtime, scheduler, persistence layer, subagent runner, and `/workflows` UI will be implemented later against the behavior documented in [spec.md](./spec.md).
+Status: alpha. The core launcher/runtime/scheduler/Pi-subagent path is implemented and tested, but richer monitor polish, restart-agent controls, and Pi-native transcript surfacing are still evolving. See [spec.md](./spec.md) for the target behavior and current constraints.
 
-Wondering where a spec behavior is implemented? [brain/contracts/spec-coverage.md](./brain/contracts/spec-coverage.md) maps each spec area to its production files and tests.
+Wondering where a spec behavior is implemented? [brain/contracts/spec-coverage.md](./brain/contracts/spec-coverage.md) maps each spec area to its production files, tests, and remaining gaps.
 
 Reference notes for future implementation:
 
@@ -19,13 +19,19 @@ Reference notes for future implementation:
 Install a tagged release from git:
 
 ```bash
-pi install git:github.com/alexanderopalic/pi-dynamic-workflow-extension@v0.1.0
+pi install git:github.com/alexanderopalic/pi-dynamic-workflow-extension@<tag>
+```
+
+For example, after publishing `v0.1.18`:
+
+```bash
+pi install git:github.com/alexanderopalic/pi-dynamic-workflow-extension@v0.1.18
 ```
 
 Install into project settings instead of global settings:
 
 ```bash
-pi install -l git:github.com/alexanderopalic/pi-dynamic-workflow-extension@v0.1.0
+pi install -l git:github.com/alexanderopalic/pi-dynamic-workflow-extension@<tag>
 ```
 
 Try the local checkout without installing:
@@ -34,9 +40,39 @@ Try the local checkout without installing:
 pi -e .
 ```
 
+## Quick Start After Install
+
+1. Start Pi in a project where the package is installed:
+
+   ```bash
+   pi
+   ```
+
+2. Check the monitor:
+
+   ```text
+   /workflows
+   ```
+
+3. Run the bundled smoke-test skill:
+
+   ```text
+   /skill:hello-workflow
+   ```
+
+   The skill launches `skills/hello-workflow/workflows/hello-workflow.js` with the `Workflow` tool and reports back through a workflow notification.
+
+4. Opt into workflow orchestration for a real task by using the `ultracode` trigger in your prompt, for example:
+
+   ```text
+   ultracode review this change and verify the risky parts with subagents
+   ```
+
+Saved workflows live under the resolved project/workspace `.pi/workflows` root. A saved workflow named `deep-research` can be launched as `/deep-research ...` when the name is command-safe, or with the generic fallback `/workflow deep-research ...`.
+
 ## Current Behavior
 
-The package announces auth-configured Pi models and their supported thinking modes when a session starts, registers a `/workflows` command for project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`, registers saved workflows as slash commands (a generic `/workflow <name> [args]` plus direct `/<meta.name>` commands discovered on session start), and ships the `workflow-debugger` skill for investigating failed or surprising workflow runs.
+The package announces auth-configured Pi models and their supported thinking modes when a session starts, registers a `/workflows` command for project-local workflow run manifests from `.pi/workflows/<runId>/manifest.json`, registers saved workflows as slash commands (a generic `/workflow <name> [args]` plus direct `/<meta.name>` commands discovered on session start), ships the `hello-workflow` smoke-test skill, and ships the `workflow-debugger` skill for investigating failed or surprising workflow runs.
 
 The core workflow modules now support metadata parsing, sandboxed script execution, scheduler-capped `agent()` calls, run-state discovery, inline launch persistence, saved workflow launch by name or explicit path, saved workflow listing with `description`/`whenToUse` guidance, per-run `journal.jsonl` audit/cache events, resume cache replay for inline launches, terminal `output.json` files, structured-output capture for Pi subagents, and testable task-notification payloads. The `ultracode` trigger wires agents to real Pi sidechain sessions and sends completion notifications back through `pi.sendMessage()`.
 
@@ -66,7 +102,7 @@ Pi loads this package through the `pi` manifest in `package.json`:
 }
 ```
 
-The extension entrypoint stays small. Most behavior should live in ordinary TypeScript modules so the workflow runtime can be unit-tested without launching Pi. Packaged skills live under `skills/`; `workflow-debugger` teaches agents how to diagnose existing workflow artifacts without relaunching work by default.
+The extension entrypoint stays small. Most behavior should live in ordinary TypeScript modules so the workflow runtime can be unit-tested without launching Pi. Packaged skills live under `skills/`; `hello-workflow` provides a first-run smoke test, and `workflow-debugger` teaches agents how to diagnose existing workflow artifacts without relaunching work by default.
 
 Current module structure follows [ADR 0007](./brain/decisions/adr/0007-organize-workflows-as-domain-modules.md):
 
@@ -149,20 +185,35 @@ Implementation guidance:
 
 ## Versioning
 
-Use SemVer tags. Pi pins git refs, so users should install tagged versions rather than `main`.
+Use SemVer git tags. Pi pins git refs, so every shipped version should be an annotated `vX.Y.Z` tag and users should install tags rather than `main`.
 
-Release checklist:
+Prepare the next patch release:
 
 ```bash
-npm version patch --no-git-tag-version
-git add package.json CHANGELOG.md
-git commit -m "Release v0.1.1"
-git tag -a v0.1.1 -m "v0.1.1"
-git push origin main --tags
+git checkout main
+git pull --ff-only
+git fetch --tags origin
+pnpm run release:patch
+```
+
+The release helper updates `package.json` and moves the `CHANGELOG.md` `[Unreleased]` section under the new version. It chooses the next version from the highest existing `vX.Y.Z` tag or `package.json`, whichever is newer, then prints the exact commit/tag/push commands. Add `--dry-run` to preview the next tag without changing files.
+
+One-command release when you are ready to commit, tag, and push:
+
+```bash
+pnpm run release:patch -- --commit --push
+```
+
+Other bumps:
+
+```bash
+pnpm run release:minor
+pnpm run release:major
+pnpm run release:version -- 0.2.0
 ```
 
 Users upgrade by installing the new tag:
 
 ```bash
-pi install git:github.com/alexanderopalic/pi-dynamic-workflow-extension@v0.1.1
+pi install git:github.com/alexanderopalic/pi-dynamic-workflow-extension@v0.1.18
 ```

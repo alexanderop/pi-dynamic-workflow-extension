@@ -63,9 +63,37 @@ function inlineResult(result: unknown, outputPath: string, maxChars: number): st
   const text = result === undefined ? "" : stringifyResult(result);
   if (text.length <= maxChars) return text;
 
-  const suffix = `\n[truncated ${text.length - maxChars} chars, full result in ${outputPath}]`;
-  if (suffix.length >= maxChars) return suffix.slice(0, maxChars);
-  return `${text.slice(0, maxChars - suffix.length)}${suffix}`;
+  // Workflow synthesis lives at the END of the result, so keep both a head and a
+  // tail with a middle gap marker. The marker length depends on the omitted-char
+  // count, so estimate it first, derive the content budget, then recompute.
+  const estimate = gapMarker(text.length, outputPath);
+  if (estimate.length >= maxChars) {
+    // Too small to fit head + marker + tail. Fall back to a head/marker slice,
+    // mirroring the original guard.
+    const suffix = `\n[truncated ${text.length - maxChars} chars, full result in ${outputPath}]`;
+    if (suffix.length >= maxChars) return suffix.slice(0, maxChars);
+    return `${text.slice(0, maxChars - suffix.length)}${suffix}`;
+  }
+
+  // Bias toward the tail since synthesis lives at the end: ~60% tail, ~40% head.
+  const contentBudget = maxChars - estimate.length;
+  const headBudget = Math.floor(contentBudget * 0.4);
+  const tailBudget = contentBudget - headBudget;
+
+  const head = text.slice(0, headBudget);
+  const tail = tailBudget > 0 ? text.slice(text.length - tailBudget) : "";
+
+  const omitted = text.length - head.length - tail.length;
+  const marker = gapMarker(omitted, outputPath);
+  const inlined = `${head}${marker}${tail}`;
+
+  // Recomputing the marker (with the exact omitted count) can shift the length
+  // by a digit or two; clamp to the budget to keep the guarantee.
+  return inlined.length <= maxChars ? inlined : inlined.slice(0, maxChars);
+}
+
+function gapMarker(omitted: number, outputPath: string): string {
+  return `\n[… ${omitted} chars truncated; full result in ${outputPath} …]\n`;
 }
 
 function stringifyResult(result: unknown): string {
@@ -112,10 +140,10 @@ function formatFailure(failure: WorkflowFailure): string {
 }
 
 function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
+  // The <result> payload is an XML text node, where only `&` and `<` strictly
+  // need escaping. Quotes only matter inside attribute values, so leaving them
+  // raw keeps the model-visible result compact and matches the reference
+  // Claude Code notification. `&` must be replaced first. `>` is kept as a
+  // harmless defensive escape.
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }

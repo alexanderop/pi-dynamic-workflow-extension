@@ -575,10 +575,11 @@ function patchLiveEvent(
         }),
       });
     case "usage_update":
+      // Pi reports usage per assistant turn, so accumulate rather than overwrite.
+      // Only bookkeeping is patched here: the activity label/state is left intact
+      // so frequent message_end events don't clobber the visible activity.
       return patchActivity(agent, event, {
-        lastEventType: event.type,
-        lastEventLabel: "usage updated",
-        tokens: event.tokens ?? agent.tokens,
+        tokens: event.tokens === undefined ? agent.tokens : (agent.tokens ?? 0) + event.tokens,
         toolCalls: event.toolCalls ?? agent.toolCalls,
       });
   }

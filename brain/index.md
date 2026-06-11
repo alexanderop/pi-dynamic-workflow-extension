@@ -28,6 +28,7 @@
 - [[decisions/adr/0016-use-terminating-workflow-launch-tool]]
 - [[decisions/adr/0017-use-workflow-feature-flags]]
 - [[decisions/adr/0018-use-pi-native-sidechain-sessions-for-agent-transcripts]]
+- [[decisions/adr/0019-split-launch-module-along-source-background-run-state-seams]]
 - [[decisions/adr/README]]
 
 ## Learning
@@ -49,6 +50,7 @@
 
 ## Plans
 - [[plans/index]]
+- [[plans/readability-review-2026-06-09]]
 - [[plans/workflows/agent-mock-boundary/spec]]
 - [[plans/workflows/align-with-pi/plan]]
 - [[plans/workflows/atomic-manifest-writes/chunk]]
@@ -87,6 +89,10 @@
 - [[references/error-handling]]
 - [[references/pi-extension-reference]]
 - [[references/testing-reference]]
+
+## Reviews
+- [[reviews/action-items-2026-06-08]]
+- [[reviews/ultracode-codebase-review-2026-06-08]]
 
 ## Other
 - [[decisions-adr-0006-use-terminal-notification-hook-before-pi-message-wiring]]

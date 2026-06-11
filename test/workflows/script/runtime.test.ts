@@ -301,6 +301,26 @@ return await agent("scan src", { label: "scan-agent" });
     ]);
   });
 
+  it("should charge the budget with real per-agent token usage instead of the char estimate", async () => {
+    const state = await runWorkflowScript(
+      workflowScript({
+        meta: { name: "real-usage", description: "Charge budget from real Pi usage" },
+        body: `
+const r = await agent("x");
+return budget.spent();
+`,
+      }),
+      {
+        schedulerRunner: async (request) => {
+          request.onEvent?.({ type: "usage_update", at: 0, tokens: 500 });
+          return "ok";
+        },
+      },
+    );
+
+    expect(state.result).toBe(500);
+  });
+
   it("should fail fast when the scheduler total-agent cap is exceeded", async () => {
     const agents = setupAgentMock(
       agent.call({ prompt: "first" }, () => AgentResponse.text("first result")),

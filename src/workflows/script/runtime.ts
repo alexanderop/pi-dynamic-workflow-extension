@@ -319,12 +319,16 @@ function createAgentGlobal(deps: AgentGlobalDeps) {
     const progressCountBeforeSchedule = deps.scheduler.progress().length;
     try {
       const result = await deps.scheduler.schedule(prompt, effectiveOptions.options);
-      deps.budget.addSpent(estimateTokens(prompt, result));
+      deps.budget.addSpent(
+        resolveSpentTokens(deps.scheduler, progressCountBeforeSchedule, prompt, result),
+      );
       return result;
     } catch (cause) {
       if (deps.scheduler.progress().length === progressCountBeforeSchedule) throw cause;
       if (effectiveOptions.options.schema !== undefined || isSchemaAgentFailure(cause)) throw cause;
-      deps.budget.addSpent(estimateTokens(prompt, null));
+      deps.budget.addSpent(
+        resolveSpentTokens(deps.scheduler, progressCountBeforeSchedule, prompt, null),
+      );
       return null;
     }
   };
@@ -462,4 +466,22 @@ function isThenable(value: unknown): boolean {
 function estimateTokens(prompt: string, result: unknown): number {
   const resultText = typeof result === "string" ? result : JSON.stringify(result);
   return Math.ceil((prompt.length + (resultText?.length ?? 0)) / 4);
+}
+
+/**
+ * Charge the budget with the scheduler's real accumulated token total for this
+ * agent when available (`progress()[progressIndex]?.tokens`, populated by Pi
+ * usage_update events), falling back to the char-count estimate when no real
+ * usage was observed.
+ */
+function resolveSpentTokens(
+  scheduler: WorkflowAgentScheduler,
+  progressIndex: number,
+  prompt: string,
+  result: unknown,
+): number {
+  const realTokens = scheduler.progress()[progressIndex]?.tokens;
+  return typeof realTokens === "number" && realTokens > 0
+    ? realTokens
+    : estimateTokens(prompt, result);
 }

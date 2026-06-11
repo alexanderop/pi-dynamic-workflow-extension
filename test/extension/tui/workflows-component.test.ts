@@ -734,6 +734,19 @@ describe("WorkflowsTuiComponent width contract", () => {
   });
 });
 
+describe("WorkflowsTuiComponent empty state", () => {
+  it("should render a concise empty state without monitor panes when no runs exist", () => {
+    const component = make([]);
+    const lines = component.render(80);
+    const screen = lines.join("\n");
+
+    expect(screen).toContain("No workflow runs found in .pi/workflows.");
+    expect(screen).not.toContain("┌ Phases");
+    expect(screen).not.toContain("› /workflows");
+    expect(lines.every((line) => visibleWidth(line) <= 80)).toBe(true);
+  });
+});
+
 describe("WorkflowsTuiComponent lifecycle", () => {
   it("should refresh rendered state when runs are replaced", () => {
     const component = make([runState({ runId: "wf_old", workflowName: "old-flow" })]);

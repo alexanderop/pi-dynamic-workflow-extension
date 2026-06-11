@@ -28,10 +28,18 @@ The orchestrator should:
 ## Step 0 - orchestrator planning, do not skip
 
 Do not launch immediately. First take time to understand the ticket and design
-why a workflow is warranted and how it should look. For complex tasks, identify
-or read the useful local context before authoring the script: AGENTS.md, spec.md,
-brain/plans/index.md, brain/contracts/spec-coverage.md, relevant ADRs under
-brain/decisions/adr/, and the source and test files likely owned by the task.
+why a workflow is warranted and how it should look. Read repo docs only when the
+task requires understanding this repo's existing code, contracts, or workflow
+internals: AGENTS.md, spec.md, brain/plans/index.md,
+brain/contracts/spec-coverage.md, relevant ADRs under brain/decisions/adr/, and
+the source and test files likely owned by the task. For self-contained, creative,
+or general tasks, do NOT read spec.md - it is a large reverse-engineering spec
+mostly about persistence/UI contracts that is irrelevant to authoring a script;
+these authoring instructions plus the published script API in
+types/workflow.d.ts are the authoritative, compact reference for what the
+\`Workflow\`/\`agent\`/\`pipeline\`/\`parallel\` API can do. Read only the specific files
+a task actually depends on, and avoid re-reading large docs you have already read
+this session.
 
 Then output a brief orchestration plan before calling Workflow:
 1. Why workflow: task class, risk/failure mode, and why a solo turn is weaker.
@@ -110,6 +118,10 @@ references "all the other results" (dedup/merge, total-count early-exit,
 cross-item comparison). "I need to flatten/map/filter first" is NOT a reason -
 do that inside a pipeline stage. A barrier wastes the wall-clock of fast items
 waiting on slow ones.
+
+A single-stage fan-out over a work-list - one operation per item with no second
+stage - is just \`parallel()\`. Reach for \`pipeline()\` only when each item flows
+through two or more stages.
 
 ## Example workflow shapes to adapt
 

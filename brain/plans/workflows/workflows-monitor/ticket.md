@@ -1,17 +1,17 @@
 ---
 title: Make Workflows Match The Claude Code Workflow Monitor
-status: partial
+status: done
 priority: P2
-last_audited: 2026-06-07
-implementation: "The current TUI has monitor foundations and several user actions, but the full spec §24 four-state experience is not complete."
-next: "Use the implementation plan in this folder as the source for the remaining monitor work."
+last_audited: 2026-06-11
+implementation: "The spec §24 four-state monitor (overview, agent detail, prompt reader, chooser) is implemented in src/extension/tui/ + src/workflows/view/ with width-contract, navigation, and render tests green."
+next: "None — keep docs in sync if spec §24 changes."
 ---
 
 # Ticket: Make `/workflows` match the Claude Code workflow monitor
 
 ## Status
 
-Planned
+Implemented. Verified against spec §24 on 2026-06-11; this ticket's key-direction error (`←` vs `→` for opening detail) has been corrected to match the spec.
 
 ## Product owner summary
 
@@ -56,11 +56,11 @@ so that I can quickly understand which phase is active, which agents are running
   │
   ├─ 1 active workflow ─────────► State A: Overview monitor
   │                                  │
-  │                                  ├─ ← ─► State B: Agent detail
+  │                                  ├─ → ─► State B: Agent detail
   │                                  │          │
   │                                  │          ├─ Enter ─► State C: Prompt reader
   │                                  │          │              └─ Esc ─► State B
-  │                                  │          └─ →/Esc ─► State A
+  │                                  │          └─ ←/Esc ─► State A
   │                                  └─ Esc ─► close
   │
   └─ multiple workflows ────────► State D: Workflow chooser
@@ -85,7 +85,7 @@ artifacts dir: .pi/workflows/wf_hard/
 │                       │ ● slice:P1.1-model-thread… Opus 4.8 (1M context)                   34.3k tok · 17 tools │
 │                       │                                                                            │
 └───────────────────────┴────────────────────────────────────────────────────────────────────────────┘
-↑↓ select · ← detail · x stop workflow · p pause · esc back · s save
+↑↓ select · → detail · x stop workflow · p pause · esc back · s save
 ```
 
 ### State B: structured agent detail
@@ -197,7 +197,7 @@ Scenario: Overview phase navigation
 Scenario: Overview opens structured detail
   Given the overview monitor is open
   And the selected phase has agents
-  When the user presses Left
+  When the user presses Right
   Then the UI opens structured agent detail for the selected phase
 ```
 

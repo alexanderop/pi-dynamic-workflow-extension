@@ -1,13 +1,21 @@
 {
   "name": "pi-dynamic-workflow-extension",
   "version": "0.1.0",
-  "private": true,
-  "description": "A Pi package scaffold for Claude-Code-like dynamic workflows.",
+  "description": "A Pi package for Claude-Code-like dynamic workflows.",
   "keywords": [
     "pi-extension",
     "pi-package",
     "workflows"
   ],
+  "homepage": "https://github.com/alexanderopalic/pi-dynamic-workflow-extension#readme",
+  "bugs": {
+    "url": "https://github.com/alexanderopalic/pi-dynamic-workflow-extension/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexanderopalic/pi-dynamic-workflow-extension.git"
+  },
   "files": [
     "src",
     "types",
@@ -30,6 +38,10 @@
     "lint": "oxlint src test tools",
     "lint:fix": "oxlint --fix src test tools",
     "pi": "pi --no-extensions -e .",
+    "release:major": "node tools/git-tag-release.mjs major",
+    "release:minor": "node tools/git-tag-release.mjs minor",
+    "release:patch": "node tools/git-tag-release.mjs patch",
+    "release:version": "node tools/git-tag-release.mjs",
     "test": "vitest --run",
     "test:coverage": "vitest --run --coverage",
     "verify": "pnpm run check && pnpm run lint && pnpm run fmt:check && pnpm test"

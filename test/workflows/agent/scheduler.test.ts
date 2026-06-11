@@ -132,6 +132,20 @@ describe("WorkflowAgentScheduler", () => {
     await expect(result).resolves.toBe("ok");
   });
 
+  it("should accumulate tokens across per-turn usage_update events", async () => {
+    const scheduler = new WorkflowAgentScheduler({
+      createAgentId: sequenceIds("agent"),
+      runner: async ({ onEvent }) => {
+        onEvent?.({ type: "usage_update", at: 1000, tokens: 140 });
+        onEvent?.({ type: "usage_update", at: 1100, tokens: 60 });
+        return "ok";
+      },
+    });
+
+    await expect(scheduler.schedule("scan src")).resolves.toBe("ok");
+    expect(scheduler.progress()[0]).toMatchObject({ tokens: 200 });
+  });
+
   it("should expose queued, running, done, and failed progress rows", async () => {
     const first = deferred<string>();
     const scheduler = new WorkflowAgentScheduler({
