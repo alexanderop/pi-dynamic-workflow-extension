@@ -1,6 +1,6 @@
 {
   "name": "pi-dynamic-workflow-extension",
-  "version": "0.1.0",
+  "version": "0.1.18",
   "description": "A Pi package for Claude-Code-like dynamic workflows.",
   "keywords": [
     "pi-extension",

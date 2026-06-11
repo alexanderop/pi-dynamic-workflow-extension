@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.1.18 - 2026-06-11
+
 ### Added
 
 - Git-tag release helper scripts for Pi package shipping.
